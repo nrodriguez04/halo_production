@@ -1,0 +1,542 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobRunKind {
+  UNDERWRITE_DEAL
+  GENERATE_FLYER_DRAFT
+  GENERATE_BUYER_BLAST_DRAFT
+}
+
+enum JobRunEntityType {
+  DEAL
+  LEAD
+  MESSAGE
+}
+
+enum JobRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum TimelineEntityType {
+  LEAD
+  DEAL
+  MESSAGE
+  PROPERTY
+  JOB
+}
+
+enum TimelineActorType {
+  user
+  system
+  webhook
+}
+
+// Multi-tenant support
+model Account {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+
+  @@map("accounts")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships   Membership[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  accountId String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles   MembershipRole[]
+
+  @@unique([accountId, userId])
+  @@map("memberships")
+}
+
+// RBAC
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  memberships MembershipRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model MembershipRole {
+  id           String   @id @default(cuid())
+  membershipId String
+  roleId       String
+  createdAt    DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, roleId])
+  @@map("membership_roles")
+}
+
+// NextAuth sessions
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Audit log
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  accountId   String?
+  action      String
+  resource    String?
+  resourceId  String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Leads
+model Lead {
+  id          String   @id @default(cuid())
+  accountId   String
+  status      String   @default("new") // new, enriched, underwriting, contacted, etc.
+  score       Float?
+  tags        String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Canonical fields (reconciled)
+  canonicalAddress String?
+  canonicalCity    String?
+  canonicalState   String?
+  canonicalZip     String?
+  canonicalOwner   String?
+  canonicalPhone   String?
+  canonicalEmail   String?
+
+  // Source provenance
+  sourceRecords SourceRecord[]
+  properties    Property[]
+  deals         Deal[]
+  consents      Consent[]
+
+  @@index([accountId])
+  @@index([status])
+  @@map("leads")
+}
+
+// Source records (provenance)
+model SourceRecord {
+  id          String   @id @default(cuid())
+  leadId      String?
+  propertyId  String?
+  provider    String   // attom, google, etc.
+  endpoint    String
+  requestHash String
+  response    Json
+  trustWeight Float    @default(1.0)
+  createdAt   DateTime @default(now())
+
+  lead     Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  property Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([propertyId])
+  @@index([provider])
+  @@map("source_records")
+}
+
+// Properties (canonical)
+model Property {
+  id             String   @id @default(cuid())
+  leadId         String?
+  accountId      String
+  apn            String?
+  address        String
+  city           String
+  state          String
+  zip            String
+  latitude       Float?
+  longitude      Float?
+  estimatedValue Float?
+  confidence     Float    @default(1.0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lead          Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sourceRecords SourceRecord[]
+  deals         Deal[]
+  underwritingResults UnderwritingResult[]
+
+  @@index([accountId])
+  @@index([apn])
+  @@index([address, city, state, zip])
+  @@map("properties")
+}
+
+// Deals
+model Deal {
+  id          String   @id @default(cuid())
+  accountId   String
+  leadId      String?
+  propertyId  String?
+  stage       String   @default("new") // new, contacted, negotiating, under_contract, marketing, assigned, closed, lost
+  arv         Float?
+  repairEstimate Float?
+  mao         Float?
+  offerAmount Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  contracts Contract[]
+  underwritingResult UnderwritingResult?
+  marketingMaterials MarketingMaterial[]
+
+  @@index([accountId])
+  @@index([stage])
+  @@map("deals")
+}
+
+// Contracts (DocuSign)
+model Contract {
+  id              String   @id @default(cuid())
+  dealId          String
+  docusignEnvelopeId String? @unique
+  status          String   // draft, sent, signed, completed, declined
+  pdfUrl          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@index([docusignEnvelopeId])
+  @@map("contracts")
+}
+
+// Communications
+model Message {
+  id          String   @id @default(cuid())
+  accountId   String
+  leadId      String?
+  dealId      String?
+  channel     String   // sms, email
+  direction   String   // inbound, outbound
+  status      String   // draft, pending_approval, approved, sent, delivered, failed
+  content     String
+  metadata    Json?
+  approvedAt  DateTime?
+  approvedBy  String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([leadId])
+  @@index([status])
+  @@map("messages")
+}
+
+// Buyers
+model Buyer {
+  id          String   @id @default(cuid())
+  accountId   String
+  name        String
+  email       String?
+  phone       String?
+  preferences Json?
+  engagementScore Float @default(0.0)
+  lastContacted DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([accountId])
+  @@map("buyers")
+}
+
+// Control plane
+model ControlPlane {
+  id        String   @id @default(cuid())
+  enabled   Boolean  @default(true)
+  smsEnabled Boolean @default(true)
+  emailEnabled Boolean @default(true)
+  docusignEnabled Boolean @default(true)
+  externalDataEnabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("control_plane")
+}
+
+// AI cost tracking
+model AICostLog {
+  id          String   @id @default(cuid())
+  provider    String   // openai, anthropic
+  model       String
+  tokensIn    Int?
+  tokensOut   Int?
+  cost        Float
+  accountId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([provider])
+  @@index([accountId])
+  @@index([createdAt])
+  @@map("ai_cost_logs")
+}
+
+// Compliance: DNC (Do Not Call) list
+model DNCList {
+  id          String   @id @default(cuid())
+  accountId   String
+  phone       String
+  source      String   // manual, stop_keyword, help_keyword, external
+  reason      String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime? // null = permanent
+
+  @@unique([accountId, phone])
+  @@index([phone])
+  @@index([accountId])
+  @@map("dnc_list")
+}
+
+// Compliance: Consent records
+model Consent {
+  id          String   @id @default(cuid())
+  accountId   String
+  leadId      String?
+  phone       String?
+  email       String?
+  channel     String   // sms, email, call
+  source      String   // manual, form, verbal, implied
+  evidence    Json?    // proof/documentation
+  grantedAt   DateTime @default(now())
+  revokedAt   DateTime?
+  expiresAt   DateTime?
+
+  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([leadId])
+  @@index([phone])
+  @@index([email])
+  @@map("consents")
+}
+
+// Compliance: Quiet hours configuration
+model QuietHours {
+  id          String   @id @default(cuid())
+  accountId   String
+  timezone    String   @default("America/Los_Angeles")
+  startHour   Int      @default(20) // 8 PM
+  endHour     Int      @default(9)   // 9 AM
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([accountId])
+  @@map("quiet_hours")
+}
+
+// PII Encryption envelopes
+model PIIEnvelope {
+  id          String   @id @default(cuid())
+  accountId   String
+  leadId      String?
+  propertyId  String?
+  fieldName   String   // phone, email, ownerName, etc.
+  encryptedValue String
+  keyVersion  Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([leadId])
+  @@index([propertyId])
+  @@map("pii_envelopes")
+}
+
+// Job queues (BullMQ)
+model JobQueue {
+  id          String   @id @default(cuid())
+  queueName   String
+  jobId       String
+  status      String   // pending, active, completed, failed, delayed
+  data        Json?
+  result      Json?
+  error       String?
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+
+  @@index([queueName])
+  @@index([status])
+  @@index([jobId])
+  @@map("job_queues")
+}
+
+// Underwriting results
+model UnderwritingResult {
+  id              String   @id @default(cuid())
+  dealId          String   @unique
+  propertyId      String?
+  arv             Float?
+  repairEstimate  Float?
+  mao             Float?
+  confidence      Float?
+  rationale       String?
+  compsSummary    Json?
+  evaluationMetadata Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deal     Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId])
+  @@map("underwriting_results")
+}
+
+// Marketing materials
+model MarketingMaterial {
+  id          String   @id @default(cuid())
+  dealId      String
+  type        String   // flyer, video_script, buyer_blast
+  content     String?  // text content
+  fileUrl     String?  // PDF, video URL
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@index([type])
+  @@map("marketing_materials")
+}
+
+model JobRun {
+  id          String          @id @default(cuid())
+  tenantId    String
+  kind        JobRunKind
+  entityType  JobRunEntityType
+  entityId    String
+  status      JobRunStatus    @default(QUEUED)
+  attempts    Int             @default(0)
+  error       String?
+  resultJson  Json?
+  resultHash  String?
+  actorId     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([tenantId, kind, entityId])
+  @@index([tenantId, status])
+  @@map("job_runs")
+}
+
+model TimelineEvent {
+  id          String           @id @default(cuid())
+  tenantId    String
+  entityType  TimelineEntityType
+  entityId    String
+  eventType   String
+  payloadJson Json?
+  actorId     String?
+  actorType   TimelineActorType
+  createdAt   DateTime         @default(now())
+
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@index([tenantId, eventType, createdAt])
+  @@map("timeline_events")
+}
+

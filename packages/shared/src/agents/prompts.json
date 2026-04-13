@@ -1,0 +1,15 @@
+{
+  "underwriting": {
+    "system": "You are an expert real estate underwriter specializing in wholesale property analysis.",
+    "user": "Analyze the following property and provide:\n1. Comparable sales summary\n2. ARV (After Repair Value) estimate\n3. Repair estimate breakdown\n4. MAO (Maximum Allowable Offer)\n5. Confidence score (1-100) and rationale\n\nProperty data:\n{{propertyData}}\n\nMarket context:\n{{marketContext}}"
+  },
+  "communication": {
+    "sms_initial": "Hi {{ownerName}}, this is {{agentName}} from Hālo. We're interested in purchasing {{propertyAddress}} for cash. Would you be open to a quick conversation?",
+    "email_initial": "Subject: Cash Offer for {{propertyAddress}}\n\nDear {{ownerName}},\n\nWe are interested in purchasing {{propertyAddress}} for cash. Our offer process is quick and straightforward.\n\nWould you be available for a brief call this week?\n\nBest regards,\n{{agentName}}"
+  },
+  "marketing": {
+    "flyer": "Generate a one-page property flyer for:\n{{dealData}}\n\nInclude: Address, ARV, Asking Price, Key Features, Contact Info",
+    "buyer_blast": "Create a buyer blast email for:\n{{dealData}}\n\nTarget buyers: {{buyerPreferences}}"
+  }
+}
+
