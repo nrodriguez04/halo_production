@@ -42,8 +42,12 @@ export default function LeadsPage() {
   const fetchLeads = async () => {
     try {
       const response = await apiFetch('/leads');
+      if (!response.ok) {
+        console.error('Failed to fetch leads:', response.status, response.statusText);
+        return;
+      }
       const data = await response.json();
-      setLeads(data);
+      setLeads(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch leads:', error);
     } finally {

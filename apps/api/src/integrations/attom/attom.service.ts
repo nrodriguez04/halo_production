@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
+import { ApiCostService } from '../../api-cost/api-cost.service';
 import * as crypto from 'crypto';
 
 interface ATTOMResponse {
@@ -44,6 +45,7 @@ export class AttomService {
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
+    private apiCostService: ApiCostService,
   ) {}
 
   async lookupProperty(address: string, city?: string, state?: string, zip?: string) {
@@ -66,6 +68,14 @@ export class AttomService {
 
       const response = await this.makeRequest(url, {
         address: query,
+      });
+
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'attom',
+        endpoint: `${url}?${new URLSearchParams({ address: query }).toString()}`,
+        costUsd: 0.1,
+        responseCode: 200,
       });
 
       const data = response as ATTOMResponse;
@@ -105,6 +115,14 @@ export class AttomService {
     try {
       const url = `${this.baseUrl}/propertyapi/v1.0.0/property/expandedprofile`;
       const response = await this.makeRequest(url, { apn });
+
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'attom',
+        endpoint: `${url}?${new URLSearchParams({ apn }).toString()}`,
+        costUsd: 0.1,
+        responseCode: 200,
+      });
 
       const data = response as ATTOMResponse;
 

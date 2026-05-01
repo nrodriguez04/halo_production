@@ -1,19 +1,19 @@
-import request from 'supertest';
+import request = require('supertest');
 
-describe('Policy enforcement (e2e)', () => {
+const describePolicy = process.env.E2E_TOKEN_TENANT_A ? describe : describe.skip;
+
+describePolicy('Policy enforcement (e2e)', () => {
   const apiBase = process.env.API_BASE_URL || 'http://localhost:3001';
   const token = process.env.E2E_TOKEN_TENANT_A || '';
   const dealId = process.env.E2E_DEAL_ID_TENANT_A || '';
   const authHeader = { Authorization: `Bearer ${token}` };
 
   it('Blocks underwriting when AI is disabled via control plane', async () => {
-    await request(apiBase)
+    const cpOff = await request(apiBase)
       .put('/api/control-plane')
       .set(authHeader)
-      .send({ enabled: false })
-      .expect((res: any) => {
-        expect([200, 403]).toContain(res.status);
-      });
+      .send({ enabled: false });
+    expect([200, 403]).toContain(cpOff.status);
 
     if (dealId) {
       const res = await request(apiBase)

@@ -25,7 +25,7 @@ export class OpenClawGateway implements OnModuleInit, OnModuleDestroy {
         url: openclawConfig.gatewayUrl,
         agent: openclawConfig.agentName,
         token: openclawConfig.authToken || undefined,
-      });
+      } as any);
 
       this.client.on('message', async (message: any) => {
         await this.handleMessage(message);

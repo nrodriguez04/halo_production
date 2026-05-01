@@ -32,8 +32,13 @@ export class DealsController {
   async findAll(
     @CurrentAccountId() accountId: string,
     @Query('stage') stage?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
   ) {
-    return this.dealsService.findAll(accountId, stage);
+    return this.dealsService.findAll(accountId, stage, {
+      skip: skip ? parseInt(skip, 10) : 0,
+      take: take ? parseInt(take, 10) : 50,
+    });
   }
 
   @Get(':id')

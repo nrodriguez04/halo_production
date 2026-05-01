@@ -10,7 +10,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     jwt = undefined;
   }
 
-  return fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -18,4 +18,12 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
       ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
     },
   });
+
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/sign-in';
+    }
+  }
+
+  return res;
 }

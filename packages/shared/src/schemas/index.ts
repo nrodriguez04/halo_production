@@ -25,6 +25,10 @@ export const PropertyCreateSchema = z.object({
   city: z.string(),
   state: z.string(),
   zip: z.string(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  estimatedValue: z.number().optional(),
+  salePrice: z.number().optional(),
   confidence: z.number().min(0).max(1).default(1.0),
 });
 

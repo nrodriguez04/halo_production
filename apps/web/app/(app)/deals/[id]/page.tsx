@@ -76,9 +76,36 @@ export default function DealDetailPage() {
   useEffect(() => {
     if (!id) return;
     Promise.all([
-      apiFetch(`/deals/${id}`).then((r) => r.json()).then(setDeal).catch(() => null),
-      apiFetch(`/timeline/DEAL/${id}`).then((r) => r.json()).then(setTimeline).catch(() => []),
-      apiFetch(`/underwriting/result/${id}`).then((r) => r.json()).then(setUwResult).catch(() => null),
+      apiFetch(`/deals/${id}`)
+        .then(async (r) => {
+          if (!r.ok) {
+            console.error('Failed to fetch deal:', r.status, r.statusText);
+            return null;
+          }
+          return r.json();
+        })
+        .then(setDeal)
+        .catch(() => setDeal(null)),
+      apiFetch(`/timeline/DEAL/${id}`)
+        .then(async (r) => {
+          if (!r.ok) {
+            console.error('Failed to fetch timeline:', r.status, r.statusText);
+            return [];
+          }
+          return r.json();
+        })
+        .then(setTimeline)
+        .catch(() => setTimeline([])),
+      apiFetch(`/underwriting/result/${id}`)
+        .then(async (r) => {
+          if (!r.ok) {
+            console.error('Failed to fetch underwriting result:', r.status, r.statusText);
+            return null;
+          }
+          return r.json();
+        })
+        .then(setUwResult)
+        .catch(() => setUwResult(null)),
     ]).finally(() => setLoading(false));
   }, [id]);
 
@@ -183,7 +210,11 @@ export default function DealDetailPage() {
               <div className="text-sm text-muted-foreground">
                 No underwriting run yet.
                 <Button variant="outline" size="sm" className="ml-3" onClick={async () => {
-                  await apiFetch(`/underwriting/analyze/${id}`, { method: 'POST' });
+                  const res = await apiFetch(`/underwriting/analyze/${id}`, { method: 'POST' });
+                  if (!res.ok) {
+                    console.error('Underwriting analyze failed:', res.status, res.statusText);
+                    return;
+                  }
                 }}>
                   Run Underwriting
                 </Button>

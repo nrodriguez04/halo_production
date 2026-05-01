@@ -36,9 +36,14 @@ export default function BuyersPage() {
   const fetchBuyers = async () => {
     try {
       const res = await apiFetch('/buyers');
+      if (!res.ok) {
+        console.error('Failed to fetch buyers:', res.status, res.statusText);
+        return;
+      }
       const data = await res.json();
       setBuyers(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (error) {
+      console.error('Failed to fetch buyers:', error);
     } finally {
       setLoading(false);
     }
@@ -58,6 +63,8 @@ export default function BuyersPage() {
       setForm({ name: '', email: '', phone: '' });
       setShowAdd(false);
       fetchBuyers();
+    } else {
+      console.error('Failed to add buyer:', res.status, res.statusText);
     }
   };
 

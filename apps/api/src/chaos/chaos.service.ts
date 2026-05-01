@@ -1,19 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
+import Redis from 'ioredis';
+import { REDIS } from '../redis/redis.module';
 
 const CHAOS_KEY = 'halo:chaos';
 
 @Injectable()
 export class ChaosService {
   private readonly logger = new Logger(ChaosService.name);
-  private redis: IORedis;
 
-  constructor() {
-    this.redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
-    });
-  }
+  constructor(@Inject(REDIS) private redis: Redis) {}
 
   async simulateTwilio429() {
     await this.redis.hset(CHAOS_KEY, 'twilio', 'rate_limited');
@@ -58,7 +54,7 @@ export class ChaosService {
     for (const name of queueNames) {
       try {
         const q = new Queue(name, {
-          connection: { host: 'localhost', port: 6379, maxRetriesPerRequest: null },
+          connection: this.redis.duplicate(),
         });
         const failed = await q.getFailed(0, 50);
         for (const job of failed) {
@@ -83,7 +79,7 @@ export class ChaosService {
 
   async replayJob(queueName: string, jobId: string) {
     const q = new Queue(queueName, {
-      connection: { host: 'localhost', port: 6379, maxRetriesPerRequest: null },
+      connection: this.redis.duplicate(),
     });
 
     try {

@@ -1,28 +1,29 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { AutomationService } from '../../automation/automation.service';
 import * as complianceUtils from '@halo/shared';
 
 @Injectable()
 export class TwilioService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(TwilioService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private automationService: AutomationService,
+  ) {}
 
   async handleInbound(body: any) {
     const from = body.From;
     const to = body.To;
     const messageBody = body.Body;
 
-    // Check for STOP/HELP keywords
+    const accountId = await this.resolveAccountId(to, from);
+
     if (complianceUtils.containsStopKeywords(messageBody)) {
-      // Add to DNC list
       const normalizedPhone = complianceUtils.normalizePhoneNumber(from);
-      const accountId = 'halo-hq'; // Get from phone mapping in production
-      
-      // Check if already exists
+
       const existing = await this.prisma.dNCList.findFirst({
-        where: {
-          accountId,
-          phone: normalizedPhone,
-        },
+        where: { accountId, phone: normalizedPhone },
       });
 
       if (!existing) {
@@ -36,10 +37,9 @@ export class TwilioService {
         });
       }
 
-      // Store inbound message
       await this.prisma.message.create({
         data: {
-          accountId: 'halo-hq',
+          accountId,
           channel: 'sms',
           direction: 'inbound',
           status: 'delivered',
@@ -57,10 +57,9 @@ export class TwilioService {
     }
 
     if (complianceUtils.containsHelpKeywords(messageBody)) {
-      // Store help request
       await this.prisma.message.create({
         data: {
-          accountId: 'halo-hq',
+          accountId,
           channel: 'sms',
           direction: 'inbound',
           status: 'delivered',
@@ -77,10 +76,9 @@ export class TwilioService {
       return { message: 'HELP processed' };
     }
 
-    // Store regular inbound message
-    await this.prisma.message.create({
+    const inboundMsg = await this.prisma.message.create({
       data: {
-        accountId: 'halo-hq',
+        accountId,
         channel: 'sms',
         direction: 'inbound',
         status: 'delivered',
@@ -93,6 +91,15 @@ export class TwilioService {
       },
     });
 
+    try {
+      await this.automationService.attributeReply(
+        inboundMsg.id,
+        accountId,
+      );
+    } catch (err) {
+      this.logger.warn(`Attribution failed for message ${inboundMsg.id}: ${err}`);
+    }
+
     return { message: 'Received' };
   }
 
@@ -100,7 +107,6 @@ export class TwilioService {
     const messageSid = body.MessageSid;
     const status = body.MessageStatus;
 
-    // Find message by SID
     const messages = await this.prisma.message.findMany({
       where: {
         metadata: {
@@ -127,6 +133,53 @@ export class TwilioService {
     return { message: 'Status updated' };
   }
 
+  /**
+   * Resolve accountId by looking up the 'To' number (our Twilio number) or
+   * falling back to the most recent outbound message to the sender.
+   */
+  private async resolveAccountId(
+    toPhone: string,
+    fromPhone: string,
+  ): Promise<string> {
+    const normalized = complianceUtils.normalizePhoneNumber(fromPhone);
+
+    const recentOutbound = await this.prisma.message.findFirst({
+      where: {
+        direction: 'outbound',
+        metadata: {
+          path: ['to'],
+          string_contains: normalized,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { accountId: true },
+    });
+
+    if (recentOutbound?.accountId) {
+      return recentOutbound.accountId;
+    }
+
+    const lead = await this.prisma.lead.findFirst({
+      where: {
+        OR: [
+          { canonicalPhone: normalized },
+          { canonicalPhone: fromPhone },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { accountId: true },
+    });
+
+    if (lead?.accountId) {
+      return lead.accountId;
+    }
+
+    this.logger.warn(
+      `Could not resolve accountId for from=${fromPhone} to=${toPhone}, defaulting to 'unknown'`,
+    );
+    return 'unknown';
+  }
+
   private mapTwilioStatus(status: string): string {
     const statusMap: Record<string, string> = {
       queued: 'pending_approval',
@@ -139,4 +192,3 @@ export class TwilioService {
     return statusMap[status] || 'sent';
   }
 }
-

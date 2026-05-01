@@ -13,14 +13,18 @@ export class SendEmailSkill {
       description: 'Send an email through the approval queue',
       inputSchema: { to: 'string', subject: 'string', body: 'string', dealId: 'string', tenantId: 'string' },
       execute: async (input) => {
+        const cp = await this.prisma.controlPlane.findFirst();
+        const sideEffects = cp?.enabled ?? false;
+        const messaging = sideEffects && (cp?.emailEnabled ?? false);
+
         const ctx = buildPolicyContext({
           tenantId: input.tenantId,
           actorId: null,
           actorType: 'system',
           requestedAction: 'send_email',
           channel: 'email',
-          sideEffectsEnabled: true,
-          messagingEnabled: true,
+          sideEffectsEnabled: sideEffects,
+          messagingEnabled: messaging,
           aiEnabled: false,
         });
         assertPolicy(ctx);
@@ -32,9 +36,9 @@ export class SendEmailSkill {
             channel: 'email',
             direction: 'outbound',
             content: input.body,
-            toAddress: input.to,
+            source: 'openclaw',
             status: 'pending_approval',
-            metadata: { source: 'openclaw', subject: input.subject },
+            metadata: { to: input.to, subject: input.subject },
           },
         });
 

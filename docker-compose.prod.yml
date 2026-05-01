@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: halo-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-halo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-halo_prod}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-halo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: halo-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: halo-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: halo-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+      DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID}
+      DESCOPE_MANAGEMENT_KEY: ${DESCOPE_MANAGEMENT_KEY:-}
+      OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-2.0}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      DOCUSIGN_CONNECT_SECRET: ${DOCUSIGN_CONNECT_SECRET:-}
+      ATTOM_API_KEY: ${ATTOM_API_KEY:-}
+      PROPERTYRADAR_API_KEY: ${PROPERTYRADAR_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3001/api/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: halo-web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+      NEXT_PUBLIC_DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID}
+      NEXT_PUBLIC_DESCOPE_FLOW_ID: ${NEXT_PUBLIC_DESCOPE_FLOW_ID:-sign-in}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    container_name: halo-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+      ATTOM_API_KEY: ${ATTOM_API_KEY:-}
+      GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
+      PROPERTYRADAR_API_KEY: ${PROPERTYRADAR_API_KEY:-}
+      FEATURE_OPENCLAW: ${FEATURE_OPENCLAW:-false}
+      OPENCLAW_WS_URL: ${OPENCLAW_WS_URL:-}
+      OPENCLAW_AGENT_ID: ${OPENCLAW_AGENT_ID:-}
+      OPENCLAW_SECRET: ${OPENCLAW_SECRET:-}
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

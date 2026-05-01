@@ -10,8 +10,14 @@ export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) {}
 
   @Post()
-  async create(@Body() data: unknown) {
-    const validated = PropertyCreateSchema.parse(data);
+  async create(
+    @Body() data: unknown,
+    @CurrentAccountId() accountId: string,
+  ) {
+    const validated = PropertyCreateSchema.parse({
+      ...(data as object),
+      accountId,
+    });
     return this.propertiesService.create(validated);
   }
 

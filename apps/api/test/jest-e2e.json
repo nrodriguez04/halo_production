@@ -9,5 +9,6 @@
   "moduleNameMapper": {
     "^@halo/shared(.*)$": "<rootDir>/../../packages/shared/src$1"
   },
-  "testTimeout": 30000
+  "testTimeout": 30000,
+  "forceExit": true
 }

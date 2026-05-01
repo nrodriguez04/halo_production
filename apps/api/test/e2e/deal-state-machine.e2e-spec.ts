@@ -1,4 +1,4 @@
-import request from 'supertest';
+import request = require('supertest');
 
 describe('Deal state machine (e2e)', () => {
   const apiBase = process.env.API_BASE_URL || 'http://localhost:3001';

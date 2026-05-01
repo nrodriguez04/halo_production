@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { BuyersService } from './buyers.service';
@@ -28,28 +29,47 @@ export class BuyersController {
   }
 
   @Get()
-  async findAll(@CurrentAccountId() accountId: string) {
-    return this.buyersService.findAll(accountId);
-  }
-
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.buyersService.findOne(id);
-  }
-
-  @Put(':id')
-  async update(@Param('id') id: string, @Body() data: unknown) {
-    return this.buyersService.update(id, data as any);
-  }
-
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
-    return this.buyersService.remove(id);
+  async findAll(
+    @CurrentAccountId() accountId: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.buyersService.findAll(accountId, {
+      skip: skip ? parseInt(skip, 10) : 0,
+      take: take ? parseInt(take, 10) : 50,
+    });
   }
 
   @Get('match/:dealId')
-  async matchBuyers(@Param('dealId') dealId: string) {
-    return this.buyersService.matchBuyers(dealId);
+  async matchBuyers(
+    @Param('dealId') dealId: string,
+    @CurrentAccountId() accountId: string,
+  ) {
+    return this.buyersService.matchBuyers(dealId, accountId);
+  }
+
+  @Get(':id')
+  async findOne(
+    @Param('id') id: string,
+    @CurrentAccountId() accountId: string,
+  ) {
+    return this.buyersService.findOne(id, accountId);
+  }
+
+  @Put(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() data: unknown,
+    @CurrentAccountId() accountId: string,
+  ) {
+    return this.buyersService.update(id, accountId, data as any);
+  }
+
+  @Delete(':id')
+  async remove(
+    @Param('id') id: string,
+    @CurrentAccountId() accountId: string,
+  ) {
+    return this.buyersService.remove(id, accountId);
   }
 }
-

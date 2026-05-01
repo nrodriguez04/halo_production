@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
+import { ApiCostService } from '../../api-cost/api-cost.service';
 import * as crypto from 'crypto';
 
 interface GeocodingResponse {
@@ -29,6 +30,7 @@ export class GeocodingService {
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
+    private apiCostService: ApiCostService,
   ) {}
 
   async geocode(address: string, city?: string, state?: string, zip?: string) {
@@ -62,6 +64,14 @@ export class GeocodingService {
       if (data.status !== 'OK') {
         throw new Error(`Geocoding failed: ${data.status}`);
       }
+
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'google',
+        endpoint: `${url}?${params.toString()}`,
+        costUsd: 0.005,
+        responseCode: 200,
+      });
 
       // Store source record
       const sourceRecord = await this.storeSourceRecord(
@@ -108,6 +118,14 @@ export class GeocodingService {
       if (data.status !== 'OK') {
         throw new Error(`Reverse geocoding failed: ${data.status}`);
       }
+
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'google',
+        endpoint: `${url}?${params.toString()}`,
+        costUsd: 0.005,
+        responseCode: 200,
+      });
 
       const sourceRecord = await this.storeSourceRecord(
         'google',

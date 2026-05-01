@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import {
   DealCreate,
@@ -7,13 +7,17 @@ import {
   transitionDealStage,
 } from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
+import { AutomationService } from '../automation/automation.service';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 
 @Injectable()
 export class DealsService {
+  private readonly logger = new Logger(DealsService.name);
+
   constructor(
     private prisma: PrismaService,
     private timelineService: TimelineService,
+    private automationService: AutomationService,
   ) {}
 
   async create(data: DealCreate, actorId: string | null = null) {
@@ -39,14 +43,23 @@ export class DealsService {
     return deal;
   }
 
-  async findAll(accountId: string, stage?: string) {
+  async findAll(
+    accountId: string,
+    stage?: string,
+    pagination?: { skip?: number; take?: number },
+  ) {
     const where: any = { accountId };
     if (stage) {
       where.stage = stage;
     }
 
+    const skip = pagination?.skip ?? 0;
+    const take = pagination?.take ?? 50;
+
     return this.prisma.deal.findMany({
       where,
+      skip,
+      take,
       include: {
         lead: true,
         property: true,
@@ -142,6 +155,12 @@ export class DealsService {
       actorId,
       actorType,
     });
+
+    try {
+      await this.automationService.attributeStageChange(id, accountId, stage);
+    } catch (err) {
+      this.logger.warn(`Stage-change attribution failed for deal ${id}: ${err}`);
+    }
 
     return updated;
   }

@@ -48,8 +48,12 @@ export default function DealsPage() {
   const fetchDeals = async () => {
     try {
       const response = await apiFetch('/deals');
+      if (!response.ok) {
+        console.error('Failed to fetch deals:', response.status, response.statusText);
+        return;
+      }
       const data = await response.json();
-      setDeals(data);
+      setDeals(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch deals:', error);
     } finally {

@@ -26,10 +26,13 @@ export class LeadsService {
       where.status = options.status;
     }
 
+    const skip = options?.skip ?? 0;
+    const take = options?.take ?? 50;
+
     return this.prisma.lead.findMany({
       where,
-      skip: options?.skip,
-      take: options?.take,
+      skip,
+      take,
       include: {
         properties: true,
         deals: true,
@@ -281,9 +284,8 @@ export class LeadsService {
         userId,
         accountId: target.accountId,
         action: 'lead.merge',
-        resource: 'lead',
-        resourceId: targetId,
-        metadata: {
+        resource: `lead:${targetId}`,
+        details: {
           sourceId,
           targetId,
           mergedAt: new Date().toISOString(),
@@ -309,9 +311,8 @@ export class LeadsService {
         userId,
         accountId,
         action: 'lead.mark_distinct',
-        resource: 'lead',
-        resourceId: lead1Id,
-        metadata: {
+        resource: `lead:${lead1Id}`,
+        details: {
           lead1Id,
           lead2Id,
           markedAt: new Date().toISOString(),

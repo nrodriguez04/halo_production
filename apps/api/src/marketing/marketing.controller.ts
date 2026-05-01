@@ -1,7 +1,14 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { z } from 'zod';
 import { MarketingService } from './marketing.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+
+const GenerateBlastSchema = z
+  .object({
+    buyerIds: z.array(z.string()).min(1),
+  })
+  .strict();
 
 @Controller('marketing')
 @UseGuards(AuthGuard)
@@ -22,13 +29,14 @@ export class MarketingController {
     @Param('dealId') dealId: string,
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
-    @Body() body: { buyerIds: string[] },
+    @Body() body: unknown,
   ) {
+    const data = GenerateBlastSchema.parse(body);
     return this.marketingService.generateBuyerBlast(
       accountId,
       userId,
       dealId,
-      body.buyerIds,
+      data.buyerIds,
     );
   }
 

@@ -83,10 +83,16 @@ export default function DataTriagePage() {
   const fetchDuplicates = async () => {
     try {
       const response = await apiFetch('/leads/duplicates?threshold=0.7');
+      if (!response.ok) {
+        console.error('Failed to fetch duplicates:', response.status);
+        setDuplicates([]);
+        return;
+      }
       const data = await response.json();
-      setDuplicates(data);
+      setDuplicates(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch duplicates:', error);
+      setDuplicates([]);
     } finally {
       setLoading(false);
     }

@@ -18,8 +18,11 @@ export class UnderwritingProcessor extends WorkerHost {
 
   private get openai(): OpenAI {
     if (!this._openai) {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY environment variable is required');
+      }
       this._openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY || 'sk-placeholder',
+        apiKey: process.env.OPENAI_API_KEY,
       });
     }
     return this._openai;

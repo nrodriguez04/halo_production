@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "JobRunKind" ADD VALUE 'GENERATE_VIDEO_SCRIPT';

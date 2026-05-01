@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "control_plane" ADD COLUMN     "aiDailyCostCap" DOUBLE PRECISION NOT NULL DEFAULT 2.0,
+ADD COLUMN     "aiEnabled" BOOLEAN NOT NULL DEFAULT true;

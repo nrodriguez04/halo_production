@@ -8,7 +8,6 @@ import {
   Param,
   UseGuards,
   Query,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -33,10 +32,23 @@ export class LeadsController {
   async findAll(
     @CurrentAccountId() accountId: string,
     @Query('status') status?: string,
-    @Query('skip', ParseIntPipe) skip?: number,
-    @Query('take', ParseIntPipe) take?: number,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
   ) {
-    return this.leadsService.findAll(accountId, { status, skip, take });
+    return this.leadsService.findAll(accountId, {
+      status,
+      skip: skip ? parseInt(skip, 10) : 0,
+      take: take ? parseInt(take, 10) : 50,
+    });
+  }
+
+  @Get('duplicates')
+  async findDuplicates(
+    @CurrentAccountId() accountId: string,
+    @Query('threshold') threshold?: string,
+  ) {
+    const thresholdNum = threshold ? parseFloat(threshold) : 0.8;
+    return this.leadsService.findPotentialDuplicates(accountId, thresholdNum);
   }
 
   @Get(':id')
@@ -73,15 +85,6 @@ export class LeadsController {
   ) {
     const validatedRows = body.rows.map((row) => CSVImportRowSchema.parse(row));
     return this.leadsService.importCSV(validatedRows, accountId, userId);
-  }
-
-  @Get('duplicates')
-  async findDuplicates(
-    @CurrentAccountId() accountId: string,
-    @Query('threshold') threshold?: string,
-  ) {
-    const thresholdNum = threshold ? parseFloat(threshold) : 0.8;
-    return this.leadsService.findPotentialDuplicates(accountId, thresholdNum);
   }
 
   @Post('merge')

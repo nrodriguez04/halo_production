@@ -20,8 +20,21 @@ interface Property {
   state: string;
   zip?: string;
   estimatedValue?: number;
+  salePrice?: number | null;
   confidence?: number;
   deals?: Array<{ id: string; stage: string }>;
+}
+
+function formatUsd(n: number) {
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+/** Estimated value minus seller sale price (positive = spread below your value estimate). */
+function valueSpread(estimated?: number | null, sale?: number | null): number | null {
+  if (estimated == null || sale == null || Number.isNaN(estimated) || Number.isNaN(sale)) {
+    return null;
+  }
+  return estimated - sale;
 }
 
 export default function PropertiesPage() {
@@ -79,6 +92,13 @@ export default function PropertiesPage() {
                 <TableHead>Address</TableHead>
                 <TableHead>City/State</TableHead>
                 <TableHead>Estimated Value</TableHead>
+                <TableHead>Sale Price</TableHead>
+                <TableHead>
+                  <span className="block">Value Spread</span>
+                  <span className="text-[10px] font-normal text-muted-foreground normal-case">
+                    est. − sale
+                  </span>
+                </TableHead>
                 <TableHead>Confidence</TableHead>
                 <TableHead>Deals</TableHead>
               </TableRow>
@@ -86,14 +106,35 @@ export default function PropertiesPage() {
             <TableBody>
               {properties.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No properties found</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No properties found</TableCell>
                 </TableRow>
               ) : (
                 properties.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium text-foreground">{p.address}</TableCell>
                     <TableCell className="text-muted-foreground">{p.city}, {p.state}</TableCell>
-                    <TableCell className="text-foreground">{p.estimatedValue ? `$${p.estimatedValue.toLocaleString()}` : '--'}</TableCell>
+                    <TableCell className="text-foreground">{p.estimatedValue != null ? formatUsd(p.estimatedValue) : '—'}</TableCell>
+                    <TableCell className="text-foreground">
+                      {p.salePrice != null ? formatUsd(p.salePrice) : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const spread = valueSpread(p.estimatedValue, p.salePrice);
+                        if (spread == null) {
+                          return <span className="text-muted-foreground">—</span>;
+                        }
+                        const positive = spread >= 0;
+                        return (
+                          <span
+                            className={positive ? 'text-emerald-500 font-medium' : 'text-amber-500 font-medium'}
+                            title="Estimated value minus sale price"
+                          >
+                            {positive ? '+' : ''}
+                            {formatUsd(spread)}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                       {p.confidence != null ? (
                         <Badge variant={p.confidence > 0.7 ? 'success' : p.confidence > 0.4 ? 'warning' : 'destructive'}>

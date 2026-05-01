@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { AutomationRunStatus, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -104,6 +104,8 @@ async function main() {
       },
     });
 
+    const salePrice = Math.round(prop.value * (0.82 + Math.random() * 0.12));
+
     const property = await prisma.property.create({
       data: {
         accountId: ACCOUNT_ID,
@@ -116,6 +118,7 @@ async function main() {
         latitude: prop.lat,
         longitude: prop.lng,
         estimatedValue: prop.value,
+        salePrice,
         confidence: 0.7 + Math.random() * 0.3,
       },
     });
@@ -220,17 +223,229 @@ async function main() {
   }
   console.log(`  Created ${eventCount} timeline events`);
 
+  // 10. Automation runs (OpenClaw integration demo data)
+  console.log('\nCreating automation runs...');
+
+  const completedRun = await prisma.automationRun.create({
+    data: {
+      tenantId: ACCOUNT_ID,
+      source: 'openclaw',
+      agentName: 'outreach-agent',
+      workflowName: 'draft-seller-sms',
+      entityType: 'deal',
+      entityId: createdDeals[0],
+      status: 'COMPLETED',
+      triggerType: 'API',
+      startedAt: new Date(Date.now() - 3600_000),
+      completedAt: new Date(Date.now() - 3500_000),
+      inputJson: { channel: 'sms', recipientType: 'seller' },
+      outputJson: { messageId: 'demo-msg-1', sent: true },
+      aiCostUsd: 0.003,
+      messageCostUsd: 0.007,
+      estimatedValueUsd: 500,
+      realizedValueUsd: 0,
+    },
+  });
+
+  const failedRun = await prisma.automationRun.create({
+    data: {
+      tenantId: ACCOUNT_ID,
+      source: 'openclaw',
+      agentName: 'outreach-agent',
+      workflowName: 'draft-seller-email',
+      entityType: 'deal',
+      entityId: createdDeals[1],
+      status: 'FAILED',
+      triggerType: 'API',
+      startedAt: new Date(Date.now() - 7200_000),
+      completedAt: new Date(Date.now() - 7100_000),
+      inputJson: { channel: 'email', recipientType: 'seller' },
+      errorJson: { code: 'CONTROL_PLANE_DISABLED', message: 'Email channel disabled' },
+      aiCostUsd: 0.002,
+    },
+  });
+
+  const pendingRun = await prisma.automationRun.create({
+    data: {
+      tenantId: ACCOUNT_ID,
+      source: 'openclaw',
+      agentName: 'follow-up-agent',
+      workflowName: 'propose-follow-up',
+      entityType: 'deal',
+      entityId: createdDeals[2],
+      status: 'AWAITING_APPROVAL',
+      triggerType: 'SCHEDULED',
+      startedAt: new Date(Date.now() - 1800_000),
+      approvalRequired: true,
+      inputJson: { channel: 'sms', recipientType: 'seller' },
+      outputJson: { messageId: 'demo-msg-pending' },
+      aiCostUsd: 0.001,
+      messageCostUsd: 0.005,
+      estimatedValueUsd: 300,
+    },
+  });
+
+  // Pending approval message from openclaw
+  if (createdDeals.length > 2) {
+    await prisma.message.create({
+      data: {
+        accountId: ACCOUNT_ID,
+        dealId: createdDeals[2],
+        channel: 'sms',
+        direction: 'outbound',
+        status: 'pending_approval',
+        content: 'Hi William, following up on 789 Magnolia Dr. We can offer a competitive cash price. Interested in a quick chat?',
+        source: 'openclaw',
+        agentName: 'follow-up-agent',
+        automationRunId: pendingRun.id,
+        metadata: { recipientType: 'seller', workflowName: 'propose-follow-up' },
+      },
+    });
+  }
+
+  console.log(`  Created 3 automation runs (completed, failed, pending)`);
+
+  // 11. Deal economics
+  console.log('\nCreating deal economics...');
+
+  // Deal with positive ROI (closed deal)
+  const closedDealIndex = DEAL_STAGES.indexOf('closed');
+  if (closedDealIndex >= 0 && createdDeals[closedDealIndex]) {
+    await prisma.dealEconomics.create({
+      data: {
+        dealId: createdDeals[closedDealIndex],
+        tenantId: ACCOUNT_ID,
+        contractPrice: 155000,
+        assignmentPrice: 180000,
+        assignmentFee: 25000,
+        closingCosts: 2500,
+        marketingCost: 500,
+        skipTraceCost: 25,
+        smsCost: 12,
+        emailCost: 3,
+        aiCostAllocated: 0.50,
+        toolingCost: 15,
+        laborCost: 200,
+        otherCost: 50,
+        grossRevenue: 25000,
+        netProfit: 21694.50,
+        roiPercent: 658.0,
+        notes: 'Closed wholesale assignment. Strong ROI.',
+      },
+    });
+    console.log('  Created deal economics with positive ROI');
+  }
+
+  // Deal with incomplete economics (negotiating deal)
+  const negotiatingIndex = DEAL_STAGES.indexOf('negotiating');
+  if (negotiatingIndex >= 0 && createdDeals[negotiatingIndex]) {
+    await prisma.dealEconomics.create({
+      data: {
+        dealId: createdDeals[negotiatingIndex],
+        tenantId: ACCOUNT_ID,
+        contractPrice: null,
+        assignmentPrice: null,
+        skipTraceCost: 25,
+        smsCost: 8,
+        aiCostAllocated: 0.30,
+        notes: 'In negotiation. Costs tracked but no revenue yet.',
+      },
+    });
+    console.log('  Created deal economics with incomplete data');
+  }
+
+  // Seed API cost logs for the spend dashboard
+  const providers = [
+    { provider: 'attom', costPerCall: 0.10, endpoints: ['/propertyapi/v1.0.0/property/expandedprofile', '/propertyapi/v1.0.0/assessment'] },
+    { provider: 'google_geocoding', costPerCall: 0.005, endpoints: ['https://maps.googleapis.com/maps/api/geocode/json'] },
+    { provider: 'propertyradar', costPerCall: 0.02, endpoints: ['/v1/properties', '/v1/properties/contacts', '/v1/import'] },
+    { provider: 'rentcast', costPerCall: 0.05, endpoints: ['/v1/listings/sale', '/v1/properties', '/v1/avm/value'] },
+  ];
+
+  const now = new Date();
+  for (let daysAgo = 0; daysAgo < 30; daysAgo++) {
+    const day = new Date(now);
+    day.setDate(day.getDate() - daysAgo);
+    day.setHours(0, 0, 0, 0);
+
+    for (const p of providers) {
+      const callCount = Math.floor(Math.random() * 20) + 3;
+      for (let i = 0; i < callCount; i++) {
+        const callTime = new Date(day.getTime() + Math.random() * 86400000);
+        await prisma.apiCostLog.create({
+          data: {
+            accountId: ACCOUNT_ID,
+            provider: p.provider,
+            endpoint: p.endpoints[Math.floor(Math.random() * p.endpoints.length)],
+            costUsd: p.costPerCall * (0.8 + Math.random() * 0.4),
+            responseCode: Math.random() > 0.05 ? 200 : 500,
+            durationMs: Math.floor(Math.random() * 2000) + 100,
+            createdAt: callTime,
+          },
+        });
+      }
+    }
+  }
+  console.log('  Seeded API cost logs (30 days)');
+
+  await prisma.auditLog.createMany({
+    data: [
+      { accountId: ACCOUNT_ID, userId: 'system', action: 'control_plane.update', resource: 'control-plane', details: { enabled: true }, createdAt: new Date(Date.now() - 86400000 * 5) },
+      { accountId: ACCOUNT_ID, userId: 'system', action: 'secret.set', resource: 'integration-secret:twilio:TWILIO_AUTH_TOKEN', details: { provider: 'twilio' }, createdAt: new Date(Date.now() - 86400000 * 3) },
+      { accountId: ACCOUNT_ID, userId: 'system', action: 'control_plane.update', resource: 'control-plane', details: { smsEnabled: false }, createdAt: new Date(Date.now() - 86400000 * 2) },
+      { accountId: ACCOUNT_ID, userId: 'system', action: 'control_plane.update', resource: 'control-plane', details: { smsEnabled: true }, createdAt: new Date(Date.now() - 86400000) },
+    ],
+  });
+  console.log('  Seeded audit logs');
+
+  const agentNames = ['lead-qualifier', 'deal-negotiator', 'skip-tracer', 'follow-up-scheduler', 'market-analyst'];
+  const workflows = ['inbound-lead-flow', 'seller-outreach', 'buyer-matching', 'deal-progression', 'enrichment-pipeline'];
+  const statuses: AutomationRunStatus[] = ['COMPLETED', 'COMPLETED', 'COMPLETED', 'FAILED', 'RUNNING', 'QUEUED', 'AWAITING_APPROVAL'];
+
+  for (let i = 0; i < 50; i++) {
+    const agent = agentNames[Math.floor(Math.random() * agentNames.length)];
+    const workflow = workflows[Math.floor(Math.random() * workflows.length)];
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const daysAgo = Math.floor(Math.random() * 30);
+    const created = new Date(Date.now() - daysAgo * 86400000);
+    const completed = status === 'COMPLETED' || status === 'FAILED' ? new Date(created.getTime() + Math.random() * 60000) : null;
+
+    await prisma.automationRun.create({
+      data: {
+        tenantId: ACCOUNT_ID,
+        source: 'openclaw',
+        agentName: agent,
+        workflowName: workflow,
+        status,
+        triggerType: 'API',
+        startedAt: status !== 'QUEUED' ? created : null,
+        completedAt: completed,
+        aiCostUsd: Math.random() * 0.5,
+        messageCostUsd: Math.random() * 0.1,
+        toolCostUsd: Math.random() * 0.05,
+        estimatedValueUsd: Math.random() * 500,
+        realizedValueUsd: status === 'COMPLETED' ? Math.random() * 300 : 0,
+        createdAt: created,
+      },
+    });
+  }
+  console.log('  Seeded 50 automation runs');
+
   console.log('\n--- Seed complete! ---');
   console.log(`\nSummary:`);
-  console.log(`  Account:    1 (${ACCOUNT_ID})`);
-  console.log(`  Roles:      ${roleNames.length}`);
-  console.log(`  Leads:      ${DEMO_PROPERTIES.length}`);
-  console.log(`  Properties: ${DEMO_PROPERTIES.length}`);
-  console.log(`  Deals:      ${DEMO_PROPERTIES.length}`);
-  console.log(`  Buyers:     ${DEMO_BUYERS.length}`);
-  console.log(`  Messages:   ${Math.min(4, createdDeals.length)}`);
-  console.log(`  Consents:   ${leads.length}`);
-  console.log(`  Timeline:   ${eventCount}`);
+  console.log(`  Account:        1 (${ACCOUNT_ID})`);
+  console.log(`  Roles:          ${roleNames.length}`);
+  console.log(`  Leads:          ${DEMO_PROPERTIES.length}`);
+  console.log(`  Properties:     ${DEMO_PROPERTIES.length}`);
+  console.log(`  Deals:          ${DEMO_PROPERTIES.length}`);
+  console.log(`  Buyers:         ${DEMO_BUYERS.length}`);
+  console.log(`  Messages:       ${Math.min(4, createdDeals.length) + 1}`);
+  console.log(`  Consents:       ${leads.length}`);
+  console.log(`  Timeline:       ${eventCount}`);
+  console.log(`  AutomationRuns: 53 (3 demo + 50 agent cards)`);
+  console.log(`  ApiCostLogs:    30 days sample`);
+  console.log(`  AuditLogs:      4`);
+  console.log(`  DealEconomics:  2`);
   console.log(`\nRun "npm run db:studio" to explore data in Prisma Studio.`);
 }
 

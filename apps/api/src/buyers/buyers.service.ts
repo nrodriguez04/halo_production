@@ -12,16 +12,24 @@ export class BuyersService {
     });
   }
 
-  async findAll(accountId: string) {
+  async findAll(
+    accountId: string,
+    pagination?: { skip?: number; take?: number },
+  ) {
+    const skip = pagination?.skip ?? 0;
+    const take = pagination?.take ?? 50;
+
     return this.prisma.buyer.findMany({
       where: { accountId },
+      skip,
+      take,
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string) {
-    const buyer = await this.prisma.buyer.findUnique({
-      where: { id },
+  async findOne(id: string, accountId: string) {
+    const buyer = await this.prisma.buyer.findFirst({
+      where: { id, accountId },
     });
 
     if (!buyer) {
@@ -31,22 +39,24 @@ export class BuyersService {
     return buyer;
   }
 
-  async update(id: string, data: Partial<BuyerCreate>) {
+  async update(id: string, accountId: string, data: Partial<BuyerCreate>) {
+    await this.findOne(id, accountId);
     return this.prisma.buyer.update({
       where: { id },
       data,
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, accountId: string) {
+    await this.findOne(id, accountId);
     return this.prisma.buyer.delete({
       where: { id },
     });
   }
 
-  async matchBuyers(dealId: string) {
-    const deal = await this.prisma.deal.findUnique({
-      where: { id: dealId },
+  async matchBuyers(dealId: string, accountId: string) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
       include: {
         property: true,
         underwritingResult: true,

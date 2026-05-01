@@ -1,33 +1,28 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { Redis } from 'ioredis';
+import Redis from 'ioredis';
+import { REDIS } from '../redis/redis.module';
 
 @Injectable()
 export class QueueService {
-  private redis: Redis;
   private leadEnrichmentQueue: Queue;
   private communicationsQueue: Queue;
   private underwritingQueue: Queue;
   private marketingQueue: Queue;
 
-  constructor() {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      // BullMQ requires this to be null
-      maxRetriesPerRequest: null,
-    });
-    
+  constructor(@Inject(REDIS) private redis: Redis) {
     this.leadEnrichmentQueue = new Queue('lead-enrichment', {
       connection: this.redis,
     });
-    
+
     this.communicationsQueue = new Queue('communications', {
       connection: this.redis,
     });
-    
+
     this.underwritingQueue = new Queue('underwriting', {
       connection: this.redis,
     });
-    
+
     this.marketingQueue = new Queue('marketing', {
       connection: this.redis,
     });
@@ -61,4 +56,3 @@ export class QueueService {
     return this.marketingQueue.add(payload.type, payload);
   }
 }
-

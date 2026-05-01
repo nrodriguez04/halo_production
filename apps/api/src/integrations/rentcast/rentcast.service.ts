@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
+import { ApiCostService } from '../../api-cost/api-cost.service';
 
 export interface RentCastListing {
   id: string;
@@ -48,6 +49,7 @@ export class RentCastService {
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
+    private apiCostService: ApiCostService,
   ) {}
 
   async getListings(city: string, state: string): Promise<RentCastListing[]> {
@@ -77,6 +79,14 @@ export class RentCastService {
         return [];
       }
 
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'rentcast',
+        endpoint: `${this.baseUrl}/listings/sale?${params}`,
+        costUsd: 0.05,
+        responseCode: res.status,
+      });
+
       const data = await res.json();
       await this.setCache(cacheKey, data, 'rentcast', 'listings/sale');
       return data;
@@ -101,6 +111,15 @@ export class RentCastService {
       });
 
       if (!res.ok) return null;
+
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'rentcast',
+        endpoint: `${this.baseUrl}/properties?${params}`,
+        costUsd: 0.05,
+        responseCode: res.status,
+      });
+
       const data = await res.json();
       const record = Array.isArray(data) ? data[0] : data;
       if (record) await this.setCache(cacheKey, record, 'rentcast', 'properties');
@@ -121,6 +140,15 @@ export class RentCastService {
       });
 
       if (!res.ok) return null;
+
+      await this.apiCostService.log({
+        accountId: 'system',
+        provider: 'rentcast',
+        endpoint: `${this.baseUrl}/avm/value?${params}`,
+        costUsd: 0.05,
+        responseCode: res.status,
+      });
+
       return await res.json();
     } catch (error) {
       this.logger.error('RentCast value estimate failed', error);

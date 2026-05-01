@@ -199,7 +199,7 @@ export class MarketingService {
     const jobRun = await this.prisma.jobRun.create({
       data: {
         tenantId: accountId,
-        kind: 'GENERATE_FLYER_DRAFT',
+        kind: 'GENERATE_VIDEO_SCRIPT',
         entityType: 'DEAL',
         entityId: dealId,
         actorId: userId,

@@ -13,9 +13,18 @@ out/
 build/
 dist/
 
-# Production
-*.local
-.env*.local
+# Environment files / secrets
+.env
+.env.*
+!.env.local.example
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials*.json
+service-account*.json
 
 # Debug
 npm-debug.log*

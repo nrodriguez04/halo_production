@@ -41,6 +41,10 @@ export default function CommunicationsPage() {
   const fetchMessages = async () => {
     try {
       const res = await apiFetch('/communications/messages');
+      if (!res.ok) {
+        console.error('Failed to fetch messages:', res.status, res.statusText);
+        return;
+      }
       setMessages(await res.json());
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -52,6 +56,10 @@ export default function CommunicationsPage() {
   const fetchApprovalQueue = async () => {
     try {
       const res = await apiFetch('/communications/approval-queue');
+      if (!res.ok) {
+        console.error('Failed to fetch approval queue:', res.status, res.statusText);
+        return;
+      }
       setApprovalQueue(await res.json());
     } catch (error) {
       console.error('Failed to fetch approval queue:', error);
@@ -59,16 +67,24 @@ export default function CommunicationsPage() {
   };
 
   const handleApprove = async (id: string) => {
-    await apiFetch(`/communications/messages/${id}/approve`, { method: 'PUT' });
+    const res = await apiFetch(`/communications/messages/${id}/approve`, { method: 'PUT' });
+    if (!res.ok) {
+      console.error('Failed to approve message:', res.status, res.statusText);
+      return;
+    }
     fetchMessages();
     fetchApprovalQueue();
   };
 
   const handleReject = async (id: string) => {
-    await apiFetch(`/communications/messages/${id}/reject`, {
+    const res = await apiFetch(`/communications/messages/${id}/reject`, {
       method: 'PUT',
       body: JSON.stringify({ reason: 'Rejected by user' }),
     });
+    if (!res.ok) {
+      console.error('Failed to reject message:', res.status, res.statusText);
+      return;
+    }
     fetchMessages();
     fetchApprovalQueue();
   };

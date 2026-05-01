@@ -3,13 +3,17 @@ import { resolve } from 'path';
 config({ path: resolve(__dirname, '..', '.env.local') });
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger as NestLogger } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import * as express from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { validateEnv } from './env';
 
 async function bootstrap() {
+  validateEnv();
   const app = await NestFactory.create(AppModule);
+  app.useLogger(app.get(Logger));
 
   const httpAdapter = app.getHttpAdapter().getInstance() as express.Application;
   httpAdapter.disable('x-powered-by');
@@ -19,6 +23,19 @@ async function bootstrap() {
   } catch {
     httpAdapter.disable('x-powered-by');
   }
+
+  // CORS
+  const origins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  app.enableCors({
+    origin: origins,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
 
   app.use(express.json({ limit: '512kb' }));
   app.use(express.urlencoded({ extended: true, limit: '512kb' }));
@@ -54,8 +71,8 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`API server running on http://localhost:${port}`);
+  const logger = new NestLogger('Bootstrap');
+  logger.log(`API server running on http://localhost:${port}`);
 }
 
 bootstrap();
-

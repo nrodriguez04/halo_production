@@ -87,14 +87,23 @@ export class CommunicationsService {
     return message;
   }
 
-  async findAll(accountId: string, status?: string) {
+  async findAll(
+    accountId: string,
+    status?: string,
+    pagination?: { skip?: number; take?: number },
+  ) {
     const where: any = { accountId };
     if (status) {
       where.status = status;
     }
 
+    const skip = pagination?.skip ?? 0;
+    const take = pagination?.take ?? 50;
+
     return this.prisma.message.findMany({
       where,
+      skip,
+      take,
       orderBy: { createdAt: 'desc' },
     });
   }

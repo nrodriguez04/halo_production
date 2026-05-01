@@ -32,6 +32,9 @@ export class ControlPlaneService {
       emailEnabled?: boolean;
       docusignEnabled?: boolean;
       externalDataEnabled?: boolean;
+      aiEnabled?: boolean;
+      aiDailyCostCap?: number;
+      apiDailyCostCap?: number;
     },
     userId: string,
   ) {
@@ -81,6 +84,21 @@ export class ControlPlaneService {
   async isExternalDataEnabled(): Promise<boolean> {
     const cp = await this.getStatus();
     return cp.enabled && cp.externalDataEnabled;
+  }
+
+  async isAiEnabled(): Promise<boolean> {
+    const cp = await this.getStatus();
+    return cp.enabled && cp.aiEnabled;
+  }
+
+  async getAiDailyCostCap(): Promise<number> {
+    const cp = await this.getStatus();
+    return cp.aiDailyCostCap;
+  }
+
+  async getApiDailyCostCap(): Promise<number> {
+    const cp = await this.getStatus();
+    return cp.apiDailyCostCap;
   }
 }
 

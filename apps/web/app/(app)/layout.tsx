@@ -19,6 +19,8 @@ import {
   Megaphone,
   UserCheck,
   Zap,
+  Bot,
+  DollarSign,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +37,8 @@ const navItems = [
 
 const adminItems = [
   { href: '/admin', label: 'Control Plane', icon: Shield },
+  { href: '/admin/openclaw', label: 'OpenClaw', icon: Bot },
+  { href: '/admin/api-spend', label: 'API Spend', icon: DollarSign },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/chaos', label: 'Chaos & DLQ', icon: Zap },
 ];
@@ -55,7 +59,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [sdk]);
 
   const isActive = (href: string) => {
-    if (href === '/dashboard') return pathname === '/dashboard';
+    if (href === '/dashboard' || href === '/admin') return pathname === href;
     return pathname.startsWith(href);
   };
 

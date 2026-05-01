@@ -1,84 +1,113 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma.service';
-import { Redis } from 'ioredis';
+import { ControlPlaneService } from '../control-plane/control-plane.service';
+import { ApiCostService } from '../api-cost/api-cost.service';
+import { AuthGuard } from '../auth/auth.guard';
+import { REDIS } from '../redis/redis.module';
+import Redis from 'ioredis';
 
 @Controller('health')
 export class HealthController {
-  private redis: Redis;
+  constructor(
+    private prisma: PrismaService,
+    private controlPlane: ControlPlaneService,
+    private apiCostService: ApiCostService,
+    @Inject(REDIS) private redis: Redis,
+  ) {}
 
-  constructor(private prisma: PrismaService) {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-  }
-
-  @Get()
-  async getHealth() {
+  @SkipThrottle()
+  @Get('live')
+  async getLive() {
     const checks: Record<string, any> = {
-      timestamp: new Date().toISOString(),
       status: 'ok',
+      timestamp: new Date().toISOString(),
     };
 
-    // DB connectivity
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       checks.database = { status: 'ok' };
-    } catch (error) {
-      checks.database = { status: 'error', error: error.message };
+    } catch {
+      checks.database = { status: 'error' };
       checks.status = 'degraded';
     }
 
-    // Redis connectivity
     try {
       await this.redis.ping();
       checks.redis = { status: 'ok' };
-    } catch (error) {
-      checks.redis = { status: 'error', error: error.message };
+    } catch {
+      checks.redis = { status: 'error' };
       checks.status = 'degraded';
     }
 
-    // Queue depth (basic check)
+    return checks;
+  }
+
+  @SkipThrottle()
+  @Get('ready')
+  @UseGuards(AuthGuard)
+  async getReady() {
+    const checks = await this.getLive();
+
     try {
-      // This will be enhanced when BullMQ is set up
       checks.queues = { status: 'ok', depth: 0 };
-    } catch (error) {
+    } catch (error: any) {
       checks.queues = { status: 'error', error: error.message };
     }
 
-    // Control plane status
     try {
-      const controlPlane = await this.prisma.controlPlane.findFirst();
+      const cp = await this.controlPlane.getStatus();
       checks.controlPlane = {
-        enabled: controlPlane?.enabled ?? true,
-        smsEnabled: controlPlane?.smsEnabled ?? true,
-        emailEnabled: controlPlane?.emailEnabled ?? true,
-        docusignEnabled: controlPlane?.docusignEnabled ?? true,
-        externalDataEnabled: controlPlane?.externalDataEnabled ?? true,
+        enabled: cp.enabled,
+        smsEnabled: cp.smsEnabled,
+        emailEnabled: cp.emailEnabled,
+        docusignEnabled: cp.docusignEnabled,
+        externalDataEnabled: cp.externalDataEnabled,
+        aiEnabled: cp.aiEnabled,
+        aiDailyCostCap: cp.aiDailyCostCap,
+        apiDailyCostCap: cp.apiDailyCostCap,
       };
-    } catch (error) {
+    } catch (error: any) {
       checks.controlPlane = { status: 'error', error: error.message };
     }
 
-    // AI cost today
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const costLogs = await this.prisma.aICostLog.findMany({
-        where: {
-          createdAt: { gte: today },
-        },
+        where: { createdAt: { gte: today } },
       });
       const totalCost = costLogs.reduce((sum, log) => sum + log.cost, 0);
-      const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
+      const dailyCap = await this.controlPlane.getAiDailyCostCap();
       checks.aiCost = {
         today: totalCost.toFixed(4),
         cap: dailyCap,
         remaining: Math.max(0, dailyCap - totalCost).toFixed(4),
         status: totalCost < dailyCap ? 'ok' : 'capped',
       };
-    } catch (error) {
+    } catch (error: any) {
       checks.aiCost = { status: 'error', error: error.message };
+    }
+
+    try {
+      const apiSpendToday = await this.apiCostService.getTodayTotal();
+      const apiCap = await this.controlPlane.getApiDailyCostCap();
+      checks.apiSpend = {
+        today: apiSpendToday.toFixed(4),
+        cap: apiCap,
+        remaining: Math.max(0, apiCap - apiSpendToday).toFixed(4),
+        status: apiSpendToday < apiCap ? 'ok' : 'capped',
+      };
+    } catch (error: any) {
+      checks.apiSpend = { status: 'error', error: error.message };
     }
 
     return checks;
   }
-}
 
+  @SkipThrottle()
+  @Get()
+  async getHealth() {
+    return this.getLive();
+  }
+}

@@ -34,11 +34,11 @@ export class PIIService {
 
     await this.prisma.auditLog.create({
       data: {
+        accountId: record.accountId,
         action: 'pii_access',
         userId: actorId || 'system',
-        resource: 'PIIEnvelope',
-        resourceId: envelopeId,
-        metadata: { fieldName: record.fieldName, leadId: record.leadId },
+        resource: `PIIEnvelope:${envelopeId}`,
+        details: { fieldName: record.fieldName, leadId: record.leadId },
       },
     });
 

@@ -35,8 +35,13 @@ export class CommunicationsController {
   async findAll(
     @CurrentAccountId() accountId: string,
     @Query('status') status?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
   ) {
-    return this.communicationsService.findAll(accountId, status);
+    return this.communicationsService.findAll(accountId, status, {
+      skip: skip ? parseInt(skip, 10) : 0,
+      take: take ? parseInt(take, 10) : 50,
+    });
   }
 
   @Get('messages/:id')
@@ -72,8 +77,15 @@ export class CommunicationsController {
   }
 
   @Get('approval-queue')
-  async getApprovalQueue(@CurrentAccountId() accountId: string) {
-    return this.communicationsService.findAll(accountId, 'pending_approval');
+  async getApprovalQueue(
+    @CurrentAccountId() accountId: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.communicationsService.findAll(accountId, 'pending_approval', {
+      skip: skip ? parseInt(skip, 10) : 0,
+      take: take ? parseInt(take, 10) : 50,
+    });
   }
 }
 

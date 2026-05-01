@@ -13,14 +13,18 @@ export class SendSmsSkill {
       description: 'Send an SMS message through the approval queue',
       inputSchema: { to: 'string', body: 'string', dealId: 'string', tenantId: 'string' },
       execute: async (input) => {
+        const cp = await this.prisma.controlPlane.findFirst();
+        const sideEffects = cp?.enabled ?? false;
+        const messaging = sideEffects && (cp?.smsEnabled ?? false);
+
         const ctx = buildPolicyContext({
           tenantId: input.tenantId,
           actorId: null,
           actorType: 'system',
           requestedAction: 'send_sms',
           channel: 'sms',
-          sideEffectsEnabled: true,
-          messagingEnabled: true,
+          sideEffectsEnabled: sideEffects,
+          messagingEnabled: messaging,
           aiEnabled: false,
         });
         assertPolicy(ctx);
@@ -32,9 +36,9 @@ export class SendSmsSkill {
             channel: 'sms',
             direction: 'outbound',
             content: input.body,
-            toAddress: input.to,
+            source: 'openclaw',
             status: 'pending_approval',
-            metadata: { source: 'openclaw' },
+            metadata: { to: input.to },
           },
         });
 
