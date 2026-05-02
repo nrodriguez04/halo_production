@@ -190,6 +190,16 @@ REDIS_PASSWORD=<strong_random>
 MINIO_ROOT_USER=halo_minio
 MINIO_ROOT_PASSWORD=<strong_random>
 
+# ── Database connection pool (Prisma-side) ─────────────
+# Cap each Node process at 10 PG connections. Both the api and the worker
+# use a single PrismaClient per process (the worker shares one across all
+# BullMQ processors via apps/worker/src/prisma-client.ts), so total
+# connections from this box are roughly 2 × connection_limit = 20.
+# Postgres' default max_connections is 100, leaving plenty of headroom for
+# psql sessions, backups, and the migration job. pool_timeout=20 is how
+# long Prisma will wait for a free connection before failing the query.
+DATABASE_URL="postgresql://halo:<password>@postgres:5432/halo_prod?connection_limit=10&pool_timeout=20"
+
 # ── Auth (Descope - PROD project) ──────────────────────
 DESCOPE_PROJECT_ID=P_prod_xxx
 DESCOPE_MANAGEMENT_KEY=
@@ -473,17 +483,53 @@ beyond env vars + compose edits.
 
 ### 12.1 Move Postgres to Neon (managed, branchable)
 
-- Create a Neon project, enable the `vector` extension under Extensions.
-- Copy the pooled connection string.
+- Create a Neon project, enable the `vector` **and** `pg_trgm` extensions
+  under Extensions. (`pg_trgm` powers the leads search trigram GIN indexes
+  added in migration `20260502150215_perf_indexes`.)
+- Copy the **pooled** connection string (the one with `-pooler` in the
+  hostname). Neon's pooler is PgBouncer in transaction mode.
 - Replace `DATABASE_URL` in `/opt/halo/.env`:
 
   ```env
-  DATABASE_URL=postgresql://<user>:<pw>@<host>/halo?sslmode=require
+  # Pooled URL for the api + worker (PgBouncer transaction mode).
+  # connection_limit=10 keeps each Node process under Neon's free-tier
+  # connection budget; pool_timeout=20 is how long Prisma waits for a
+  # connection before failing the query.
+  DATABASE_URL="postgresql://<user>:<pw>@<host>-pooler/halo?sslmode=require&connection_limit=10&pool_timeout=20&pgbouncer=true"
+
+  # Direct (non-pooled) URL is only needed for `prisma migrate deploy`.
+  # Migrations require a session-mode connection, which PgBouncer txn mode
+  # can't provide. Add this as a separate variable and reference it from
+  # `directUrl` in schema.prisma if you switch to Neon long-term.
+  DIRECT_DATABASE_URL="postgresql://<user>:<pw>@<host>/halo?sslmode=require"
   ```
+
+  Sizing notes:
+  - api: ~ `connection_limit = floor((pool_size_at_pgbouncer) / 2)` — leave
+    headroom for the worker. With the default Neon free-tier of ~100 pooled
+    connections, `10` per process is comfortable.
+  - worker: same `connection_limit=10`. The worker's BullMQ processors all
+    share a single PrismaClient (see `apps/worker/src/prisma-client.ts`) so
+    there is **one** connection pool per process, not one per processor.
+  - Increase to `20–30` only if you see Prisma `pool_timeout` errors under
+    load and Neon shows headroom.
+
+- If you want Prisma to use the direct URL for migrations, add
+  `directUrl = env("DIRECT_DATABASE_URL")` next to the existing `url =` line
+  in `apps/api/prisma/schema.prisma`'s `datasource db` block.
 
 - In `docker-compose.prod.yml`: comment out the `postgres:` service and the
   `depends_on: postgres` blocks on api/worker.
-- `docker compose up -d` then `prisma migrate deploy`.
+- `docker compose up -d` then
+  `docker compose exec api npx prisma migrate deploy`. (Neon will run all 8
+  current migrations, including `pg_trgm` extension creation, the composite
+  + GIN indexes, and the redundant-index drop.)
+- After the first deploy, run an `ANALYZE;` on Neon to populate planner
+  statistics for the new indexes:
+
+  ```bash
+  docker compose exec api npx prisma db execute --stdin <<< "ANALYZE;"
+  ```
 
 ### 12.2 Move object storage to Cloudflare R2
 
