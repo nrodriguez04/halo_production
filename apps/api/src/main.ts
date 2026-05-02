@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger as NestLogger } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import * as express from 'express';
+import * as compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { validateEnv } from './env';
@@ -23,6 +24,21 @@ async function bootstrap() {
   } catch {
     httpAdapter.disable('x-powered-by');
   }
+
+  // gzip-compress JSON responses larger than 1 KB. Most analytics / list
+  // endpoints return JSON arrays in the 5–200 KB range that compress 70–90%.
+  // The 1 KB threshold avoids burning CPU on tiny payloads where overhead
+  // outweighs savings. Skip if the client sends `x-no-compression` or for
+  // any response already marked Cache-Control: no-transform.
+  app.use(
+    compression({
+      threshold: 1024,
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+      },
+    }),
+  );
 
   // CORS
   const origins = (process.env.CORS_ORIGINS || 'http://localhost:3000')

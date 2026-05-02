@@ -23,6 +23,39 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { prefetchApi, useQueryClient } from '@/lib/api-query';
+
+// Nav link → list of {path, params?} entries that the destination page will
+// useApiQuery for. We fire these on mouseEnter so by the time the user clicks,
+// the destination page paints with cached data. Cache keys here MUST match
+// the keys built inside each page's useApiQuery call (path + params object),
+// otherwise the prefetch is wasted.
+type Prefetch = { path: string; params?: Record<string, string | number> };
+const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
+  '/dashboard': [{ path: '/analytics/kpis' }],
+  '/deals': [{ path: '/deals' }],
+  '/communications': [
+    { path: '/communications/messages' },
+    { path: '/communications/approval-queue' },
+  ],
+  '/marketing': [{ path: '/deals' }],
+  '/buyers': [{ path: '/buyers' }],
+  '/admin': [{ path: '/health/ready' }, { path: '/control-plane' }],
+  '/admin/openclaw': [
+    { path: '/analytics/automation/overview' },
+    { path: '/analytics/automation/roi' },
+    { path: '/analytics/automation/by-workflow' },
+    { path: '/analytics/automation/agent-cards' },
+  ],
+  '/admin/api-spend': [
+    { path: '/analytics/api-spend' },
+    { path: '/analytics/api-spend/by-provider' },
+    { path: '/analytics/api-spend/daily-trend', params: { days: 30 } },
+    { path: '/health/ready' },
+  ],
+  '/admin/integrations': [{ path: '/integration-secrets' }],
+  '/admin/chaos': [{ path: '/admin/chaos/status' }, { path: '/admin/dlq' }],
+};
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -47,6 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const sdk = useDescope();
+  const queryClient = useQueryClient();
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -57,6 +91,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       window.location.href = '/';
     }
   }, [sdk]);
+
+  const handlePrefetch = useCallback(
+    (href: string) => {
+      const list = ROUTE_PREFETCH[href];
+      if (!list) return;
+      for (const entry of list) {
+        // prefetchQuery is a no-op if the cache entry is still fresh.
+        void prefetchApi(queryClient, entry.path, entry.params);
+      }
+    },
+    [queryClient],
+  );
 
   const isActive = (href: string) => {
     if (href === '/dashboard' || href === '/admin') return pathname === href;
@@ -99,6 +145,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onMouseEnter={() => handlePrefetch(item.href)}
+                  onFocus={() => handlePrefetch(item.href)}
                   className={cn(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     active
@@ -127,6 +175,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onMouseEnter={() => handlePrefetch(item.href)}
+                  onFocus={() => handlePrefetch(item.href)}
                   className={cn(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     active
