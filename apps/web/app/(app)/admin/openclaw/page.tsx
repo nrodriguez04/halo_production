@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery, useQueryClient } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -396,60 +396,41 @@ function AgentCardComponent({ agent }: { agent: AgentCard }) {
 type Tab = 'overview' | 'agents' | 'runs' | 'costs';
 
 export default function OpenClawPage() {
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('overview');
-  const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [roi, setRoi] = useState<ROI | null>(null);
-  const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
-  const [agentCards, setAgentCards] = useState<AgentCard[]>([]);
-  const [runs, setRuns] = useState<RunRow[]>([]);
   const [runsFilter, setRunsFilter] = useState('');
-  const [runsLoading, setRunsLoading] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [ovRes, roiRes, wfRes, agRes] = await Promise.all([
-        apiFetch('/analytics/automation/overview'),
-        apiFetch('/analytics/automation/roi'),
-        apiFetch('/analytics/automation/by-workflow'),
-        apiFetch('/analytics/automation/agent-cards'),
-      ]);
-      if (ovRes.ok) setOverview(await ovRes.json());
-      if (roiRes.ok) setRoi(await roiRes.json());
-      if (wfRes.ok) setWorkflows(await wfRes.json());
-      if (agRes.ok) setAgentCards(await agRes.json());
-    } catch (err) {
-      console.error('Failed to fetch OpenClaw data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: overview, isPending: overviewPending } =
+    useApiQuery<Overview>('/analytics/automation/overview');
+  const { data: roi, isPending: roiPending } =
+    useApiQuery<ROI>('/analytics/automation/roi');
+  const { data: workflows = [], isPending: workflowsPending } =
+    useApiQuery<WorkflowRow[]>('/analytics/automation/by-workflow');
+  const { data: agentCards = [], isPending: agentsPending } =
+    useApiQuery<AgentCard[]>('/analytics/automation/agent-cards');
 
-  const fetchRuns = useCallback(
-    async (status?: string) => {
-      setRunsLoading(true);
-      try {
-        const qs = status ? `?status=${status}&take=50` : '?take=50';
-        const res = await apiFetch(`/automation/runs${qs}`);
-        if (res.ok) setRuns(await res.json());
-      } catch (err) {
-        console.error('Failed to fetch runs:', err);
-      } finally {
-        setRunsLoading(false);
-      }
+  // Runs are only fetched when the runs tab is active. The cache key includes
+  // the filter so switching status pulls a fresh list (still cached per filter).
+  const { data: runs = [], isFetching: runsLoading } = useApiQuery<RunRow[]>(
+    '/automation/runs',
+    {
+      enabled: tab === 'runs',
+      params: { status: runsFilter || undefined, take: 50 },
     },
-    [],
   );
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  const fetchAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['/analytics/automation/overview'] });
+    queryClient.invalidateQueries({ queryKey: ['/analytics/automation/roi'] });
+    queryClient.invalidateQueries({ queryKey: ['/analytics/automation/by-workflow'] });
+    queryClient.invalidateQueries({ queryKey: ['/analytics/automation/agent-cards'] });
+  };
 
-  useEffect(() => {
-    if (tab === 'runs') fetchRuns(runsFilter || undefined);
-  }, [tab, runsFilter, fetchRuns]);
+  const fetchRuns = () => {
+    queryClient.invalidateQueries({ queryKey: ['/automation/runs'] });
+  };
 
+  const loading = overviewPending || roiPending || workflowsPending || agentsPending;
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -479,7 +460,7 @@ export default function OpenClawPage() {
           size="sm"
           onClick={() => {
             fetchAll();
-            if (tab === 'runs') fetchRuns(runsFilter || undefined);
+            if (tab === 'runs') fetchRuns();
           }}
         >
           <RefreshCw size={16} className="mr-2" />

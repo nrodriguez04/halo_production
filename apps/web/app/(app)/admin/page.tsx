@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useEffect, useState } from 'react';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,31 +30,22 @@ interface HealthData {
   };
 }
 
-function Toggle({
-  enabled,
-  onToggle,
-  label,
-}: {
-  enabled: boolean;
-  onToggle: () => void;
-  label: string;
-}) {
+function Toggle({ enabled, onToggle, label, disabled }: { enabled: boolean; onToggle: () => void; label: string; disabled?: boolean }) {
   return (
     <div className="flex items-center justify-between p-3 rounded-md bg-secondary">
       <span className="text-sm font-medium text-foreground">{label}</span>
       <button
         onClick={onToggle}
+        disabled={disabled}
         className={cn(
-          'relative w-11 h-6 rounded-full transition-colors',
+          'relative w-11 h-6 rounded-full transition-colors disabled:opacity-50',
           enabled ? 'bg-primary' : 'bg-muted',
         )}
       >
         <span
           className={cn(
             'block w-4 h-4 rounded-full transition-transform absolute top-1',
-            enabled
-              ? 'translate-x-6 bg-primary-foreground'
-              : 'translate-x-1 bg-foreground',
+            enabled ? 'translate-x-6 bg-primary-foreground' : 'translate-x-1 bg-foreground',
           )}
         />
       </button>
@@ -69,78 +60,50 @@ function resolveStatus(field: { status: string } | string | undefined): string {
 }
 
 export default function AdminPage() {
-  const [health, setHealth] = useState<HealthData | null>(null);
-  const [controlPlane, setControlPlane] = useState<ControlPlane | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // Try /health/ready first, fallback to /health (matches old dual-fetch behavior).
+  // We still surface partial data even if one endpoint is down.
+  const { data: health } = useApiQuery<HealthData>('/health/ready', {
+    retry: 0,
+  });
+  const { data: healthFallback } = useApiQuery<HealthData>('/health', {
+    enabled: !health,
+    retry: 0,
+  });
+  const effectiveHealth = health ?? healthFallback ?? null;
+
+  const { data: controlPlane, isPending: cpPending } = useApiQuery<ControlPlane>('/control-plane');
+
   const [costCapInput, setCostCapInput] = useState('');
-  const [savingCap, setSavingCap] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchHealth = useCallback(async () => {
-    try {
-      let res = await apiFetch('/health/ready');
-      if (!res.ok) {
-        res = await apiFetch('/health');
-      }
-      if (res.ok) {
-        setHealth(await res.json());
-      }
-    } catch (err) {
-      console.error('Failed to fetch health:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchControlPlane = useCallback(async () => {
-    try {
-      const res = await apiFetch('/control-plane');
-      if (res.ok) {
-        const data = await res.json();
-        setControlPlane(data);
-        setCostCapInput(String(data.aiDailyCostCap ?? 2));
-      }
-    } catch (err) {
-      console.error('Failed to fetch control plane:', err);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchHealth();
-    fetchControlPlane();
-  }, [fetchHealth, fetchControlPlane]);
+    if (controlPlane) setCostCapInput(String(controlPlane.aiDailyCostCap ?? 2));
+  }, [controlPlane]);
 
-  const update = async (updates: Partial<ControlPlane>) => {
-    setError(null);
-    try {
-      const res = await apiFetch('/control-plane', {
+  const updateMutation = useApiMutation<Partial<ControlPlane>, ControlPlane>(
+    (updates) =>
+      apiJson<ControlPlane>('/control-plane', {
         method: 'PUT',
         body: JSON.stringify(updates),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.message || `Save failed (${res.status})`);
-        return;
-      }
-      await fetchControlPlane();
-      await fetchHealth();
-    } catch (err: any) {
-      setError(err.message || 'Network error');
-    }
-  };
+      }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/control-plane'] });
+        queryClient.invalidateQueries({ queryKey: ['/health/ready'] });
+        queryClient.invalidateQueries({ queryKey: ['/health'] });
+      },
+    },
+  );
 
-  const handleSaveCostCap = async () => {
+  const update = (updates: Partial<ControlPlane>) => updateMutation.mutate(updates);
+
+  const handleSaveCostCap = () => {
     const val = parseFloat(costCapInput);
     if (isNaN(val) || val < 0) return;
-    setSavingCap(true);
-    try {
-      await update({ aiDailyCostCap: val });
-    } finally {
-      setSavingCap(false);
-    }
+    update({ aiDailyCostCap: val });
   };
 
-  if (loading) {
+  if (cpPending && !effectiveHealth) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         Loading admin dashboard...
@@ -148,25 +111,25 @@ export default function AdminPage() {
     );
   }
 
-  const dbStatus = resolveStatus(health?.database);
-  const redisStatus = resolveStatus(health?.redis);
-  const dailyCap = controlPlane?.aiDailyCostCap ?? health?.aiCost?.cap ?? 2;
-  const todaySpend = parseFloat(health?.aiCost?.today || '0');
+  const dbStatus = resolveStatus(effectiveHealth?.database);
+  const redisStatus = resolveStatus(effectiveHealth?.redis);
+  const dailyCap = controlPlane?.aiDailyCostCap ?? effectiveHealth?.aiCost?.cap ?? 2;
+  const todaySpend = parseFloat(effectiveHealth?.aiCost?.today || '0');
   const costPct = dailyCap > 0 ? Math.min(100, (todaySpend / dailyCap) * 100) : 0;
   const remaining = Math.max(0, dailyCap - todaySpend);
+  const errorMsg = updateMutation.error?.message ?? null;
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
 
-      {error && (
+      {errorMsg && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
+          {errorMsg}
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* System Health */}
         <Card>
           <CardHeader>
             <CardTitle>System Health</CardTitle>
@@ -175,18 +138,11 @@ export default function AdminPage() {
             {[
               { label: 'Database', status: dbStatus },
               { label: 'Redis', status: redisStatus },
-              { label: 'Overall', status: health?.status },
+              { label: 'Overall', status: effectiveHealth?.status },
             ].map((item) => (
-              <div
-                key={item.label}
-                className="flex justify-between items-center"
-              >
-                <span className="text-sm text-muted-foreground">
-                  {item.label}
-                </span>
-                <Badge
-                  variant={item.status === 'ok' ? 'success' : 'destructive'}
-                >
+              <div key={item.label} className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{item.label}</span>
+                <Badge variant={item.status === 'ok' ? 'success' : 'destructive'}>
                   {item.status || 'unknown'}
                 </Badge>
               </div>
@@ -194,7 +150,6 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* AI Cost Tracking */}
         <Card>
           <CardHeader>
             <CardTitle>AI Cost Tracking</CardTitle>
@@ -202,47 +157,32 @@ export default function AdminPage() {
           <CardContent className="space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Today</span>
-              <span className="font-semibold text-foreground">
-                ${todaySpend.toFixed(4)}
-              </span>
+              <span className="font-semibold text-foreground">${todaySpend.toFixed(4)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Daily Cap</span>
-              <span className="font-semibold text-foreground">
-                ${dailyCap.toFixed(2)}
-              </span>
+              <span className="font-semibold text-foreground">${dailyCap.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Remaining</span>
-              <span
-                className={cn(
-                  'font-semibold',
-                  remaining > 0 ? 'text-primary' : 'text-destructive',
-                )}
-              >
+              <span className={cn('font-semibold', remaining > 0 ? 'text-primary' : 'text-destructive')}>
                 ${remaining.toFixed(4)}
               </span>
             </div>
             <div className="w-full bg-secondary rounded-full h-2 mt-2">
               <div
-                className={cn(
-                  'h-2 rounded-full transition-all',
-                  costPct > 80 ? 'bg-destructive' : 'bg-primary',
-                )}
+                className={cn('h-2 rounded-full transition-all', costPct > 80 ? 'bg-destructive' : 'bg-primary')}
                 style={{ width: `${costPct}%` }}
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* AI Spend Controls */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>AI Spend Controls</CardTitle>
-              <Badge
-                variant={controlPlane?.aiEnabled ? 'success' : 'destructive'}
-              >
+              <Badge variant={controlPlane?.aiEnabled ? 'success' : 'destructive'}>
                 {controlPlane?.aiEnabled ? 'AI Active' : 'AI Disabled'}
               </Badge>
             </div>
@@ -252,23 +192,17 @@ export default function AdminPage() {
               <Toggle
                 label="AI Enabled"
                 enabled={!!controlPlane?.aiEnabled}
-                onToggle={() =>
-                  update({ aiEnabled: !controlPlane?.aiEnabled })
-                }
+                onToggle={() => update({ aiEnabled: !controlPlane?.aiEnabled })}
+                disabled={updateMutation.isPending}
               />
 
               <div className="space-y-1.5">
-                <label
-                  htmlFor="cost-cap"
-                  className="text-sm font-medium text-muted-foreground"
-                >
+                <label htmlFor="cost-cap" className="text-sm font-medium text-muted-foreground">
                   Daily Cost Cap (USD)
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      $
-                    </span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                     <input
                       id="cost-cap"
                       type="number"
@@ -276,9 +210,7 @@ export default function AdminPage() {
                       step="0.50"
                       value={costCapInput}
                       onChange={(e) => setCostCapInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveCostCap();
-                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCostCap(); }}
                       className={cn(
                         'w-full h-9 rounded-md border border-input bg-background pl-7 pr-3 text-sm',
                         'text-foreground placeholder:text-muted-foreground',
@@ -286,12 +218,8 @@ export default function AdminPage() {
                       )}
                     />
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handleSaveCostCap}
-                    disabled={savingCap}
-                  >
-                    {savingCap ? 'Saving...' : 'Save'}
+                  <Button size="sm" onClick={handleSaveCostCap} disabled={updateMutation.isPending}>
+                    {updateMutation.isPending ? 'Saving...' : 'Save'}
                   </Button>
                 </div>
               </div>
@@ -299,19 +227,13 @@ export default function AdminPage() {
               <div className="p-3 rounded-md bg-secondary space-y-1">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Spend today</span>
-                  <span>
-                    ${todaySpend.toFixed(4)} / ${dailyCap.toFixed(2)}
-                  </span>
+                  <span>${todaySpend.toFixed(4)} / ${dailyCap.toFixed(2)}</span>
                 </div>
                 <div className="w-full bg-muted rounded-full h-1.5">
                   <div
                     className={cn(
                       'h-1.5 rounded-full transition-all',
-                      costPct > 90
-                        ? 'bg-destructive'
-                        : costPct > 60
-                          ? 'bg-amber-500'
-                          : 'bg-primary',
+                      costPct > 90 ? 'bg-destructive' : costPct > 60 ? 'bg-amber-500' : 'bg-primary',
                     )}
                     style={{ width: `${costPct}%` }}
                   />
@@ -326,7 +248,6 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Kill Switch Banner */}
         {controlPlane && !controlPlane.enabled && (
           <div className="lg:col-span-2 rounded-lg border-2 border-destructive bg-destructive/10 px-6 py-4 flex items-center justify-between">
             <div>
@@ -337,9 +258,7 @@ export default function AdminPage() {
               variant="outline"
               className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
               onClick={() => {
-                if (window.confirm('Re-enable all outbound operations?')) {
-                  update({ enabled: true });
-                }
+                if (window.confirm('Re-enable all outbound operations?')) update({ enabled: true });
               }}
             >
               Re-enable System
@@ -347,7 +266,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Control Plane */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -369,9 +287,7 @@ export default function AdminPage() {
                   size="sm"
                   variant="default"
                   onClick={() => {
-                    if (window.confirm('Re-enable all outbound operations?')) {
-                      update({ enabled: true });
-                    }
+                    if (window.confirm('Re-enable all outbound operations?')) update({ enabled: true });
                   }}
                 >
                   Re-enable
@@ -381,36 +297,10 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Toggle
-                label="SMS"
-                enabled={!!controlPlane?.smsEnabled}
-                onToggle={() =>
-                  update({ smsEnabled: !controlPlane?.smsEnabled })
-                }
-              />
-              <Toggle
-                label="Email"
-                enabled={!!controlPlane?.emailEnabled}
-                onToggle={() =>
-                  update({ emailEnabled: !controlPlane?.emailEnabled })
-                }
-              />
-              <Toggle
-                label="DocuSign"
-                enabled={!!controlPlane?.docusignEnabled}
-                onToggle={() =>
-                  update({ docusignEnabled: !controlPlane?.docusignEnabled })
-                }
-              />
-              <Toggle
-                label="External Data"
-                enabled={!!controlPlane?.externalDataEnabled}
-                onToggle={() =>
-                  update({
-                    externalDataEnabled: !controlPlane?.externalDataEnabled,
-                  })
-                }
-              />
+              <Toggle label="SMS" enabled={!!controlPlane?.smsEnabled} onToggle={() => update({ smsEnabled: !controlPlane?.smsEnabled })} disabled={updateMutation.isPending} />
+              <Toggle label="Email" enabled={!!controlPlane?.emailEnabled} onToggle={() => update({ emailEnabled: !controlPlane?.emailEnabled })} disabled={updateMutation.isPending} />
+              <Toggle label="DocuSign" enabled={!!controlPlane?.docusignEnabled} onToggle={() => update({ docusignEnabled: !controlPlane?.docusignEnabled })} disabled={updateMutation.isPending} />
+              <Toggle label="External Data" enabled={!!controlPlane?.externalDataEnabled} onToggle={() => update({ externalDataEnabled: !controlPlane?.externalDataEnabled })} disabled={updateMutation.isPending} />
             </div>
           </CardContent>
         </Card>

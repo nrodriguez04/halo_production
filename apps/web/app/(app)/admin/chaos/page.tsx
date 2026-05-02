@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Zap, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
+import { Zap, RotateCcw, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 
 interface ChaosStatus {
   active: boolean;
@@ -29,44 +28,32 @@ const drills = [
 ];
 
 export default function ChaosAdminPage() {
-  const [status, setStatus] = useState<ChaosStatus | null>(null);
-  const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    refresh();
-  }, []);
+  const { data: status, isPending: statusPending } = useApiQuery<ChaosStatus>('/admin/chaos/status');
+  const { data: failedJobs = [], isPending: dlqPending } = useApiQuery<FailedJob[]>('/admin/dlq');
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      const [statusRes, dlqRes] = await Promise.all([
-        apiFetch('/admin/chaos/status'),
-        apiFetch('/admin/dlq'),
-      ]);
-      if (statusRes.ok) setStatus(await statusRes.json());
-      if (dlqRes.ok) setFailedJobs(await dlqRes.json());
-    } catch {
-    } finally {
-      setLoading(false);
-    }
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['/admin/chaos/status'] });
+    queryClient.invalidateQueries({ queryKey: ['/admin/dlq'] });
   };
 
-  const triggerDrill = async (endpoint: string) => {
-    await apiFetch(`/admin/chaos/${endpoint}`, { method: 'POST' });
-    refresh();
-  };
+  const triggerDrill = useApiMutation<string, unknown>(
+    (endpoint) => apiJson(`/admin/chaos/${endpoint}`, { method: 'POST' }),
+    { onSuccess: invalidate },
+  );
 
-  const clearChaos = async () => {
-    await apiFetch('/admin/chaos/clear', { method: 'POST' });
-    refresh();
-  };
+  const clearChaos = useApiMutation<void, unknown>(
+    () => apiJson('/admin/chaos/clear', { method: 'POST' }),
+    { onSuccess: invalidate },
+  );
 
-  const replayJob = async (queue: string, jobId: string) => {
-    await apiFetch(`/admin/dlq/${jobId}/replay?queue=${queue}`, { method: 'POST' });
-    refresh();
-  };
+  const replayJob = useApiMutation<{ queue: string; jobId: string }, unknown>(
+    ({ queue, jobId }) => apiJson(`/admin/dlq/${jobId}/replay?queue=${queue}`, { method: 'POST' }),
+    { onSuccess: invalidate },
+  );
 
+  const loading = statusPending || dlqPending;
   if (loading) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading...</div>;
 
   return (
@@ -77,18 +64,18 @@ export default function ChaosAdminPage() {
           <p className="text-sm text-muted-foreground mt-1">Test resilience and manage failed jobs</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={refresh}>
+          <Button variant="outline" size="sm" onClick={invalidate}>
             <RefreshCw size={16} className="mr-2" /> Refresh
           </Button>
           {status?.active && (
-            <Button variant="destructive" size="sm" onClick={clearChaos}>
-              <Trash2 size={16} className="mr-2" /> Clear All Chaos
+            <Button variant="destructive" size="sm" onClick={() => clearChaos.mutate()} disabled={clearChaos.isPending}>
+              {clearChaos.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Trash2 size={16} className="mr-2" />}
+              Clear All Chaos
             </Button>
           )}
         </div>
       </div>
 
-      {/* Chaos Status */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -109,20 +96,23 @@ export default function ChaosAdminPage() {
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {drills.map((drill) => (
-              <div key={drill.endpoint} className="p-4 rounded bg-secondary space-y-2">
-                <p className="text-sm font-medium text-foreground">{drill.name}</p>
-                <p className="text-xs text-muted-foreground">{drill.description}</p>
-                <Button size="sm" variant="outline" onClick={() => triggerDrill(drill.endpoint)}>
-                  <Zap size={14} className="mr-2" /> Trigger
-                </Button>
-              </div>
-            ))}
+            {drills.map((drill) => {
+              const isPending = triggerDrill.isPending && triggerDrill.variables === drill.endpoint;
+              return (
+                <div key={drill.endpoint} className="p-4 rounded bg-secondary space-y-2">
+                  <p className="text-sm font-medium text-foreground">{drill.name}</p>
+                  <p className="text-xs text-muted-foreground">{drill.description}</p>
+                  <Button size="sm" variant="outline" onClick={() => triggerDrill.mutate(drill.endpoint)} disabled={isPending}>
+                    {isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Zap size={14} className="mr-2" />}
+                    Trigger
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
 
-      {/* DLQ */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -149,19 +139,31 @@ export default function ChaosAdminPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                failedJobs.map((job) => (
-                  <TableRow key={`${job.queue}-${job.id}`}>
-                    <TableCell><Badge variant="secondary">{job.queue}</Badge></TableCell>
-                    <TableCell className="text-sm text-foreground">{job.name}</TableCell>
-                    <TableCell className="text-sm text-destructive max-w-xs truncate">{job.failedReason}</TableCell>
-                    <TableCell className="text-muted-foreground">{job.attemptsMade}</TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline" onClick={() => replayJob(job.queue, job.id)}>
-                        <RotateCcw size={14} className="mr-1" /> Replay
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                failedJobs.map((job) => {
+                  const isReplaying =
+                    replayJob.isPending &&
+                    replayJob.variables?.jobId === job.id &&
+                    replayJob.variables?.queue === job.queue;
+                  return (
+                    <TableRow key={`${job.queue}-${job.id}`}>
+                      <TableCell><Badge variant="secondary">{job.queue}</Badge></TableCell>
+                      <TableCell className="text-sm text-foreground">{job.name}</TableCell>
+                      <TableCell className="text-sm text-destructive max-w-xs truncate">{job.failedReason}</TableCell>
+                      <TableCell className="text-muted-foreground">{job.attemptsMade}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => replayJob.mutate({ queue: job.queue, jobId: job.id })}
+                          disabled={isReplaying}
+                        >
+                          {isReplaying ? <Loader2 size={14} className="mr-1 animate-spin" /> : <RotateCcw size={14} className="mr-1" />}
+                          Replay
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

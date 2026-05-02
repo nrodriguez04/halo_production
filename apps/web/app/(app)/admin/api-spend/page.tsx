@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useEffect, useState } from 'react';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,8 +45,12 @@ interface EndpointRow {
   avgDurationMs: number;
 }
 
-const usd = (n: number | null | undefined) =>
-  n != null ? `$${n.toFixed(2)}` : '—';
+interface HealthForCap {
+  controlPlane?: { apiDailyCostCap?: number };
+  apiSpend?: { cap?: number };
+}
+
+const usd = (n: number | null | undefined) => (n != null ? `$${n.toFixed(2)}` : '—');
 
 const PROVIDER_COLORS: Record<string, string> = {
   attom: 'bg-blue-500',
@@ -86,12 +90,8 @@ function StatCard({
       <CardContent className="pt-6">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {label}
-            </p>
-            <p className={cn('text-2xl font-bold', alert ? 'text-destructive' : 'text-foreground')}>
-              {value}
-            </p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+            <p className={cn('text-2xl font-bold', alert ? 'text-destructive' : 'text-foreground')}>{value}</p>
             {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
           </div>
           <div className={cn('rounded-md p-2', alert ? 'bg-destructive/10' : 'bg-primary/10')}>
@@ -104,86 +104,67 @@ function StatCard({
 }
 
 export default function ApiSpendPage() {
-  const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<SpendSummary | null>(null);
-  const [providers, setProviders] = useState<ProviderRow[]>([]);
-  const [dailyTrend, setDailyTrend] = useState<DailyRow[]>([]);
-  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
-  const [endpointData, setEndpointData] = useState<EndpointRow[]>([]);
-  const [endpointLoading, setEndpointLoading] = useState(false);
-  const [apiCap, setApiCap] = useState<number>(50);
-  const [capInput, setCapInput] = useState('');
-  const [savingCap, setSavingCap] = useState(false);
+  const queryClient = useQueryClient();
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [sumRes, provRes, trendRes, healthRes] = await Promise.all([
-        apiFetch('/analytics/api-spend'),
-        apiFetch('/analytics/api-spend/by-provider'),
-        apiFetch('/analytics/api-spend/daily-trend?days=30'),
-        apiFetch('/health/ready'),
-      ]);
-      if (sumRes.ok) setSummary(await sumRes.json());
-      if (provRes.ok) setProviders(await provRes.json());
-      if (trendRes.ok) setDailyTrend(await trendRes.json());
-      if (healthRes.ok) {
-        const health = await healthRes.json();
-        const cap =
-          typeof health.controlPlane?.apiDailyCostCap === 'number'
-            ? health.controlPlane.apiDailyCostCap
-            : typeof health.apiSpend?.cap === 'number'
-              ? health.apiSpend.cap
-              : undefined;
-        if (cap !== undefined && !Number.isNaN(cap)) {
-          setApiCap(cap);
-          setCapInput(String(cap));
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch API spend data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: summary, isPending: summaryPending } = useApiQuery<SpendSummary>('/analytics/api-spend');
+  const { data: providers = [], isPending: providersPending } =
+    useApiQuery<ProviderRow[]>('/analytics/api-spend/by-provider');
+  const { data: dailyTrend = [], isPending: trendPending } =
+    useApiQuery<DailyRow[]>('/analytics/api-spend/daily-trend', { params: { days: 30 } });
+  const { data: health, isPending: healthPending } =
+    useApiQuery<HealthForCap>('/health/ready', { retry: 0 });
+
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [capInput, setCapInput] = useState('');
+
+  // Endpoint breakdown is fetched lazily when a provider is expanded.
+  const { data: endpointData = [], isFetching: endpointLoading } = useApiQuery<EndpointRow[]>(
+    '/analytics/api-spend/endpoint-breakdown',
+    {
+      enabled: !!expandedProvider,
+      params: { provider: expandedProvider ?? undefined },
+    },
+  );
+
+  const apiCap =
+    typeof health?.controlPlane?.apiDailyCostCap === 'number'
+      ? health.controlPlane.apiDailyCostCap
+      : typeof health?.apiSpend?.cap === 'number'
+        ? health.apiSpend.cap
+        : 50;
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (apiCap !== undefined && capInput === '') setCapInput(String(apiCap));
+  }, [apiCap, capInput]);
 
-  const fetchEndpoints = async (provider: string) => {
-    if (expandedProvider === provider) {
-      setExpandedProvider(null);
-      return;
-    }
-    setExpandedProvider(provider);
-    setEndpointLoading(true);
-    try {
-      const res = await apiFetch(`/analytics/api-spend/endpoint-breakdown?provider=${provider}`);
-      if (res.ok) setEndpointData(await res.json());
-    } finally {
-      setEndpointLoading(false);
-    }
+  const saveCapMutation = useApiMutation<number, unknown>(
+    (val) => apiJson('/control-plane', { method: 'PUT', body: JSON.stringify({ apiDailyCostCap: val }) }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/health/ready'] });
+        queryClient.invalidateQueries({ queryKey: ['/control-plane'] });
+      },
+    },
+  );
+
+  const refreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['/analytics/api-spend'] });
+    queryClient.invalidateQueries({ queryKey: ['/analytics/api-spend/by-provider'] });
+    queryClient.invalidateQueries({ queryKey: ['/analytics/api-spend/daily-trend'] });
+    queryClient.invalidateQueries({ queryKey: ['/health/ready'] });
   };
 
-  const handleSaveCap = async () => {
+  const handleSaveCap = () => {
     const val = parseFloat(capInput);
     if (isNaN(val) || val < 0) return;
-    setSavingCap(true);
-    try {
-      const res = await apiFetch('/control-plane', {
-        method: 'PUT',
-        body: JSON.stringify({ apiDailyCostCap: val }),
-      });
-      if (res.ok) {
-        setApiCap(val);
-        await fetchAll();
-      }
-    } finally {
-      setSavingCap(false);
-    }
+    saveCapMutation.mutate(val);
   };
 
+  const toggleProvider = (provider: string) => {
+    setExpandedProvider((prev) => (prev === provider ? null : provider));
+  };
+
+  const loading = summaryPending || providersPending || trendPending || healthPending;
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -198,16 +179,19 @@ export default function ApiSpendPage() {
   const isOverCap = todaySpend >= apiCap;
   const totalProviderCost = providers.reduce((s, p) => s + p.totalCost, 0);
 
-  const last7days = dailyTrend.reduce((acc, row) => {
-    const existing = acc.find((d) => d.day === row.day);
-    if (existing) {
-      existing.cost += row.cost;
-      existing.calls += row.calls;
-    } else {
-      acc.push({ day: row.day, cost: row.cost, calls: row.calls });
-    }
-    return acc;
-  }, [] as { day: string; cost: number; calls: number }[]);
+  const last7days = dailyTrend.reduce(
+    (acc, row) => {
+      const existing = acc.find((d) => d.day === row.day);
+      if (existing) {
+        existing.cost += row.cost;
+        existing.calls += row.calls;
+      } else {
+        acc.push({ day: row.day, cost: row.cost, calls: row.calls });
+      }
+      return acc;
+    },
+    [] as { day: string; cost: number; calls: number }[],
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -218,7 +202,7 @@ export default function ApiSpendPage() {
             Track costs across all external API integrations
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchAll}>
+        <Button variant="outline" size="sm" onClick={refreshAll}>
           <RefreshCw size={16} className="mr-2" />
           Refresh
         </Button>
@@ -236,36 +220,13 @@ export default function ApiSpendPage() {
         </div>
       )}
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Today"
-          value={usd(summary?.today.cost)}
-          sub={`${summary?.today.calls ?? 0} calls`}
-          icon={DollarSign}
-          alert={isOverCap}
-        />
-        <StatCard
-          label="7-Day"
-          value={usd(summary?.week.cost)}
-          sub={`${summary?.week.calls ?? 0} calls`}
-          icon={Activity}
-        />
-        <StatCard
-          label="30-Day"
-          value={usd(summary?.month.cost)}
-          sub={`${summary?.month.calls ?? 0} calls`}
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="Projected Monthly"
-          value={usd(summary?.projectedMonthly)}
-          sub="Based on 30-day avg"
-          icon={TrendingUp}
-        />
+        <StatCard label="Today" value={usd(summary?.today.cost)} sub={`${summary?.today.calls ?? 0} calls`} icon={DollarSign} alert={isOverCap} />
+        <StatCard label="7-Day" value={usd(summary?.week.cost)} sub={`${summary?.week.calls ?? 0} calls`} icon={Activity} />
+        <StatCard label="30-Day" value={usd(summary?.month.cost)} sub={`${summary?.month.calls ?? 0} calls`} icon={TrendingUp} />
+        <StatCard label="Projected Monthly" value={usd(summary?.projectedMonthly)} sub="Based on 30-day avg" icon={TrendingUp} />
       </div>
 
-      {/* Daily Cap Control */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -306,14 +267,13 @@ export default function ApiSpendPage() {
                 />
               </div>
             </div>
-            <Button size="sm" onClick={handleSaveCap} disabled={savingCap}>
-              {savingCap ? 'Saving...' : 'Save'}
+            <Button size="sm" onClick={handleSaveCap} disabled={saveCapMutation.isPending}>
+              {saveCapMutation.isPending ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Provider Breakdown */}
       <Card>
         <CardHeader>
           <CardTitle>Spend by Provider (30 days)</CardTitle>
@@ -350,61 +310,62 @@ export default function ApiSpendPage() {
             <p className="text-sm text-muted-foreground text-center py-8">No API spend data yet</p>
           ) : (
             <div className="space-y-2">
-              {providers.sort((a, b) => b.totalCost - a.totalCost).map((p) => (
-                <div key={p.provider}>
-                  <button
-                    onClick={() => fetchEndpoints(p.provider)}
-                    className="w-full flex items-center justify-between p-3 rounded-md bg-secondary hover:bg-secondary/80 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={cn('inline-block h-3 w-3 rounded-full', PROVIDER_COLORS[p.provider] || 'bg-zinc-400')} />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {PROVIDER_LABELS[p.provider] || p.provider}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.callCount} calls &middot; avg {usd(p.avgCostPerCall)}/call
-                          {p.avgDurationMs > 0 && ` &middot; ${Math.round(p.avgDurationMs)}ms avg`}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">{usd(p.totalCost)}</p>
-                  </button>
-
-                  {expandedProvider === p.provider && (
-                    <div className="ml-6 mt-1 mb-2 space-y-1">
-                      {endpointLoading ? (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground p-2">
-                          <Loader2 size={12} className="animate-spin" /> Loading...
+              {[...providers]
+                .sort((a, b) => b.totalCost - a.totalCost)
+                .map((p) => (
+                  <div key={p.provider}>
+                    <button
+                      onClick={() => toggleProvider(p.provider)}
+                      className="w-full flex items-center justify-between p-3 rounded-md bg-secondary hover:bg-secondary/80 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={cn('inline-block h-3 w-3 rounded-full', PROVIDER_COLORS[p.provider] || 'bg-zinc-400')} />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {PROVIDER_LABELS[p.provider] || p.provider}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {p.callCount} calls &middot; avg {usd(p.avgCostPerCall)}/call
+                            {p.avgDurationMs > 0 && ` · ${Math.round(p.avgDurationMs)}ms avg`}
+                          </p>
                         </div>
-                      ) : endpointData.length === 0 ? (
-                        <p className="text-xs text-muted-foreground p-2">No endpoint data</p>
-                      ) : (
-                        endpointData.map((ep) => (
-                          <div
-                            key={ep.endpoint}
-                            className="flex items-center justify-between p-2 rounded bg-muted/50 text-xs"
-                          >
-                            <div>
-                              <p className="font-mono text-foreground">{ep.endpoint}</p>
-                              <p className="text-muted-foreground">
-                                {ep.callCount} calls &middot; avg {usd(ep.avgCostPerCall)}
-                              </p>
-                            </div>
-                            <p className="font-semibold text-foreground">{usd(ep.totalCost)}</p>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">{usd(p.totalCost)}</p>
+                    </button>
+
+                    {expandedProvider === p.provider && (
+                      <div className="ml-6 mt-1 mb-2 space-y-1">
+                        {endpointLoading ? (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground p-2">
+                            <Loader2 size={12} className="animate-spin" /> Loading...
                           </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                        ) : endpointData.length === 0 ? (
+                          <p className="text-xs text-muted-foreground p-2">No endpoint data</p>
+                        ) : (
+                          endpointData.map((ep) => (
+                            <div
+                              key={ep.endpoint}
+                              className="flex items-center justify-between p-2 rounded bg-muted/50 text-xs"
+                            >
+                              <div>
+                                <p className="font-mono text-foreground">{ep.endpoint}</p>
+                                <p className="text-muted-foreground">
+                                  {ep.callCount} calls &middot; avg {usd(ep.avgCostPerCall)}
+                                </p>
+                              </div>
+                              <p className="font-semibold text-foreground">{usd(ep.totalCost)}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Daily Trend */}
       {last7days.length > 0 && (
         <Card>
           <CardHeader>

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,145 +39,86 @@ const INTEGRATIONS: IntegrationDef[] = [
       { keyName: 'DOCUSIGN_CONNECT_SECRET', label: 'Connect Secret', placeholder: 'HMAC secret for webhook verification' },
     ],
   },
-  {
-    provider: 'attom',
-    name: 'ATTOM Property API',
-    keys: [
-      { keyName: 'ATTOM_API_KEY', label: 'API Key', placeholder: 'Your ATTOM API key' },
-    ],
-  },
-  {
-    provider: 'google_geocoding',
-    name: 'Google Geocoding',
-    keys: [
-      { keyName: 'GOOGLE_GEOCODING_API_KEY', label: 'API Key', placeholder: 'AIzaSy...' },
-    ],
-  },
-  {
-    provider: 'openai',
-    name: 'OpenAI',
-    keys: [
-      { keyName: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-...' },
-    ],
-  },
-  {
-    provider: 'sendgrid',
-    name: 'SendGrid',
-    keys: [
-      { keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' },
-    ],
-  },
-  {
-    provider: 'rentcast',
-    name: 'RentCast',
-    keys: [
-      { keyName: 'RENTCAST_API_KEY', label: 'API Key', placeholder: 'Your RentCast API key' },
-    ],
-  },
-  {
-    provider: 'propertyradar',
-    name: 'PropertyRadar',
-    keys: [
-      { keyName: 'PROPERTYRADAR_API_KEY', label: 'API Key', placeholder: 'Your PropertyRadar API key' },
-    ],
-  },
-  {
-    provider: 'openclaw',
-    name: 'OpenClaw',
-    keys: [
-      { keyName: 'OPENCLAW_SECRET', label: 'Agent Secret', placeholder: 'Your OpenClaw agent secret' },
-    ],
-  },
+  { provider: 'attom', name: 'ATTOM Property API', keys: [{ keyName: 'ATTOM_API_KEY', label: 'API Key', placeholder: 'Your ATTOM API key' }] },
+  { provider: 'google_geocoding', name: 'Google Geocoding', keys: [{ keyName: 'GOOGLE_GEOCODING_API_KEY', label: 'API Key', placeholder: 'AIzaSy...' }] },
+  { provider: 'openai', name: 'OpenAI', keys: [{ keyName: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-...' }] },
+  { provider: 'sendgrid', name: 'SendGrid', keys: [{ keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' }] },
+  { provider: 'rentcast', name: 'RentCast', keys: [{ keyName: 'RENTCAST_API_KEY', label: 'API Key', placeholder: 'Your RentCast API key' }] },
+  { provider: 'propertyradar', name: 'PropertyRadar', keys: [{ keyName: 'PROPERTYRADAR_API_KEY', label: 'API Key', placeholder: 'Your PropertyRadar API key' }] },
+  { provider: 'openclaw', name: 'OpenClaw', keys: [{ keyName: 'OPENCLAW_SECRET', label: 'Agent Secret', placeholder: 'Your OpenClaw agent secret' }] },
 ];
 
 type ConnStatus = 'idle' | 'testing' | 'connected' | 'error';
 
 export default function IntegrationsPage() {
-  const [secrets, setSecrets] = useState<StoredSecret[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  const { data: secrets = [], isPending } = useApiQuery<StoredSecret[]>('/integration-secrets');
+
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [showValues, setShowValues] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [connStatus, setConnStatus] = useState<Record<string, ConnStatus>>({});
   const [connError, setConnError] = useState<Record<string, string>>({});
 
-  const fetchSecrets = useCallback(async () => {
-    try {
-      const res = await apiFetch('/integration-secrets');
-      if (res.ok) {
-        setSecrets(await res.json());
-      }
-    } catch (err) {
-      console.error('Failed to fetch secrets:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const invalidateSecrets = () =>
+    queryClient.invalidateQueries({ queryKey: ['/integration-secrets'] });
 
-  useEffect(() => {
-    fetchSecrets();
-  }, [fetchSecrets]);
+  const saveMutation = useApiMutation<{ provider: string; keyName: string; value: string }, unknown>(
+    ({ provider, keyName, value }) =>
+      apiJson(`/integration-secrets/${provider}/${keyName}`, {
+        method: 'PUT',
+        body: JSON.stringify({ value }),
+      }),
+    {
+      onSuccess: (_data, variables) => {
+        const k = inputKey(variables.provider, variables.keyName);
+        setInputValues((p) => ({ ...p, [k]: '' }));
+        setShowValues((p) => ({ ...p, [k]: false }));
+        invalidateSecrets();
+      },
+    },
+  );
+
+  const deleteMutation = useApiMutation<{ provider: string; keyName: string }, unknown>(
+    ({ provider, keyName }) =>
+      apiJson(`/integration-secrets/${provider}/${keyName}`, { method: 'DELETE' }),
+    { onSuccess: invalidateSecrets },
+  );
+
+  const testMutation = useApiMutation<string, { connected?: boolean; error?: string }>(
+    (provider) =>
+      apiJson<{ connected?: boolean; error?: string }>(`/integration-secrets/${provider}/test`, { method: 'POST' }),
+    {
+      onMutate: (provider) => {
+        setConnStatus((p) => ({ ...p, [provider]: 'testing' }));
+        setConnError((p) => ({ ...p, [provider]: '' }));
+      },
+      onSuccess: (data, provider) => {
+        setConnStatus((p) => ({ ...p, [provider]: data.connected ? 'connected' : 'error' }));
+        if (!data.connected && data.error) {
+          setConnError((p) => ({ ...p, [provider]: data.error! }));
+        }
+      },
+      onError: (err, provider) => {
+        setConnStatus((p) => ({ ...p, [provider]: 'error' }));
+        setConnError((p) => ({ ...p, [provider]: err?.message || 'Request failed' }));
+      },
+    },
+  );
 
   const getStoredSecret = (provider: string, keyName: string) =>
     secrets.find((s) => s.provider === provider && s.keyName === keyName);
 
-  const inputKey = (provider: string, keyName: string) =>
-    `${provider}:${keyName}`;
+  const inputKey = (provider: string, keyName: string) => `${provider}:${keyName}`;
 
-  const handleSave = async (provider: string, keyName: string) => {
-    const key = inputKey(provider, keyName);
-    const value = inputValues[key]?.trim();
+  const handleSave = (provider: string, keyName: string) => {
+    const k = inputKey(provider, keyName);
+    const value = inputValues[k]?.trim();
     if (!value) return;
-
-    setSaving((p) => ({ ...p, [key]: true }));
-    try {
-      await apiFetch(`/integration-secrets/${provider}/${keyName}`, {
-        method: 'PUT',
-        body: JSON.stringify({ value }),
-      });
-      setInputValues((p) => ({ ...p, [key]: '' }));
-      setShowValues((p) => ({ ...p, [key]: false }));
-      await fetchSecrets();
-    } catch (err) {
-      console.error('Failed to save secret:', err);
-    } finally {
-      setSaving((p) => ({ ...p, [key]: false }));
-    }
+    saveMutation.mutate({ provider, keyName, value });
   };
 
-  const handleDelete = async (provider: string, keyName: string) => {
-    try {
-      await apiFetch(`/integration-secrets/${provider}/${keyName}`, {
-        method: 'DELETE',
-      });
-      await fetchSecrets();
-    } catch (err) {
-      console.error('Failed to delete secret:', err);
-    }
-  };
-
-  const handleTest = async (provider: string) => {
-    setConnStatus((p) => ({ ...p, [provider]: 'testing' }));
-    setConnError((p) => ({ ...p, [provider]: '' }));
-    try {
-      const res = await apiFetch(`/integration-secrets/${provider}/test`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      setConnStatus((p) => ({
-        ...p,
-        [provider]: data.connected ? 'connected' : 'error',
-      }));
-      if (!data.connected && data.error) {
-        setConnError((p) => ({ ...p, [provider]: data.error }));
-      }
-    } catch {
-      setConnStatus((p) => ({ ...p, [provider]: 'error' }));
-      setConnError((p) => ({ ...p, [provider]: 'Request failed' }));
-    }
-  };
-
-  if (loading) {
+  if (isPending) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         Loading integrations...
@@ -195,15 +136,19 @@ export default function IntegrationsPage() {
           Testing
         </Badge>
       );
-    if (s === 'error')
-      return <Badge variant="destructive">Error</Badge>;
+    if (s === 'error') return <Badge variant="destructive">Error</Badge>;
 
-    const hasAny = INTEGRATIONS.find(
-      (i) => i.provider === provider,
-    )?.keys.some((k) => getStoredSecret(provider, k.keyName));
+    const hasAny = INTEGRATIONS.find((i) => i.provider === provider)?.keys.some((k) =>
+      getStoredSecret(provider, k.keyName),
+    );
     if (hasAny) return <Badge variant="warning">Configured</Badge>;
     return <Badge variant="secondary">Not Configured</Badge>;
   };
+
+  const isSavingKey = (provider: string, keyName: string) =>
+    saveMutation.isPending &&
+    saveMutation.variables?.provider === provider &&
+    saveMutation.variables?.keyName === keyName;
 
   return (
     <div className="p-6 space-y-6">
@@ -214,7 +159,7 @@ export default function IntegrationsPage() {
             Manage API keys and test external service connections
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchSecrets}>
+        <Button variant="outline" size="sm" onClick={invalidateSecrets}>
           <RefreshCw size={16} className="mr-2" />
           Refresh
         </Button>
@@ -225,27 +170,20 @@ export default function IntegrationsPage() {
           <Card key={integration.provider}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base text-foreground">
-                  {integration.name}
-                </CardTitle>
+                <CardTitle className="text-base text-foreground">{integration.name}</CardTitle>
                 {statusBadge(integration.provider)}
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {integration.keys.map((keyDef) => {
-                const key = inputKey(integration.provider, keyDef.keyName);
-                const stored = getStoredSecret(
-                  integration.provider,
-                  keyDef.keyName,
-                );
-                const isShowingInput = showValues[key];
-                const isSaving = saving[key];
+                const k = inputKey(integration.provider, keyDef.keyName);
+                const stored = getStoredSecret(integration.provider, keyDef.keyName);
+                const isShowingInput = showValues[k];
+                const isSaving = isSavingKey(integration.provider, keyDef.keyName);
 
                 return (
                   <div key={keyDef.keyName} className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      {keyDef.label}
-                    </label>
+                    <label className="text-xs font-medium text-muted-foreground">{keyDef.label}</label>
 
                     {stored && !isShowingInput ? (
                       <div className="flex items-center gap-2">
@@ -257,9 +195,7 @@ export default function IntegrationsPage() {
                           size="sm"
                           className="h-9 w-9 p-0"
                           title="Update key"
-                          onClick={() =>
-                            setShowValues((p) => ({ ...p, [key]: true }))
-                          }
+                          onClick={() => setShowValues((p) => ({ ...p, [k]: true }))}
                         >
                           <Eye size={14} />
                         </Button>
@@ -269,7 +205,10 @@ export default function IntegrationsPage() {
                           className="h-9 w-9 p-0 text-destructive hover:text-destructive"
                           title="Remove key"
                           onClick={() =>
-                            handleDelete(integration.provider, keyDef.keyName)
+                            deleteMutation.mutate({
+                              provider: integration.provider,
+                              keyName: keyDef.keyName,
+                            })
                           }
                         >
                           <X size={14} />
@@ -280,19 +219,12 @@ export default function IntegrationsPage() {
                         <input
                           type="password"
                           placeholder={keyDef.placeholder}
-                          value={inputValues[key] || ''}
+                          value={inputValues[k] || ''}
                           onChange={(e) =>
-                            setInputValues((p) => ({
-                              ...p,
-                              [key]: e.target.value,
-                            }))
+                            setInputValues((p) => ({ ...p, [k]: e.target.value }))
                           }
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter')
-                              handleSave(
-                                integration.provider,
-                                keyDef.keyName,
-                              );
+                            if (e.key === 'Enter') handleSave(integration.provider, keyDef.keyName);
                           }}
                           className={cn(
                             'flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm font-mono',
@@ -303,16 +235,10 @@ export default function IntegrationsPage() {
                         <Button
                           size="sm"
                           className="h-9"
-                          disabled={!inputValues[key]?.trim() || isSaving}
-                          onClick={() =>
-                            handleSave(integration.provider, keyDef.keyName)
-                          }
+                          disabled={!inputValues[k]?.trim() || isSaving}
+                          onClick={() => handleSave(integration.provider, keyDef.keyName)}
                         >
-                          {isSaving ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <Check size={14} />
-                          )}
+                          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         </Button>
                         {stored && (
                           <Button
@@ -320,12 +246,7 @@ export default function IntegrationsPage() {
                             size="sm"
                             className="h-9 w-9 p-0"
                             title="Cancel"
-                            onClick={() =>
-                              setShowValues((p) => ({
-                                ...p,
-                                [key]: false,
-                              }))
-                            }
+                            onClick={() => setShowValues((p) => ({ ...p, [k]: false }))}
                           >
                             <EyeOff size={14} />
                           </Button>
@@ -335,8 +256,7 @@ export default function IntegrationsPage() {
 
                     {stored && (
                       <p className="text-[10px] text-muted-foreground">
-                        Last updated{' '}
-                        {new Date(stored.updatedAt).toLocaleString()}
+                        Last updated {new Date(stored.updatedAt).toLocaleString()}
                       </p>
                     )}
                   </div>
@@ -347,7 +267,7 @@ export default function IntegrationsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleTest(integration.provider)}
+                  onClick={() => testMutation.mutate(integration.provider)}
                   disabled={connStatus[integration.provider] === 'testing'}
                 >
                   {connStatus[integration.provider] === 'testing' ? (
@@ -380,17 +300,10 @@ export default function IntegrationsPage() {
             { label: 'Twilio Status', path: '/api/webhooks/twilio/status' },
             { label: 'DocuSign Connect', path: '/api/webhooks/docusign' },
           ].map((wh) => (
-            <div
-              key={wh.path}
-              className="flex items-center justify-between p-3 rounded-md bg-secondary"
-            >
+            <div key={wh.path} className="flex items-center justify-between p-3 rounded-md bg-secondary">
               <div>
-                <div className="text-sm font-medium text-foreground">
-                  {wh.label}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  POST {wh.path}
-                </div>
+                <div className="text-sm font-medium text-foreground">{wh.label}</div>
+                <div className="text-xs text-muted-foreground">POST {wh.path}</div>
               </div>
               <code className="text-xs bg-background px-2 py-1 rounded text-muted-foreground">
                 http://localhost:3001{wh.path}
@@ -406,10 +319,10 @@ export default function IntegrationsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            All API keys are encrypted at rest using AES-256-GCM before being
-            stored in the database. Plaintext values are never persisted or
-            returned by the API. Only a masked hint (last 4 characters) is
-            shown in the console for identification.
+            All API keys are encrypted at rest using AES-256-GCM before being stored in
+            the database. Plaintext values are never persisted or returned by the API.
+            Only a masked hint (last 4 characters) is shown in the console for
+            identification.
           </p>
         </CardContent>
       </Card>

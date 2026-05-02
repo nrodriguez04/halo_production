@@ -1,40 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Loader2 } from 'lucide-react';
+
+interface DuplicateLead {
+  id: string;
+  canonicalAddress?: string;
+  canonicalCity?: string;
+  canonicalState?: string;
+  canonicalOwner?: string;
+  canonicalPhone?: string;
+  canonicalEmail?: string;
+  status: string;
+  createdAt: string;
+}
 
 interface DuplicatePair {
-  lead1: {
-    id: string;
-    canonicalAddress?: string;
-    canonicalCity?: string;
-    canonicalState?: string;
-    canonicalOwner?: string;
-    canonicalPhone?: string;
-    canonicalEmail?: string;
-    status: string;
-    createdAt: string;
-  };
-  lead2: {
-    id: string;
-    canonicalAddress?: string;
-    canonicalCity?: string;
-    canonicalState?: string;
-    canonicalOwner?: string;
-    canonicalPhone?: string;
-    canonicalEmail?: string;
-    status: string;
-    createdAt: string;
-  };
+  lead1: DuplicateLead;
+  lead2: DuplicateLead;
   similarity: number;
   reasons: string[];
 }
 
-function LeadColumn({ lead, label }: { lead: DuplicatePair['lead1']; label: string }) {
+function LeadColumn({ lead, label }: { lead: DuplicateLead; label: string }) {
   return (
     <div>
       <h3 className="text-sm font-semibold text-muted-foreground mb-3">{label}</h3>
@@ -71,56 +63,45 @@ function LeadColumn({ lead, label }: { lead: DuplicatePair['lead1']; label: stri
 }
 
 export default function DataTriagePage() {
-  const [duplicates, setDuplicates] = useState<DuplicatePair[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [selectedPair, setSelectedPair] = useState<DuplicatePair | null>(null);
   const [action, setAction] = useState<'merge' | 'distinct' | null>(null);
 
-  useEffect(() => {
-    fetchDuplicates();
-  }, []);
+  const {
+    data: duplicates = [],
+    isPending,
+    isFetching,
+    refetch,
+  } = useApiQuery<DuplicatePair[]>('/leads/duplicates', {
+    params: { threshold: 0.7 },
+  });
 
-  const fetchDuplicates = async () => {
-    try {
-      const response = await apiFetch('/leads/duplicates?threshold=0.7');
-      if (!response.ok) {
-        console.error('Failed to fetch duplicates:', response.status);
-        setDuplicates([]);
-        return;
-      }
-      const data = await response.json();
-      setDuplicates(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch duplicates:', error);
-      setDuplicates([]);
-    } finally {
-      setLoading(false);
-    }
+  const closeModal = () => {
+    setSelectedPair(null);
+    setAction(null);
   };
 
-  const handleMerge = async (sourceId: string, targetId: string) => {
-    try {
-      await apiFetch('/leads/merge', { method: 'POST', body: JSON.stringify({ sourceId, targetId }) });
-      fetchDuplicates();
-      setSelectedPair(null);
-      setAction(null);
-    } catch (error) {
-      console.error('Failed to merge leads:', error);
-    }
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['/leads/duplicates'] });
+    queryClient.invalidateQueries({ queryKey: ['/leads'] });
+    closeModal();
   };
 
-  const handleMarkDistinct = async (lead1Id: string, lead2Id: string) => {
-    try {
-      await apiFetch('/leads/mark-distinct', { method: 'POST', body: JSON.stringify({ lead1Id, lead2Id }) });
-      fetchDuplicates();
-      setSelectedPair(null);
-      setAction(null);
-    } catch (error) {
-      console.error('Failed to mark as distinct:', error);
-    }
-  };
+  const mergeMutation = useApiMutation<{ sourceId: string; targetId: string }, unknown>(
+    ({ sourceId, targetId }) =>
+      apiJson('/leads/merge', { method: 'POST', body: JSON.stringify({ sourceId, targetId }) }),
+    { onSuccess: invalidate },
+  );
 
-  if (loading) {
+  const markDistinctMutation = useApiMutation<{ lead1Id: string; lead2Id: string }, unknown>(
+    ({ lead1Id, lead2Id }) =>
+      apiJson('/leads/mark-distinct', { method: 'POST', body: JSON.stringify({ lead1Id, lead2Id }) }),
+    { onSuccess: invalidate },
+  );
+
+  const isConfirming = mergeMutation.isPending || markDistinctMutation.isPending;
+
+  if (isPending) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading duplicate detection...</div>;
   }
 
@@ -131,8 +112,8 @@ export default function DataTriagePage() {
           <h1 className="text-2xl font-bold text-foreground">Data Triage</h1>
           <p className="text-sm text-muted-foreground mt-1">Review and resolve potential duplicate leads</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchDuplicates}>
-          <RefreshCw size={16} className="mr-2" />
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RefreshCw size={16} className="mr-2" />}
           Refresh
         </Button>
       </div>
@@ -194,15 +175,17 @@ export default function DataTriagePage() {
                 <Button
                   className="flex-1"
                   variant={action === 'merge' ? 'default' : 'secondary'}
+                  disabled={isConfirming}
                   onClick={() =>
                     action === 'merge'
-                      ? handleMerge(selectedPair.lead1.id, selectedPair.lead2.id)
-                      : handleMarkDistinct(selectedPair.lead1.id, selectedPair.lead2.id)
+                      ? mergeMutation.mutate({ sourceId: selectedPair.lead1.id, targetId: selectedPair.lead2.id })
+                      : markDistinctMutation.mutate({ lead1Id: selectedPair.lead1.id, lead2Id: selectedPair.lead2.id })
                   }
                 >
+                  {isConfirming && <Loader2 size={14} className="mr-2 animate-spin" />}
                   Confirm
                 </Button>
-                <Button className="flex-1" variant="outline" onClick={() => { setSelectedPair(null); setAction(null); }}>
+                <Button className="flex-1" variant="outline" onClick={closeModal} disabled={isConfirming}>
                   Cancel
                 </Button>
               </div>
