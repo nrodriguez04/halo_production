@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery, useQueryClient, apiJson, apiFetch } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,47 +18,25 @@ interface JobRun {
   updatedAt: string;
 }
 
+interface Deal {
+  id: string;
+  stage: string;
+  property?: { address?: string };
+}
+
 export default function MarketingPage() {
-  const [deals, setDeals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: deals = [], isPending, refetch } = useApiQuery<Deal[]>('/deals');
   const [generating, setGenerating] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchDeals();
-  }, []);
-
-  const fetchDeals = async () => {
-    try {
-      const res = await apiFetch('/deals');
-      const data = await res.json();
-      setDeals(Array.isArray(data) ? data : []);
-    } catch {
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const generateFlyer = async (dealId: string) => {
+  const startJob = async (path: string, dealId: string) => {
     setGenerating(dealId);
     try {
-      const res = await apiFetch(`/marketing/flyer/${dealId}`, { method: 'POST' });
-      if (res.ok) {
-        const { jobId } = await res.json();
-        pollJob(jobId);
-      }
-    } finally {
-      setGenerating(null);
-    }
-  };
-
-  const generateVideoScript = async (dealId: string) => {
-    setGenerating(dealId);
-    try {
-      const res = await apiFetch(`/marketing/video-script/${dealId}`, { method: 'POST' });
-      if (res.ok) {
-        const { jobId } = await res.json();
-        pollJob(jobId);
-      }
+      const res = await apiFetch(path, { method: 'POST' });
+      if (!res.ok) return;
+      const { jobId } = (await res.json()) as { jobId: string };
+      await pollJob(jobId);
+      queryClient.invalidateQueries({ queryKey: ['/deals'] });
     } finally {
       setGenerating(null);
     }
@@ -68,30 +46,19 @@ export default function MarketingPage() {
     for (let i = 0; i < 10; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const res = await apiFetch(`/jobs/${jobId}`);
-      if (res.ok) {
-        const job: JobRun = await res.json();
-        if (job.status === 'SUCCEEDED' || job.status === 'FAILED') {
-          fetchDeals();
-          return;
-        }
-      }
+      if (!res.ok) continue;
+      const job: JobRun = await res.json();
+      if (job.status === 'SUCCEEDED' || job.status === 'FAILED') return;
     }
   };
 
-  const statusVariant = (s: string) => {
-    if (s === 'SUCCEEDED') return 'success' as const;
-    if (s === 'FAILED') return 'destructive' as const;
-    if (s === 'RUNNING') return 'warning' as const;
-    return 'secondary' as const;
-  };
-
-  if (loading) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading marketing...</div>;
+  if (isPending) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading marketing...</div>;
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Marketing</h1>
-        <Button variant="outline" size="sm" onClick={fetchDeals}>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
           <RefreshCw size={16} className="mr-2" /> Refresh
         </Button>
       </div>
@@ -119,7 +86,7 @@ export default function MarketingPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => generateFlyer(deal.id)}
+                    onClick={() => startJob(`/marketing/flyer/${deal.id}`, deal.id)}
                     disabled={generating === deal.id}
                   >
                     {generating === deal.id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <FileImage size={14} className="mr-2" />}
@@ -128,7 +95,7 @@ export default function MarketingPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => generateVideoScript(deal.id)}
+                    onClick={() => startJob(`/marketing/video-script/${deal.id}`, deal.id)}
                     disabled={generating === deal.id}
                   >
                     <Film size={14} className="mr-2" /> Video Script
@@ -137,10 +104,10 @@ export default function MarketingPage() {
                     size="sm"
                     variant="outline"
                     onClick={async () => {
-                      await apiFetch(`/marketing/buyer-blast/${deal.id}`, {
+                      await apiJson(`/marketing/buyer-blast/${deal.id}`, {
                         method: 'POST',
                         body: JSON.stringify({ buyerIds: [] }),
-                      });
+                      }).catch(() => undefined);
                     }}
                   >
                     <Mail size={14} className="mr-2" /> Buyer Blast

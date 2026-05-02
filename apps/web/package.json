@@ -12,6 +12,8 @@
   "dependencies": {
     "@descope/nextjs-sdk": "^0.15.19",
     "@halo/shared": "*",
+    "@tanstack/react-query": "^5.100.8",
+    "@tanstack/react-query-devtools": "^5.100.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.7.0",

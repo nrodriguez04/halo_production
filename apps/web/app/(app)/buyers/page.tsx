@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, UserCheck } from 'lucide-react';
+import { Plus, Search, UserCheck, Loader2 } from 'lucide-react';
 
 interface Buyer {
   id: string;
@@ -23,56 +23,42 @@ interface Buyer {
 }
 
 export default function BuyersPage() {
-  const [buyers, setBuyers] = useState<Buyer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', phone: '' });
 
-  useEffect(() => {
-    fetchBuyers();
-  }, []);
+  const queryClient = useQueryClient();
 
-  const fetchBuyers = async () => {
-    try {
-      const res = await apiFetch('/buyers');
-      if (!res.ok) {
-        console.error('Failed to fetch buyers:', res.status, res.statusText);
-        return;
-      }
-      const data = await res.json();
-      setBuyers(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch buyers:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: buyers = [], isPending, isError, error } = useApiQuery<Buyer[]>('/buyers');
 
-  const addBuyer = async () => {
-    const res = await apiFetch('/buyers', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: form.name,
-        email: form.email,
-        phone: form.phone || undefined,
-        preferences: {},
+  const addBuyerMutation = useApiMutation<typeof form, Buyer>(
+    (input) =>
+      apiJson<Buyer>('/buyers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: input.name,
+          email: input.email,
+          phone: input.phone || undefined,
+          preferences: {},
+        }),
       }),
-    });
-    if (res.ok) {
-      setForm({ name: '', email: '', phone: '' });
-      setShowAdd(false);
-      fetchBuyers();
-    } else {
-      console.error('Failed to add buyer:', res.status, res.statusText);
-    }
-  };
-
-  const filtered = buyers.filter(
-    (b) => !search || b.name.toLowerCase().includes(search.toLowerCase()) || b.email.toLowerCase().includes(search.toLowerCase()),
+    {
+      onSuccess: () => {
+        setForm({ name: '', email: '', phone: '' });
+        setShowAdd(false);
+        queryClient.invalidateQueries({ queryKey: ['/buyers'] });
+      },
+    },
   );
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading buyers...</div>;
+  const filtered = buyers.filter(
+    (b) =>
+      !search ||
+      b.name.toLowerCase().includes(search.toLowerCase()) ||
+      b.email.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  if (isPending) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading buyers...</div>;
 
   return (
     <div className="p-6 space-y-6">
@@ -82,6 +68,14 @@ export default function BuyersPage() {
           <Plus size={16} className="mr-2" /> Add Buyer
         </Button>
       </div>
+
+      {isError && (
+        <Card>
+          <CardContent className="py-4 text-destructive text-sm">
+            Failed to load buyers{error?.message ? `: ${error.message}` : ''}
+          </CardContent>
+        </Card>
+      )}
 
       {showAdd && (
         <Card>
@@ -93,9 +87,21 @@ export default function BuyersPage() {
               <Input placeholder="Phone (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
             <div className="flex gap-2 mt-3">
-              <Button size="sm" onClick={addBuyer} disabled={!form.name || !form.email}>Save</Button>
+              <Button
+                size="sm"
+                onClick={() => addBuyerMutation.mutate(form)}
+                disabled={!form.name || !form.email || addBuyerMutation.isPending}
+              >
+                {addBuyerMutation.isPending && <Loader2 size={14} className="mr-2 animate-spin" />}
+                Save
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
             </div>
+            {addBuyerMutation.isError && (
+              <p className="text-sm text-destructive mt-2">
+                {addBuyerMutation.error?.message || 'Failed to save buyer'}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

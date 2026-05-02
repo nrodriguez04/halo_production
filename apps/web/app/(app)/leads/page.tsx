@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery } from '@/lib/api-query';
+import { useDebouncedValue } from '@/lib/use-debounce';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Upload, Search, Plus } from 'lucide-react';
+import { Upload, Search, Plus, Loader2 } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -31,38 +32,21 @@ const statusVariant = (status: string) => {
 };
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
 
-  useEffect(() => {
-    fetchLeads();
-  }, []);
+  const {
+    data: leads = [],
+    isPending,
+    isError,
+    error,
+    isFetching,
+  } = useApiQuery<Lead[]>('/leads', {
+    params: { search: debouncedSearch || undefined, take: 200 },
+    placeholderData: (prev) => prev, // keep previous results visible while typing
+  });
 
-  const fetchLeads = async () => {
-    try {
-      const response = await apiFetch('/leads');
-      if (!response.ok) {
-        console.error('Failed to fetch leads:', response.status, response.statusText);
-        return;
-      }
-      const data = await response.json();
-      setLeads(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch leads:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filtered = leads.filter(
-    (l) =>
-      !search ||
-      l.canonicalAddress?.toLowerCase().includes(search.toLowerCase()) ||
-      l.canonicalCity?.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  if (loading) {
+  if (isPending) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         Loading leads...
@@ -89,16 +73,30 @@ export default function LeadsPage() {
       <div className="relative max-w-sm">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search leads..."
+          placeholder="Search address, city, or owner..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-9"
         />
+        {isFetching && (
+          <Loader2
+            size={14}
+            className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+          />
+        )}
       </div>
+
+      {isError && (
+        <Card>
+          <CardContent className="py-4 text-destructive text-sm">
+            Failed to load leads{error?.message ? `: ${error.message}` : ''}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>{filtered.length} leads</CardTitle>
+          <CardTitle>{leads.length} leads</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -111,14 +109,14 @@ export default function LeadsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {leads.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     No leads found
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((lead) => (
+                leads.map((lead) => (
                   <TableRow key={lead.id}>
                     <TableCell>
                       <div className="font-medium text-foreground">

@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api-fetch';
+import { useApiQuery } from '@/lib/api-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,31 +37,22 @@ const stageVariant = (stage: string) => {
 };
 
 export default function DealsPage() {
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: deals = [], isPending, isError, error } = useApiQuery<Deal[]>('/deals');
 
-  useEffect(() => {
-    fetchDeals();
-  }, []);
-
-  const fetchDeals = async () => {
-    try {
-      const response = await apiFetch('/deals');
-      if (!response.ok) {
-        console.error('Failed to fetch deals:', response.status, response.statusText);
-        return;
-      }
-      const data = await response.json();
-      setDeals(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch deals:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (isPending) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading deals...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-8 text-center text-destructive">
+            Failed to load deals{error?.message ? `: ${error.message}` : ''}
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -82,7 +72,7 @@ export default function DealsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {deals.map((deal) => (
-            <Link key={deal.id} href={`/deals/${deal.id}`}>
+            <Link key={deal.id} href={`/deals/${deal.id}`} prefetch>
               <Card className="hover:border-primary/30 transition-colors cursor-pointer">
                 <CardContent className="p-5">
                   <div className="flex justify-between items-start">

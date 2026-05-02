@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-fetch';
+import { useState } from 'react';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Loader2 } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -28,72 +29,47 @@ const statusVariant = (status: string) => {
 };
 
 export default function CommunicationsPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [approvalQueue, setApprovalQueue] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'approval'>('all');
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchMessages();
-    fetchApprovalQueue();
-  }, []);
+  const { data: messages = [], isPending: messagesPending } = useApiQuery<Message[]>(
+    '/communications/messages',
+  );
+  const { data: approvalQueue = [], isPending: queuePending } = useApiQuery<Message[]>(
+    '/communications/approval-queue',
+  );
 
-  const fetchMessages = async () => {
-    try {
-      const res = await apiFetch('/communications/messages');
-      if (!res.ok) {
-        console.error('Failed to fetch messages:', res.status, res.statusText);
-        return;
-      }
-      setMessages(await res.json());
-    } catch (error) {
-      console.error('Failed to fetch messages:', error);
-    } finally {
-      setLoading(false);
-    }
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['/communications/messages'] });
+    queryClient.invalidateQueries({ queryKey: ['/communications/approval-queue'] });
   };
 
-  const fetchApprovalQueue = async () => {
-    try {
-      const res = await apiFetch('/communications/approval-queue');
-      if (!res.ok) {
-        console.error('Failed to fetch approval queue:', res.status, res.statusText);
-        return;
-      }
-      setApprovalQueue(await res.json());
-    } catch (error) {
-      console.error('Failed to fetch approval queue:', error);
-    }
-  };
+  const approveMutation = useApiMutation<string, void>(
+    (id) =>
+      apiJson<void>(`/communications/messages/${id}/approve`, { method: 'PUT' }),
+    { onSuccess: invalidate },
+  );
 
-  const handleApprove = async (id: string) => {
-    const res = await apiFetch(`/communications/messages/${id}/approve`, { method: 'PUT' });
-    if (!res.ok) {
-      console.error('Failed to approve message:', res.status, res.statusText);
-      return;
-    }
-    fetchMessages();
-    fetchApprovalQueue();
-  };
+  const rejectMutation = useApiMutation<string, void>(
+    (id) =>
+      apiJson<void>(`/communications/messages/${id}/reject`, {
+        method: 'PUT',
+        body: JSON.stringify({ reason: 'Rejected by user' }),
+      }),
+    { onSuccess: invalidate },
+  );
 
-  const handleReject = async (id: string) => {
-    const res = await apiFetch(`/communications/messages/${id}/reject`, {
-      method: 'PUT',
-      body: JSON.stringify({ reason: 'Rejected by user' }),
-    });
-    if (!res.ok) {
-      console.error('Failed to reject message:', res.status, res.statusText);
-      return;
-    }
-    fetchMessages();
-    fetchApprovalQueue();
-  };
-
-  if (loading) {
+  const isPending = messagesPending || queuePending;
+  if (isPending) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading communications...</div>;
   }
 
   const displayMessages = activeTab === 'approval' ? approvalQueue : messages;
+  const pendingId = approveMutation.isPending
+    ? approveMutation.variables
+    : rejectMutation.isPending
+      ? rejectMutation.variables
+      : null;
 
   return (
     <div className="p-6 space-y-6">
@@ -148,8 +124,27 @@ export default function CommunicationsPage() {
 
                 {message.status === 'pending_approval' && (
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => handleApprove(message.id)}>Approve</Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleReject(message.id)}>Reject</Button>
+                    <Button
+                      size="sm"
+                      onClick={() => approveMutation.mutate(message.id)}
+                      disabled={pendingId === message.id}
+                    >
+                      {pendingId === message.id && approveMutation.isPending && (
+                        <Loader2 size={14} className="mr-2 animate-spin" />
+                      )}
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => rejectMutation.mutate(message.id)}
+                      disabled={pendingId === message.id}
+                    >
+                      {pendingId === message.id && rejectMutation.isPending && (
+                        <Loader2 size={14} className="mr-2 animate-spin" />
+                      )}
+                      Reject
+                    </Button>
                   </div>
                 )}
 

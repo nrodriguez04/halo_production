@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { apiFetch } from '@/lib/api-fetch';
+import { useApiQuery } from '@/lib/api-query';
+import { useDebouncedValue } from '@/lib/use-debounce';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Search, RefreshCw } from 'lucide-react';
+import { Search, RefreshCw, Loader2 } from 'lucide-react';
 
 const PropertyMap = dynamic(() => import('@/components/property-map'), { ssr: false });
 
@@ -29,7 +30,6 @@ function formatUsd(n: number) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-/** Estimated value minus seller sale price (positive = spread below your value estimate). */
 function valueSpread(estimated?: number | null, sale?: number | null): number | null {
   if (estimated == null || sale == null || Number.isNaN(estimated) || Number.isNaN(sale)) {
     return null;
@@ -38,34 +38,25 @@ function valueSpread(estimated?: number | null, sale?: number | null): number | 
 }
 
 export default function PropertiesPage() {
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const debouncedCity = useDebouncedValue(search, 250);
 
-  useEffect(() => {
-    fetchProperties();
-  }, [stateFilter]);
-
-  const fetchProperties = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (search) params.set('city', search);
-      if (stateFilter) params.set('state', stateFilter);
-      const res = await apiFetch(`/properties/search?${params.toString()}`);
-      if (res.ok) setProperties(await res.json());
-    } catch {
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: properties = [],
+    isPending,
+    isFetching,
+    refetch,
+  } = useApiQuery<Property[]>('/properties/search', {
+    params: { city: debouncedCity || undefined, state: stateFilter || undefined },
+    placeholderData: (prev) => prev,
+  });
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Properties</h1>
-        <Button variant="outline" size="sm" onClick={fetchProperties}>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
           <RefreshCw size={16} className="mr-2" /> Refresh
         </Button>
       </div>
@@ -75,7 +66,18 @@ export default function PropertiesPage() {
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Filter by city..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" onKeyDown={(e) => e.key === 'Enter' && fetchProperties()} />
+          <Input
+            placeholder="Filter by city..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {isFetching && (
+            <Loader2
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+            />
+          )}
         </div>
         <Select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} className="w-32">
           <option value="">All States</option>
@@ -84,7 +86,7 @@ export default function PropertiesPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>{properties.length} properties</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{isPending ? 'Loading...' : `${properties.length} properties`}</CardTitle></CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -106,7 +108,9 @@ export default function PropertiesPage() {
             <TableBody>
               {properties.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No properties found</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    {isPending ? 'Loading...' : 'No properties found'}
+                  </TableCell>
                 </TableRow>
               ) : (
                 properties.map((p) => (

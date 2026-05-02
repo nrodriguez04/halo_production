@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api-fetch';
+import { useApiQuery } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Users, Handshake, DollarSign, Brain, ArrowRight } from 'lucide-react';
@@ -27,14 +26,14 @@ interface KPIs {
 }
 
 const STAGE_COLORS = [
-  'hsl(142 71% 45%)',    // primary green
-  'hsl(142 71% 35%)',    // darker green
-  'hsl(142 50% 55%)',    // lighter green
-  'hsl(160 60% 40%)',    // teal-green
-  'hsl(142 40% 30%)',    // muted green
-  'hsl(120 40% 50%)',    // warm green
-  'hsl(142 71% 60%)',    // bright green
-  'hsl(0 72% 51%)',      // destructive (lost)
+  'hsl(142 71% 45%)',
+  'hsl(142 71% 35%)',
+  'hsl(142 50% 55%)',
+  'hsl(160 60% 40%)',
+  'hsl(142 40% 30%)',
+  'hsl(120 40% 50%)',
+  'hsl(142 71% 60%)',
+  'hsl(0 72% 51%)',
 ];
 
 function ProgressBar({ value, className }: { value: number; className?: string }) {
@@ -46,28 +45,22 @@ function ProgressBar({ value, className }: { value: number; className?: string }
 }
 
 export default function DashboardPage() {
-  const [kpis, setKPIs] = useState<KPIs | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: kpis, isPending, isError, error } = useApiQuery<KPIs>('/analytics/kpis');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiFetch('/analytics/kpis');
-        if (!res.ok) {
-          console.error('Failed to fetch KPIs:', res.status, res.statusText);
-          return;
-        }
-        setKPIs(await res.json());
-      } catch (error) {
-        console.error('Failed to fetch KPIs:', error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  if (loading) {
+  if (isPending) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading dashboard...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-8 text-center text-destructive">
+            Failed to load dashboard{error?.message ? `: ${error.message}` : ''}
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const kpiCards = [
