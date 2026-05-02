@@ -188,6 +188,8 @@ model Lead {
 
   @@index([accountId])
   @@index([status])
+  @@index([accountId, createdAt])
+  @@index([accountId, status, createdAt])
   @@map("leads")
 }
 
@@ -209,6 +211,7 @@ model SourceRecord {
   @@index([leadId])
   @@index([propertyId])
   @@index([provider])
+  @@index([provider, requestHash, createdAt])
   @@map("source_records")
 }
 
@@ -239,6 +242,9 @@ model Property {
   @@index([accountId])
   @@index([apn])
   @@index([address, city, state, zip])
+  @@index([leadId])
+  @@index([accountId, createdAt])
+  @@index([latitude, longitude])
   @@map("properties")
 }
 
@@ -265,6 +271,10 @@ model Deal {
 
   @@index([accountId])
   @@index([stage])
+  @@index([leadId])
+  @@index([propertyId])
+  @@index([accountId, createdAt])
+  @@index([accountId, stage, createdAt])
   @@map("deals")
 }
 
@@ -311,6 +321,9 @@ model Message {
   @@index([leadId])
   @@index([status])
   @@index([automationRunId])
+  @@index([dealId])
+  @@index([accountId, status, createdAt])
+  @@index([accountId, source, status, createdAt])
   @@map("messages")
 }
 
@@ -328,6 +341,7 @@ model Buyer {
   updatedAt   DateTime @updatedAt
 
   @@index([accountId])
+  @@index([accountId, engagementScore])
   @@map("buyers")
 }
 
@@ -381,6 +395,7 @@ model AICostLog {
   @@index([accountId])
   @@index([createdAt])
   @@index([automationRunId])
+  @@index([accountId, createdAt])
   @@map("ai_cost_logs")
 }
 
