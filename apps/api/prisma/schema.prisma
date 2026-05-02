@@ -2,12 +2,14 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm]
 }
 
 enum JobRunKind {
@@ -186,10 +188,11 @@ model Lead {
   deals         Deal[]
   consents      Consent[]
 
-  @@index([accountId])
   @@index([status])
   @@index([accountId, createdAt])
   @@index([accountId, status, createdAt])
+  @@index([canonicalAddress(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_canonicalAddress_trgm_idx")
+  @@index([canonicalOwner(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_canonicalOwner_trgm_idx")
   @@map("leads")
 }
 
@@ -239,12 +242,12 @@ model Property {
   deals         Deal[]
   underwritingResults UnderwritingResult[]
 
-  @@index([accountId])
   @@index([apn])
   @@index([address, city, state, zip])
   @@index([leadId])
   @@index([accountId, createdAt])
   @@index([latitude, longitude])
+  @@index([address(ops: raw("gin_trgm_ops"))], type: Gin, map: "properties_address_trgm_idx")
   @@map("properties")
 }
 
@@ -269,7 +272,6 @@ model Deal {
   marketingMaterials MarketingMaterial[]
   economics          DealEconomics?
 
-  @@index([accountId])
   @@index([stage])
   @@index([leadId])
   @@index([propertyId])
@@ -317,7 +319,6 @@ model Message {
 
   automationRun AutomationRun? @relation("AutomationRunMessages", fields: [automationRunId], references: [id])
 
-  @@index([accountId])
   @@index([leadId])
   @@index([status])
   @@index([automationRunId])
@@ -340,7 +341,6 @@ model Buyer {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([accountId])
   @@index([accountId, engagementScore])
   @@map("buyers")
 }
@@ -392,7 +392,6 @@ model AICostLog {
   createdAt       DateTime @default(now())
 
   @@index([provider])
-  @@index([accountId])
   @@index([createdAt])
   @@index([automationRunId])
   @@index([accountId, createdAt])
