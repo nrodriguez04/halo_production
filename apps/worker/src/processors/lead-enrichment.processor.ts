@@ -1,9 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
 import * as crypto from 'crypto';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma-client';
 
 @Processor('lead-enrichment')
 export class LeadEnrichmentProcessor extends WorkerHost {

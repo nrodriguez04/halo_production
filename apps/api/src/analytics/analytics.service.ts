@@ -9,105 +9,65 @@ export class AnalyticsService {
   async getKPIs(accountId: string, startDate?: Date, endDate?: Date) {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
     const end = endDate || new Date();
+    const inRange = { gte: start, lte: end };
 
-    // Lead metrics
-    const totalLeads = await this.prisma.lead.count({
-      where: {
-        accountId,
-        createdAt: { gte: start, lte: end },
-      },
-    });
+    const [
+      totalLeads,
+      enrichedLeads,
+      totalDeals,
+      closedDeals,
+      totalDealValue,
+      totalMessages,
+      sentMessages,
+      approvedMessages,
+      aiCostAgg,
+      stageDistribution,
+    ] = await Promise.all([
+      this.prisma.lead.count({ where: { accountId, createdAt: inRange } }),
+      this.prisma.lead.count({
+        where: { accountId, status: 'enriched', createdAt: inRange },
+      }),
+      this.prisma.deal.count({ where: { accountId, createdAt: inRange } }),
+      this.prisma.deal.count({
+        where: { accountId, stage: 'closed', createdAt: inRange },
+      }),
+      this.prisma.deal.aggregate({
+        where: {
+          accountId,
+          stage: 'closed',
+          createdAt: inRange,
+          offerAmount: { not: null },
+        },
+        _sum: { offerAmount: true },
+      }),
+      this.prisma.message.count({ where: { accountId, createdAt: inRange } }),
+      this.prisma.message.count({
+        where: { accountId, status: 'sent', createdAt: inRange },
+      }),
+      this.prisma.message.count({
+        where: { accountId, status: 'approved', createdAt: inRange },
+      }),
+      this.prisma.aICostLog.aggregate({
+        where: { accountId, createdAt: inRange },
+        _sum: { cost: true },
+        _count: { id: true },
+      }),
+      this.prisma.deal.groupBy({
+        by: ['stage'],
+        where: { accountId, createdAt: inRange },
+        _count: { stage: true },
+      }),
+    ]);
 
-    const enrichedLeads = await this.prisma.lead.count({
-      where: {
-        accountId,
-        status: 'enriched',
-        createdAt: { gte: start, lte: end },
-      },
-    });
+    const totalAICost = aiCostAgg._sum.cost || 0;
+    const aiRequests = aiCostAgg._count.id;
 
-    // Deal metrics
-    const totalDeals = await this.prisma.deal.count({
-      where: {
-        accountId,
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const closedDeals = await this.prisma.deal.count({
-      where: {
-        accountId,
-        stage: 'closed',
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const totalDealValue = await this.prisma.deal.aggregate({
-      where: {
-        accountId,
-        stage: 'closed',
-        createdAt: { gte: start, lte: end },
-        offerAmount: { not: null },
-      },
-      _sum: {
-        offerAmount: true,
-      },
-    });
-
-    // Communication metrics
-    const totalMessages = await this.prisma.message.count({
-      where: {
-        accountId,
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const sentMessages = await this.prisma.message.count({
-      where: {
-        accountId,
-        status: 'sent',
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const approvedMessages = await this.prisma.message.count({
-      where: {
-        accountId,
-        status: 'approved',
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    // AI cost metrics
-    const aiCosts = await this.prisma.aICostLog.findMany({
-      where: {
-        accountId,
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const totalAICost = aiCosts.reduce((sum, log) => sum + log.cost, 0);
-    const aiRequests = aiCosts.length;
-
-    // Conversion rates
     const leadToDealRate =
       totalLeads > 0 ? (totalDeals / totalLeads) * 100 : 0;
     const dealCloseRate =
       totalDeals > 0 ? (closedDeals / totalDeals) * 100 : 0;
     const messageApprovalRate =
       totalMessages > 0 ? (approvedMessages / totalMessages) * 100 : 0;
-
-    // Stage distribution
-    const stageDistribution = await this.prisma.deal.groupBy({
-      by: ['stage'],
-      where: {
-        accountId,
-        createdAt: { gte: start, lte: end },
-      },
-      _count: {
-        stage: true,
-      },
-    });
 
     return {
       leads: {
@@ -145,45 +105,60 @@ export class AnalyticsService {
   }
 
   async getTrends(accountId: string, days = 30) {
-    const data = [];
+    // Replaces a per-day loop (3 queries × N days = 90 queries for 30d) with 3 grouped
+    // queries that bucket rows by day in a single round trip per table.
     const now = new Date();
+    const start = new Date(now);
+    start.setUTCHours(0, 0, 0, 0);
+    start.setUTCDate(start.getUTCDate() - (days - 1));
 
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
+    type DailyAgg = { day: Date; n: bigint; cost?: number };
 
-      const leads = await this.prisma.lead.count({
-        where: {
-          accountId,
-          createdAt: { gte: date, lt: nextDate },
-        },
-      });
+    const [leadDaily, dealDaily, aiCostDaily] = await Promise.all([
+      this.prisma.$queryRaw<DailyAgg[]>`
+        SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::bigint AS n
+        FROM leads
+        WHERE "accountId" = ${accountId} AND "createdAt" >= ${start}
+        GROUP BY 1
+      `,
+      this.prisma.$queryRaw<DailyAgg[]>`
+        SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::bigint AS n
+        FROM deals
+        WHERE "accountId" = ${accountId} AND "createdAt" >= ${start}
+        GROUP BY 1
+      `,
+      this.prisma.$queryRaw<{ day: Date; cost: number }[]>`
+        SELECT date_trunc('day', "createdAt") AS day, COALESCE(SUM("cost"), 0)::float AS cost
+        FROM ai_cost_logs
+        WHERE "accountId" = ${accountId} AND "createdAt" >= ${start}
+        GROUP BY 1
+      `,
+    ]);
 
-      const deals = await this.prisma.deal.count({
-        where: {
-          accountId,
-          createdAt: { gte: date, lt: nextDate },
-        },
-      });
+    const leadsByDay = new Map<string, number>();
+    const dealsByDay = new Map<string, number>();
+    const costByDay = new Map<string, number>();
 
-      const aiCost = await this.prisma.aICostLog.aggregate({
-        where: {
-          accountId,
-          createdAt: { gte: date, lt: nextDate },
-        },
-        _sum: {
-          cost: true,
-        },
-      });
+    for (const r of leadDaily) {
+      leadsByDay.set(r.day.toISOString().split('T')[0], Number(r.n));
+    }
+    for (const r of dealDaily) {
+      dealsByDay.set(r.day.toISOString().split('T')[0], Number(r.n));
+    }
+    for (const r of aiCostDaily) {
+      costByDay.set(r.day.toISOString().split('T')[0], Number(r.cost));
+    }
 
+    const data: Array<{ date: string; leads: number; deals: number; aiCost: number }> = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setUTCDate(d.getUTCDate() + i);
+      const key = d.toISOString().split('T')[0];
       data.push({
-        date: date.toISOString().split('T')[0],
-        leads,
-        deals,
-        aiCost: aiCost._sum.cost || 0,
+        date: key,
+        leads: leadsByDay.get(key) || 0,
+        deals: dealsByDay.get(key) || 0,
+        aiCost: costByDay.get(key) || 0,
       });
     }
 
@@ -263,21 +238,23 @@ export class AnalyticsService {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();
 
-    const runs = await this.prisma.automationRun.findMany({
+    const agg = await this.prisma.automationRun.aggregate({
       where: { tenantId: accountId, createdAt: { gte: start, lte: end } },
-      select: {
+      _sum: {
         aiCostUsd: true,
         messageCostUsd: true,
         toolCostUsd: true,
         otherCostUsd: true,
       },
+      _count: { id: true },
     });
 
-    const aiSpend = runs.reduce((s, r) => s + (r.aiCostUsd || 0), 0);
-    const messagingSpend = runs.reduce((s, r) => s + (r.messageCostUsd || 0), 0);
-    const toolSpend = runs.reduce((s, r) => s + (r.toolCostUsd || 0), 0);
-    const otherSpend = runs.reduce((s, r) => s + (r.otherCostUsd || 0), 0);
+    const aiSpend = agg._sum.aiCostUsd || 0;
+    const messagingSpend = agg._sum.messageCostUsd || 0;
+    const toolSpend = agg._sum.toolCostUsd || 0;
+    const otherSpend = agg._sum.otherCostUsd || 0;
     const totalSpend = aiSpend + messagingSpend + toolSpend + otherSpend;
+    const runCount = agg._count.id;
 
     return {
       aiSpend,
@@ -285,8 +262,8 @@ export class AnalyticsService {
       toolSpend,
       otherSpend,
       totalSpend,
-      runCount: runs.length,
-      avgCostPerRun: runs.length > 0 ? totalSpend / runs.length : 0,
+      runCount,
+      avgCostPerRun: runCount > 0 ? totalSpend / runCount : 0,
       period: { start: start.toISOString(), end: end.toISOString() },
     };
   }
@@ -294,41 +271,33 @@ export class AnalyticsService {
   async getAutomationOutcomes(accountId: string, startDate?: Date, endDate?: Date) {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();
+    const inRange = { gte: start, lte: end };
 
-    const runs = await this.prisma.automationRun.findMany({
-      where: { tenantId: accountId, createdAt: { gte: start, lte: end } },
-      select: { estimatedValueUsd: true, realizedValueUsd: true },
-    });
-
-    const estimatedValue = runs.reduce(
-      (s, r) => s + (r.estimatedValueUsd || 0),
-      0,
-    );
-    const realizedValue = runs.reduce(
-      (s, r) => s + (r.realizedValueUsd || 0),
-      0,
-    );
-
-    const agentDraftsSent = await this.prisma.message.count({
-      where: {
-        accountId,
-        source: 'openclaw',
-        status: { in: ['sent', 'delivered'] },
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const inboundReplies = await this.prisma.message.count({
-      where: {
-        accountId,
-        direction: 'inbound',
-        createdAt: { gte: start, lte: end },
-      },
-    });
+    const [valueAgg, agentDraftsSent, inboundReplies] = await Promise.all([
+      this.prisma.automationRun.aggregate({
+        where: { tenantId: accountId, createdAt: inRange },
+        _sum: { estimatedValueUsd: true, realizedValueUsd: true },
+      }),
+      this.prisma.message.count({
+        where: {
+          accountId,
+          source: 'openclaw',
+          status: { in: ['sent', 'delivered'] },
+          createdAt: inRange,
+        },
+      }),
+      this.prisma.message.count({
+        where: {
+          accountId,
+          direction: 'inbound',
+          createdAt: inRange,
+        },
+      }),
+    ]);
 
     return {
-      estimatedValue,
-      realizedValue,
+      estimatedValue: valueAgg._sum.estimatedValueUsd || 0,
+      realizedValue: valueAgg._sum.realizedValueUsd || 0,
       agentDraftsSent,
       inboundReplies,
       period: { start: start.toISOString(), end: end.toISOString() },
@@ -336,26 +305,16 @@ export class AnalyticsService {
   }
 
   async getAutomationROI(accountId: string, startDate?: Date, endDate?: Date) {
-    const costs = await this.getAutomationCosts(accountId, startDate, endDate);
-    const outcomes = await this.getAutomationOutcomes(
-      accountId,
-      startDate,
-      endDate,
-    );
-
-    const economics = await this.prisma.dealEconomics.findMany({
-      where: { tenantId: accountId },
-      select: { grossRevenue: true, netProfit: true, roiPercent: true },
-    });
-
-    const totalGrossRevenue = economics.reduce(
-      (s, e) => s + (e.grossRevenue || 0),
-      0,
-    );
-    const totalNetProfit = economics.reduce(
-      (s, e) => s + (e.netProfit || 0),
-      0,
-    );
+    const [costs, outcomes, economicsAgg] = await Promise.all([
+      this.getAutomationCosts(accountId, startDate, endDate),
+      this.getAutomationOutcomes(accountId, startDate, endDate),
+      this.prisma.dealEconomics.aggregate({
+        where: { tenantId: accountId },
+        _sum: { grossRevenue: true, netProfit: true },
+        _avg: { roiPercent: true },
+        _count: { id: true },
+      }),
+    ]);
 
     const costPerReply =
       outcomes.inboundReplies > 0
@@ -366,13 +325,9 @@ export class AnalyticsService {
       costs,
       outcomes,
       dealEconomics: {
-        totalGrossRevenue,
-        totalNetProfit,
-        avgRoi:
-          economics.length > 0
-            ? economics.reduce((s, e) => s + (e.roiPercent || 0), 0) /
-              economics.length
-            : null,
+        totalGrossRevenue: economicsAgg._sum.grossRevenue || 0,
+        totalNetProfit: economicsAgg._sum.netProfit || 0,
+        avgRoi: economicsAgg._count.id > 0 ? economicsAgg._avg.roiPercent : null,
       },
       derivedMetrics: {
         costPerReply,

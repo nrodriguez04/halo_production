@@ -4,13 +4,11 @@ import {
   JobRunStatus,
   TimelineActorType,
   TimelineEntityType,
-  PrismaClient,
 } from '@prisma/client';
 import * as crypto from 'crypto';
 import OpenAI from 'openai';
 import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma-client';
 
 @Processor('underwriting')
 export class UnderwritingProcessor extends WorkerHost {

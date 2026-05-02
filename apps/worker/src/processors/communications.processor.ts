@@ -1,11 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { PrismaClient, TimelineActorType, TimelineEntityType } from '@prisma/client';
+import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { Twilio } from 'twilio';
 import * as nodemailer from 'nodemailer';
 import { assertPolicy } from '@halo/shared';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma-client';
 
 @Processor('communications')
 export class CommunicationsProcessor extends WorkerHost {
