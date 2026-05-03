@@ -12,13 +12,24 @@ type DescopeClientModule = {
 
 let descopeModulePromise: Promise<DescopeClientModule> | null = null;
 
+function getDescopeModule() {
+  if (!descopeModulePromise) {
+    descopeModulePromise = (
+      import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>
+    ).catch((error) => {
+      // Retry on the next request if the chunk load/import failed transiently.
+      descopeModulePromise = null;
+      throw error;
+    });
+  }
+
+  return descopeModulePromise;
+}
+
 async function getJwt(): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
   try {
-    if (!descopeModulePromise) {
-      descopeModulePromise = import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>;
-    }
-    const mod = await descopeModulePromise;
+    const mod = await getDescopeModule();
     if (!mod?.getSessionToken) return undefined;
     return await Promise.resolve(mod.getSessionToken());
   } catch {
