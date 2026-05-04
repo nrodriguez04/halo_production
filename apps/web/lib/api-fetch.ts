@@ -12,13 +12,25 @@ type DescopeClientModule = {
 
 let descopeModulePromise: Promise<DescopeClientModule> | null = null;
 
+async function loadDescopeModule(): Promise<DescopeClientModule> {
+  if (!descopeModulePromise) {
+    descopeModulePromise = import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>;
+  }
+  try {
+    return await descopeModulePromise;
+  } catch (error) {
+    // If the chunk load fails once (for example during a transient network error
+    // or a stale post-deploy asset), allow the next request to retry instead of
+    // poisoning auth for the rest of the tab session.
+    descopeModulePromise = null;
+    throw error;
+  }
+}
+
 async function getJwt(): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
   try {
-    if (!descopeModulePromise) {
-      descopeModulePromise = import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>;
-    }
-    const mod = await descopeModulePromise;
+    const mod = await loadDescopeModule();
     if (!mod?.getSessionToken) return undefined;
     return await Promise.resolve(mod.getSessionToken());
   } catch {
