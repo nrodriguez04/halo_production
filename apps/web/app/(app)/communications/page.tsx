@@ -5,7 +5,12 @@ import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/page-header';
+import { LoadingState, EmptyState, SkeletonTable } from '@/components/states';
+import { useReducedMotion, staggerDelay } from '@/lib/motion';
+import { MessageSquare, Check, X } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -20,16 +25,104 @@ interface Message {
 
 const statusVariant = (status: string) => {
   switch (status) {
-    case 'pending_approval': return 'warning' as const;
-    case 'approved': return 'info' as const;
-    case 'sent': return 'success' as const;
-    case 'rejected': return 'destructive' as const;
-    default: return 'secondary' as const;
+    case 'pending_approval':
+      return 'warning' as const;
+    case 'approved':
+      return 'info' as const;
+    case 'sent':
+      return 'success' as const;
+    case 'rejected':
+      return 'destructive' as const;
+    default:
+      return 'secondary' as const;
   }
 };
 
+function MessageList({
+  messages,
+  pendingId,
+  onApprove,
+  onReject,
+}: {
+  messages: Message[];
+  pendingId: string | null;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const reduced = useReducedMotion();
+
+  if (messages.length === 0) {
+    return (
+      <EmptyState
+        icon={MessageSquare}
+        title="No messages here"
+        description="Outbound and inbound messages will appear in this list."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {messages.map((message, i) => (
+        <Card
+          key={message.id}
+          variant="interactive"
+          className="animate-fade-up"
+          style={{ animationDelay: staggerDelay(i, reduced, 30) }}
+        >
+          <CardContent className="p-5">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={message.channel === 'sms' ? 'info' : 'success'}>
+                  {message.channel.toUpperCase()}
+                </Badge>
+                <Badge variant="outline">{message.direction}</Badge>
+                <Badge variant={statusVariant(message.status)}>
+                  {message.status.replace('_', ' ')}
+                </Badge>
+              </div>
+              <span className="text-caption text-muted-foreground">
+                {new Date(message.createdAt).toLocaleString()}
+              </span>
+            </div>
+
+            <p className="mb-3 whitespace-pre-wrap text-body text-foreground">{message.content}</p>
+
+            {message.status === 'pending_approval' && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  loading={pendingId === message.id}
+                  onClick={() => onApprove(message.id)}
+                >
+                  <Check size={14} className="mr-2" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  loading={pendingId === message.id}
+                  onClick={() => onReject(message.id)}
+                >
+                  <X size={14} className="mr-2" />
+                  Reject
+                </Button>
+              </div>
+            )}
+
+            {message.sentAt && (
+              <p className="mt-2 text-caption text-muted-foreground">
+                Sent: {new Date(message.sentAt).toLocaleString()}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function CommunicationsPage() {
-  const [activeTab, setActiveTab] = useState<'all' | 'approval'>('all');
   const queryClient = useQueryClient();
 
   const { data: messages = [], isPending: messagesPending } = useApiQuery<Message[]>(
@@ -45,9 +138,14 @@ export default function CommunicationsPage() {
   };
 
   const approveMutation = useApiMutation<string, void>(
-    (id) =>
-      apiJson<void>(`/communications/messages/${id}/approve`, { method: 'PUT' }),
-    { onSuccess: invalidate },
+    (id) => apiJson<void>(`/communications/messages/${id}/approve`, { method: 'PUT' }),
+    {
+      onSuccess: () => {
+        toast.success('Message approved');
+        invalidate();
+      },
+      onError: (err: any) => toast.error('Approval failed', { description: err?.message }),
+    },
   );
 
   const rejectMutation = useApiMutation<string, void>(
@@ -56,15 +154,16 @@ export default function CommunicationsPage() {
         method: 'PUT',
         body: JSON.stringify({ reason: 'Rejected by user' }),
       }),
-    { onSuccess: invalidate },
+    {
+      onSuccess: () => {
+        toast.success('Message rejected');
+        invalidate();
+      },
+      onError: (err: any) => toast.error('Reject failed', { description: err?.message }),
+    },
   );
 
   const isPending = messagesPending || queuePending;
-  if (isPending) {
-    return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading communications...</div>;
-  }
-
-  const displayMessages = activeTab === 'approval' ? approvalQueue : messages;
   const pendingId = approveMutation.isPending
     ? approveMutation.variables
     : rejectMutation.isPending
@@ -72,91 +171,47 @@ export default function CommunicationsPage() {
       : null;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Communications</h1>
-        <div className="flex gap-2">
-          <Button
-            variant={activeTab === 'all' ? 'default' : 'secondary'}
-            size="sm"
-            onClick={() => setActiveTab('all')}
-          >
-            All Messages
-          </Button>
-          <Button
-            variant={activeTab === 'approval' ? 'default' : 'secondary'}
-            size="sm"
-            onClick={() => setActiveTab('approval')}
-          >
-            Approval Queue
-            {approvalQueue.length > 0 && (
-              <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-destructive text-destructive-foreground rounded-full">
-                {approvalQueue.length}
-              </span>
-            )}
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Communications"
+        description="Inbound and outbound conversations with leads, plus the human approval queue."
+      />
 
-      {displayMessages.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">No messages found</CardContent>
-        </Card>
+      {isPending ? (
+        <LoadingState skeleton>
+          <SkeletonTable rows={4} cols={3} />
+        </LoadingState>
       ) : (
-        <div className="space-y-3">
-          {displayMessages.map((message) => (
-            <Card key={message.id}>
-              <CardContent className="p-5">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={message.channel === 'sms' ? 'info' : 'success'}>
-                      {message.channel.toUpperCase()}
-                    </Badge>
-                    <Badge variant="secondary">{message.direction}</Badge>
-                    <Badge variant={statusVariant(message.status)}>{message.status}</Badge>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(message.createdAt).toLocaleString()}
-                  </span>
-                </div>
+        <Tabs defaultValue="all">
+          <TabsList>
+            <TabsTrigger value="all">All Messages</TabsTrigger>
+            <TabsTrigger value="approval" className="flex items-center gap-2">
+              Approval Queue
+              {approvalQueue.length > 0 && (
+                <Badge variant="destructive" className="px-2 py-0 text-[10px]">
+                  {approvalQueue.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-                <p className="text-sm text-foreground mb-3">{message.content}</p>
-
-                {message.status === 'pending_approval' && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => approveMutation.mutate(message.id)}
-                      disabled={pendingId === message.id}
-                    >
-                      {pendingId === message.id && approveMutation.isPending && (
-                        <Loader2 size={14} className="mr-2 animate-spin" />
-                      )}
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => rejectMutation.mutate(message.id)}
-                      disabled={pendingId === message.id}
-                    >
-                      {pendingId === message.id && rejectMutation.isPending && (
-                        <Loader2 size={14} className="mr-2 animate-spin" />
-                      )}
-                      Reject
-                    </Button>
-                  </div>
-                )}
-
-                {message.sentAt && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Sent: {new Date(message.sentAt).toLocaleString()}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+          <TabsContent value="all">
+            <MessageList
+              messages={messages}
+              pendingId={pendingId ?? null}
+              onApprove={(id) => approveMutation.mutate(id)}
+              onReject={(id) => rejectMutation.mutate(id)}
+            />
+          </TabsContent>
+          <TabsContent value="approval">
+            <MessageList
+              messages={approvalQueue}
+              pendingId={pendingId ?? null}
+              onApprove={(id) => approveMutation.mutate(id)}
+              onReject={(id) => rejectMutation.mutate(id)}
+            />
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );

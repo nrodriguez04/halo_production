@@ -22,13 +22,8 @@ export type MessageStatus =
   | 'delivered'
   | 'failed';
 
-export type LeadStatus =
-  | 'new'
-  | 'enriched'
-  | 'underwriting'
-  | 'contacted'
-  | 'qualified'
-  | 'rejected';
+// LeadStatus is now declared in `state-machine/lead-status.ts` so the
+// state-machine validator and the type stay in sync.
 
 export type ContractStatus = 'draft' | 'sent' | 'signed' | 'completed' | 'declined';
 

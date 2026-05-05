@@ -5,7 +5,19 @@ import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/page-header';
+import { LoadingState, EmptyState, SkeletonTable } from '@/components/states';
+import { useReducedMotion, staggerDelay } from '@/lib/motion';
+import { RefreshCw, GitMerge, GitBranch, GitCompare } from 'lucide-react';
 
 interface DuplicateLead {
   id: string;
@@ -26,37 +38,35 @@ interface DuplicatePair {
   reasons: string[];
 }
 
-function LeadColumn({ lead, label }: { lead: DuplicateLead; label: string }) {
+function FieldRow({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-muted-foreground mb-3">{label}</h3>
-      <div className="space-y-2 text-sm">
-        <div>
-          <span className="text-muted-foreground">Address: </span>
-          <span className="text-foreground font-medium">{lead.canonicalAddress || 'N/A'}</span>
-          {lead.canonicalCity && (
-            <span className="text-muted-foreground">, {lead.canonicalCity}, {lead.canonicalState}</span>
-          )}
-        </div>
-        <div>
-          <span className="text-muted-foreground">Owner: </span>
-          <span className="text-foreground font-medium">{lead.canonicalOwner || 'N/A'}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Phone: </span>
-          <span className="text-foreground font-medium">{lead.canonicalPhone || 'N/A'}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Email: </span>
-          <span className="text-foreground font-medium">{lead.canonicalEmail || 'N/A'}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Status: </span>
-          <Badge variant="info">{lead.status}</Badge>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Created: {new Date(lead.createdAt).toLocaleDateString()}
-        </div>
+    <div className="flex items-baseline justify-between gap-3 border-b border-border/50 py-1.5 last:border-0">
+      <span className="text-caption text-muted-foreground">{label}</span>
+      <span className="truncate text-right text-body font-medium text-foreground">
+        {value || '—'}
+      </span>
+    </div>
+  );
+}
+
+function LeadColumn({ lead, label }: { lead: DuplicateLead; label: string }) {
+  const place = [lead.canonicalCity, lead.canonicalState].filter(Boolean).join(', ');
+  return (
+    <div className="rounded-md border border-border bg-card/60 p-4">
+      <h3 className="mb-3 text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </h3>
+      <FieldRow label="Address" value={lead.canonicalAddress} />
+      <FieldRow label="Place" value={place} />
+      <FieldRow label="Owner" value={lead.canonicalOwner} />
+      <FieldRow label="Phone" value={lead.canonicalPhone} />
+      <FieldRow label="Email" value={lead.canonicalEmail} />
+      <div className="flex items-baseline justify-between gap-3 pt-2">
+        <span className="text-caption text-muted-foreground">Status</span>
+        <Badge variant="info">{lead.status}</Badge>
+      </div>
+      <div className="mt-2 text-caption text-muted-foreground">
+        Created {new Date(lead.createdAt).toLocaleDateString()}
       </div>
     </div>
   );
@@ -64,6 +74,7 @@ function LeadColumn({ lead, label }: { lead: DuplicateLead; label: string }) {
 
 export default function DataTriagePage() {
   const queryClient = useQueryClient();
+  const reduced = useReducedMotion();
   const [selectedPair, setSelectedPair] = useState<DuplicatePair | null>(null);
   const [action, setAction] = useState<'merge' | 'distinct' | null>(null);
 
@@ -90,65 +101,105 @@ export default function DataTriagePage() {
   const mergeMutation = useApiMutation<{ sourceId: string; targetId: string }, unknown>(
     ({ sourceId, targetId }) =>
       apiJson('/leads/merge', { method: 'POST', body: JSON.stringify({ sourceId, targetId }) }),
-    { onSuccess: invalidate },
+    {
+      onSuccess: () => {
+        toast.success('Leads merged');
+        invalidate();
+      },
+      onError: (err: any) => toast.error('Merge failed', { description: err?.message }),
+    },
   );
 
   const markDistinctMutation = useApiMutation<{ lead1Id: string; lead2Id: string }, unknown>(
     ({ lead1Id, lead2Id }) =>
-      apiJson('/leads/mark-distinct', { method: 'POST', body: JSON.stringify({ lead1Id, lead2Id }) }),
-    { onSuccess: invalidate },
+      apiJson('/leads/mark-distinct', {
+        method: 'POST',
+        body: JSON.stringify({ lead1Id, lead2Id }),
+      }),
+    {
+      onSuccess: () => {
+        toast.success('Marked as distinct');
+        invalidate();
+      },
+      onError: (err: any) => toast.error('Could not mark distinct', { description: err?.message }),
+    },
   );
 
   const isConfirming = mergeMutation.isPending || markDistinctMutation.isPending;
 
-  if (isPending) {
-    return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading duplicate detection...</div>;
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Data Triage</h1>
-          <p className="text-sm text-muted-foreground mt-1">Review and resolve potential duplicate leads</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          {isFetching ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RefreshCw size={16} className="mr-2" />}
-          Refresh
-        </Button>
-      </div>
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Data Triage"
+        description="Review and resolve potential duplicate leads detected by similarity scoring."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            loading={isFetching}
+          >
+            <RefreshCw size={16} className="mr-2" />
+            Refresh
+          </Button>
+        }
+      />
 
-      {duplicates.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No potential duplicates found
-          </CardContent>
-        </Card>
+      {isPending ? (
+        <LoadingState skeleton>
+          <SkeletonTable rows={3} cols={2} />
+        </LoadingState>
+      ) : duplicates.length === 0 ? (
+        <EmptyState
+          icon={GitCompare}
+          title="No potential duplicates"
+          description="The duplicate detector found no pairs above the similarity threshold."
+        />
       ) : (
         <div className="space-y-4">
-          {duplicates.map((pair) => (
-            <Card key={`${pair.lead1.id}-${pair.lead2.id}`}>
+          {duplicates.map((pair, i) => (
+            <Card
+              key={`${pair.lead1.id}-${pair.lead2.id}`}
+              className="animate-fade-up"
+              style={{ animationDelay: staggerDelay(i, reduced, 30) }}
+            >
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="warning">{(pair.similarity * 100).toFixed(0)}% Similar</Badge>
-                    <span className="text-sm text-muted-foreground">{pair.reasons.join(', ')}</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge variant="warning">{(pair.similarity * 100).toFixed(0)}% similar</Badge>
+                    <span className="text-caption text-muted-foreground">
+                      {pair.reasons.join(' · ')}
+                    </span>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => { setSelectedPair(pair); setAction('merge'); }}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedPair(pair);
+                        setAction('merge');
+                      }}
+                    >
+                      <GitMerge size={14} className="mr-2" />
                       Merge
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => { setSelectedPair(pair); setAction('distinct'); }}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedPair(pair);
+                        setAction('distinct');
+                      }}
+                    >
+                      <GitBranch size={14} className="mr-2" />
                       Mark Distinct
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="border-r border-border pr-6">
-                    <LeadColumn lead={pair.lead1} label="Lead 1" />
-                  </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <LeadColumn lead={pair.lead1} label="Lead 1" />
                   <LeadColumn lead={pair.lead2} label="Lead 2" />
                 </div>
               </CardContent>
@@ -157,42 +208,41 @@ export default function DataTriagePage() {
         </div>
       )}
 
-      {selectedPair && action && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <Card className="max-w-md w-full mx-4">
-            <CardHeader>
-              <CardTitle className="text-lg text-foreground">
-                {action === 'merge' ? 'Confirm Merge' : 'Mark as Distinct'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                {action === 'merge'
-                  ? 'Merge Lead 1 into Lead 2? This will combine all data and delete Lead 1.'
-                  : 'Mark these leads as distinct? They will no longer appear in duplicate detection.'}
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  className="flex-1"
-                  variant={action === 'merge' ? 'default' : 'secondary'}
-                  disabled={isConfirming}
-                  onClick={() =>
-                    action === 'merge'
-                      ? mergeMutation.mutate({ sourceId: selectedPair.lead1.id, targetId: selectedPair.lead2.id })
-                      : markDistinctMutation.mutate({ lead1Id: selectedPair.lead1.id, lead2Id: selectedPair.lead2.id })
-                  }
-                >
-                  {isConfirming && <Loader2 size={14} className="mr-2 animate-spin" />}
-                  Confirm
-                </Button>
-                <Button className="flex-1" variant="outline" onClick={closeModal} disabled={isConfirming}>
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <Dialog open={!!selectedPair && !!action} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{action === 'merge' ? 'Confirm Merge' : 'Mark as Distinct'}</DialogTitle>
+            <DialogDescription>
+              {action === 'merge'
+                ? 'Merge Lead 1 into Lead 2? This combines all data and deletes Lead 1.'
+                : 'Mark these leads as distinct? They will no longer appear in duplicate detection.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeModal} disabled={isConfirming}>
+              Cancel
+            </Button>
+            <Button
+              variant={action === 'merge' ? 'default' : 'secondary'}
+              loading={isConfirming}
+              onClick={() => {
+                if (!selectedPair) return;
+                action === 'merge'
+                  ? mergeMutation.mutate({
+                      sourceId: selectedPair.lead1.id,
+                      targetId: selectedPair.lead2.id,
+                    })
+                  : markDistinctMutation.mutate({
+                      lead1Id: selectedPair.lead1.id,
+                      lead2Id: selectedPair.lead2.id,
+                    });
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -27,6 +27,16 @@ const envSchema = z.object({
   OPENCLAW_AUTH_TOKEN: z.string().optional(),
   FEATURE_OPENCLAW: z.string().optional(),
 
+  // Health probe HTTP server port (used by docker-compose / k8s
+  // liveness/readiness checks). Default matches apps/worker/src/main.ts.
+  WORKER_HEALTH_PORT: z.coerce.number().default(3003),
+
+  // The worker calls /skip-trace on the api over HTTP. Both vars are
+  // required for skip-trace to be enabled in the worker; missing values
+  // cause the lead-enrichment processor to skip skip-trace gracefully.
+  INTERNAL_API_BASE_URL: z.string().optional(),
+  INTERNAL_API_TOKEN: z.string().optional(),
+
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 

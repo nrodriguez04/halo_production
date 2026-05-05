@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { assertPolicy, buildPolicyContext } from '@halo/shared';
 import type { SkillDefinition } from './skill.interface';
+import { loadSpendContext } from './spend-context';
 
 @Injectable()
 export class SendSmsSkill {
@@ -16,6 +17,7 @@ export class SendSmsSkill {
         const cp = await this.prisma.controlPlane.findFirst();
         const sideEffects = cp?.enabled ?? false;
         const messaging = sideEffects && (cp?.smsEnabled ?? false);
+        const spend = await loadSpendContext(input.tenantId);
 
         const ctx = buildPolicyContext({
           tenantId: input.tenantId,
@@ -26,6 +28,7 @@ export class SendSmsSkill {
           sideEffectsEnabled: sideEffects,
           messagingEnabled: messaging,
           aiEnabled: false,
+          ...spend,
         });
         assertPolicy(ctx);
 

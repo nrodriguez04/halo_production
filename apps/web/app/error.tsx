@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/states';
 
 export default function GlobalError({
   error,
@@ -14,18 +16,15 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="mx-auto max-w-md space-y-4 text-center p-8">
-        <h2 className="text-2xl font-bold text-foreground">Something went wrong</h2>
-        <p className="text-muted-foreground">
-          An unexpected error occurred. Please try again.
-        </p>
-        <button
-          onClick={() => reset()}
-          className="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          Try again
-        </button>
+    <div className="grid min-h-screen place-items-center bg-background p-8">
+      <div className="w-full max-w-md animate-fade-up">
+        <ErrorState
+          title="Something went wrong"
+          description={error.message || 'An unexpected error occurred. Please try again.'}
+        />
+        <div className="mt-4 flex justify-center">
+          <Button onClick={() => reset()}>Try again</Button>
+        </div>
       </div>
     </div>
   );

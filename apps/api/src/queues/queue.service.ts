@@ -9,6 +9,7 @@ export class QueueService {
   private communicationsQueue: Queue;
   private underwritingQueue: Queue;
   private marketingQueue: Queue;
+  private marketingVideoQueue: Queue;
 
   constructor(@Inject(REDIS) private redis: Redis) {
     this.leadEnrichmentQueue = new Queue('lead-enrichment', {
@@ -24,6 +25,13 @@ export class QueueService {
     });
 
     this.marketingQueue = new Queue('marketing', {
+      connection: this.redis,
+    });
+
+    // Video gets its own queue so long-running script generation doesn't
+    // starve flyer / buyer-blast jobs sharing the marketing concurrency
+    // budget. The worker has a dedicated VideoProcessor on this queue.
+    this.marketingVideoQueue = new Queue('marketing-video', {
       connection: this.redis,
     });
   }
@@ -53,6 +61,11 @@ export class QueueService {
     buyerIds?: string[];
     actorId?: string | null;
   }) {
-    return this.marketingQueue.add(payload.type, payload);
+    // Route GENERATE_VIDEO_SCRIPT to its dedicated queue so it doesn't
+    // share concurrency with the rest of the marketing pipeline.
+    const queue = payload.type === 'GENERATE_VIDEO_SCRIPT'
+      ? this.marketingVideoQueue
+      : this.marketingQueue;
+    return queue.add(payload.type, payload);
   }
 }

@@ -25,6 +25,11 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
       {
         name: 'marketing',
       },
+      {
+        // Video scripts run on their own queue so heavy generation jobs
+        // don't block flyer / buyer-blast workflows.
+        name: 'marketing-video',
+      },
     ),
   ],
   exports: [BullModule],

@@ -7,6 +7,9 @@ export type PolicyChannel =
   | 'buyer_blast'
   | 'ai_underwrite'
   | 'marketing_flyer'
+  | 'marketing_buyer_blast'
+  | 'marketing_video'
+  | 'agent_decision'
   | 'other';
 
 export interface PolicyContext {

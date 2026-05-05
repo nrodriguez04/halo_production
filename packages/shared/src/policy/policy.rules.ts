@@ -92,9 +92,20 @@ export const consentDncQuietHoursRule: PolicyCheck = (ctx) => {
   return pass('CONSENT_DNC_QUIET_HOURS_PASSED');
 };
 
+// Channels that consume AI spend. Extended to include every AI-driven
+// pipeline (buyer-blast generation, video scripts, agent decisions) so
+// they all enforce the same daily cap. Previously buyer_blast and
+// marketing_video bypassed the rule entirely.
+const AI_CHANNELS = new Set<PolicyContext['channel']>([
+  'ai_underwrite',
+  'marketing_flyer',
+  'marketing_buyer_blast',
+  'marketing_video',
+  'agent_decision',
+]);
+
 export const aiCostCapRule: PolicyCheck = (ctx) => {
-  const aiAction =
-    ctx.channel === 'ai_underwrite' || ctx.channel === 'marketing_flyer';
+  const aiAction = AI_CHANNELS.has(ctx.channel);
 
   if (!aiAction) {
     return pass('NOT_AI_ACTION');

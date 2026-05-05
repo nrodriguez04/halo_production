@@ -5,8 +5,14 @@ import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { RefreshCw, Eye, EyeOff, Check, X, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { toast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/page-header';
+import { LoadingState } from '@/components/states';
+import { useReducedMotion, staggerDelay } from '@/lib/motion';
+import { RefreshCw, Eye, EyeOff, Check, X, Loader2, ShieldCheck, Plug } from 'lucide-react';
 
 interface StoredSecret {
   id: string;
@@ -27,7 +33,11 @@ const INTEGRATIONS: IntegrationDef[] = [
     provider: 'twilio',
     name: 'Twilio',
     keys: [
-      { keyName: 'TWILIO_ACCOUNT_SID', label: 'Account SID', placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' },
+      {
+        keyName: 'TWILIO_ACCOUNT_SID',
+        label: 'Account SID',
+        placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      },
       { keyName: 'TWILIO_AUTH_TOKEN', label: 'Auth Token', placeholder: 'Your Twilio auth token' },
     ],
   },
@@ -35,23 +45,72 @@ const INTEGRATIONS: IntegrationDef[] = [
     provider: 'docusign',
     name: 'DocuSign',
     keys: [
-      { keyName: 'DOCUSIGN_CLIENT_ID', label: 'Integration Key', placeholder: 'Your DocuSign integration key' },
-      { keyName: 'DOCUSIGN_CONNECT_SECRET', label: 'Connect Secret', placeholder: 'HMAC secret for webhook verification' },
+      {
+        keyName: 'DOCUSIGN_CLIENT_ID',
+        label: 'Integration Key',
+        placeholder: 'Your DocuSign integration key',
+      },
+      {
+        keyName: 'DOCUSIGN_CONNECT_SECRET',
+        label: 'Connect Secret',
+        placeholder: 'HMAC secret for webhook verification',
+      },
     ],
   },
-  { provider: 'attom', name: 'ATTOM Property API', keys: [{ keyName: 'ATTOM_API_KEY', label: 'API Key', placeholder: 'Your ATTOM API key' }] },
-  { provider: 'google_geocoding', name: 'Google Geocoding', keys: [{ keyName: 'GOOGLE_GEOCODING_API_KEY', label: 'API Key', placeholder: 'AIzaSy...' }] },
-  { provider: 'openai', name: 'OpenAI', keys: [{ keyName: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-...' }] },
-  { provider: 'sendgrid', name: 'SendGrid', keys: [{ keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' }] },
-  { provider: 'rentcast', name: 'RentCast', keys: [{ keyName: 'RENTCAST_API_KEY', label: 'API Key', placeholder: 'Your RentCast API key' }] },
-  { provider: 'propertyradar', name: 'PropertyRadar', keys: [{ keyName: 'PROPERTYRADAR_API_KEY', label: 'API Key', placeholder: 'Your PropertyRadar API key' }] },
-  { provider: 'openclaw', name: 'OpenClaw', keys: [{ keyName: 'OPENCLAW_SECRET', label: 'Agent Secret', placeholder: 'Your OpenClaw agent secret' }] },
+  {
+    provider: 'attom',
+    name: 'ATTOM Property API',
+    keys: [{ keyName: 'ATTOM_API_KEY', label: 'API Key', placeholder: 'Your ATTOM API key' }],
+  },
+  {
+    provider: 'google_geocoding',
+    name: 'Google Geocoding',
+    keys: [{ keyName: 'GOOGLE_GEOCODING_API_KEY', label: 'API Key', placeholder: 'AIzaSy...' }],
+  },
+  {
+    provider: 'openai',
+    name: 'OpenAI',
+    keys: [{ keyName: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-...' }],
+  },
+  {
+    provider: 'sendgrid',
+    name: 'SendGrid',
+    keys: [{ keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' }],
+  },
+  {
+    provider: 'rentcast',
+    name: 'RentCast',
+    keys: [{ keyName: 'RENTCAST_API_KEY', label: 'API Key', placeholder: 'Your RentCast API key' }],
+  },
+  {
+    provider: 'propertyradar',
+    name: 'PropertyRadar',
+    keys: [
+      {
+        keyName: 'PROPERTYRADAR_API_KEY',
+        label: 'API Key',
+        placeholder: 'Your PropertyRadar API key',
+      },
+    ],
+  },
+  {
+    provider: 'openclaw',
+    name: 'OpenClaw',
+    keys: [
+      {
+        keyName: 'OPENCLAW_SECRET',
+        label: 'Agent Secret',
+        placeholder: 'Your OpenClaw agent secret',
+      },
+    ],
+  },
 ];
 
 type ConnStatus = 'idle' | 'testing' | 'connected' | 'error';
 
 export default function IntegrationsPage() {
   const queryClient = useQueryClient();
+  const reduced = useReducedMotion();
 
   const { data: secrets = [], isPending } = useApiQuery<StoredSecret[]>('/integration-secrets');
 
@@ -63,7 +122,10 @@ export default function IntegrationsPage() {
   const invalidateSecrets = () =>
     queryClient.invalidateQueries({ queryKey: ['/integration-secrets'] });
 
-  const saveMutation = useApiMutation<{ provider: string; keyName: string; value: string }, unknown>(
+  const saveMutation = useApiMutation<
+    { provider: string; keyName: string; value: string },
+    unknown
+  >(
     ({ provider, keyName, value }) =>
       apiJson(`/integration-secrets/${provider}/${keyName}`, {
         method: 'PUT',
@@ -71,37 +133,52 @@ export default function IntegrationsPage() {
       }),
     {
       onSuccess: (_data, variables) => {
+        toast.success(`${variables.keyName} saved`);
         const k = inputKey(variables.provider, variables.keyName);
         setInputValues((p) => ({ ...p, [k]: '' }));
         setShowValues((p) => ({ ...p, [k]: false }));
         invalidateSecrets();
       },
+      onError: (err: any) => toast.error('Save failed', { description: err?.message }),
     },
   );
 
   const deleteMutation = useApiMutation<{ provider: string; keyName: string }, unknown>(
     ({ provider, keyName }) =>
       apiJson(`/integration-secrets/${provider}/${keyName}`, { method: 'DELETE' }),
-    { onSuccess: invalidateSecrets },
+    {
+      onSuccess: (_d, vars) => {
+        toast.success(`${vars.keyName} removed`);
+        invalidateSecrets();
+      },
+      onError: (err: any) => toast.error('Delete failed', { description: err?.message }),
+    },
   );
 
   const testMutation = useApiMutation<string, { connected?: boolean; error?: string }>(
     (provider) =>
-      apiJson<{ connected?: boolean; error?: string }>(`/integration-secrets/${provider}/test`, { method: 'POST' }),
+      apiJson<{ connected?: boolean; error?: string }>(
+        `/integration-secrets/${provider}/test`,
+        { method: 'POST' },
+      ),
     {
       onMutate: (provider) => {
         setConnStatus((p) => ({ ...p, [provider]: 'testing' }));
         setConnError((p) => ({ ...p, [provider]: '' }));
       },
       onSuccess: (data, provider) => {
-        setConnStatus((p) => ({ ...p, [provider]: data.connected ? 'connected' : 'error' }));
-        if (!data.connected && data.error) {
+        const ok = !!data.connected;
+        setConnStatus((p) => ({ ...p, [provider]: ok ? 'connected' : 'error' }));
+        if (ok) toast.success(`${provider} connected`);
+        else if (data.error) {
           setConnError((p) => ({ ...p, [provider]: data.error! }));
+          toast.error(`${provider} connectivity failed`, { description: data.error });
         }
       },
       onError: (err, provider) => {
         setConnStatus((p) => ({ ...p, [provider]: 'error' }));
         setConnError((p) => ({ ...p, [provider]: err?.message || 'Request failed' }));
+        toast.error(`${provider} request failed`, { description: err?.message });
       },
     },
   );
@@ -120,8 +197,9 @@ export default function IntegrationsPage() {
 
   if (isPending) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Loading integrations...
+      <div className="space-y-6 p-6">
+        <PageHeader title="Integrations" />
+        <LoadingState />
       </div>
     );
   }
@@ -131,13 +209,12 @@ export default function IntegrationsPage() {
     if (s === 'connected') return <Badge variant="success">Connected</Badge>;
     if (s === 'testing')
       return (
-        <Badge variant="info">
-          <Loader2 size={12} className="mr-1 animate-spin" />
+        <Badge variant="info" className="gap-1">
+          <Loader2 size={12} className="animate-spin" />
           Testing
         </Badge>
       );
     if (s === 'error') return <Badge variant="destructive">Error</Badge>;
-
     const hasAny = INTEGRATIONS.find((i) => i.provider === provider)?.keys.some((k) =>
       getStoredSecret(provider, k.keyName),
     );
@@ -151,26 +228,37 @@ export default function IntegrationsPage() {
     saveMutation.variables?.keyName === keyName;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage API keys and test external service connections
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={invalidateSecrets}>
-          <RefreshCw size={16} className="mr-2" />
-          Refresh
-        </Button>
-      </div>
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Integrations"
+        description="Manage API keys and test external service connections."
+        actions={
+          <Button variant="outline" size="sm" onClick={invalidateSecrets}>
+            <RefreshCw size={16} className="mr-2" />
+            Refresh
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {INTEGRATIONS.map((integration) => (
-          <Card key={integration.provider}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {INTEGRATIONS.map((integration, i) => (
+          <Card
+            key={integration.provider}
+            variant="interactive"
+            className="animate-fade-up"
+            style={{ animationDelay: staggerDelay(i, reduced, 30) }}
+          >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base text-foreground">{integration.name}</CardTitle>
+                <div className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 text-primary"
+                  >
+                    <Plug size={14} />
+                  </span>
+                  <CardTitle className="text-body font-semibold">{integration.name}</CardTitle>
+                </div>
                 {statusBadge(integration.provider)}
               </div>
             </CardHeader>
@@ -183,40 +271,51 @@ export default function IntegrationsPage() {
 
                 return (
                   <div key={keyDef.keyName} className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">{keyDef.label}</label>
+                    <label className="text-caption font-medium text-muted-foreground">
+                      {keyDef.label}
+                    </label>
 
                     {stored && !isShowingInput ? (
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-9 flex items-center px-3 rounded-md bg-secondary text-sm font-mono text-muted-foreground">
+                        <div className="flex h-10 flex-1 items-center rounded-md border border-input bg-secondary/40 px-3 font-mono text-sm text-muted-foreground">
                           {stored.maskedHint}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 w-9 p-0"
-                          title="Update key"
-                          onClick={() => setShowValues((p) => ({ ...p, [k]: true }))}
-                        >
-                          <Eye size={14} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 w-9 p-0 text-destructive hover:text-destructive"
-                          title="Remove key"
-                          onClick={() =>
-                            deleteMutation.mutate({
-                              provider: integration.provider,
-                              keyName: keyDef.keyName,
-                            })
-                          }
-                        >
-                          <X size={14} />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setShowValues((p) => ({ ...p, [k]: true }))}
+                              aria-label={`Update ${keyDef.label}`}
+                            >
+                              <Eye size={14} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Update key</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() =>
+                                deleteMutation.mutate({
+                                  provider: integration.provider,
+                                  keyName: keyDef.keyName,
+                                })
+                              }
+                              aria-label={`Remove ${keyDef.label}`}
+                            >
+                              <X size={14} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Remove key</TooltipContent>
+                        </Tooltip>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <input
+                        <Input
                           type="password"
                           placeholder={keyDef.placeholder}
                           value={inputValues[k] || ''}
@@ -224,29 +323,26 @@ export default function IntegrationsPage() {
                             setInputValues((p) => ({ ...p, [k]: e.target.value }))
                           }
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSave(integration.provider, keyDef.keyName);
+                            if (e.key === 'Enter')
+                              handleSave(integration.provider, keyDef.keyName);
                           }}
-                          className={cn(
-                            'flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm font-mono',
-                            'text-foreground placeholder:text-muted-foreground',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                          )}
+                          className="font-mono"
                         />
                         <Button
-                          size="sm"
-                          className="h-9"
-                          disabled={!inputValues[k]?.trim() || isSaving}
+                          size="icon"
+                          loading={isSaving}
+                          disabled={!inputValues[k]?.trim()}
                           onClick={() => handleSave(integration.provider, keyDef.keyName)}
+                          aria-label="Save key"
                         >
-                          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                          <Check size={14} />
                         </Button>
                         {stored && (
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-9 w-9 p-0"
-                            title="Cancel"
+                            size="icon"
                             onClick={() => setShowValues((p) => ({ ...p, [k]: false }))}
+                            aria-label="Cancel"
                           >
                             <EyeOff size={14} />
                           </Button>
@@ -263,26 +359,26 @@ export default function IntegrationsPage() {
                 );
               })}
 
-              <div className="pt-2 border-t border-border flex items-center justify-between">
+              <div className="flex items-center justify-between border-t border-border pt-2">
                 <Button
                   variant="outline"
                   size="sm"
+                  loading={connStatus[integration.provider] === 'testing'}
                   onClick={() => testMutation.mutate(integration.provider)}
-                  disabled={connStatus[integration.provider] === 'testing'}
                 >
-                  {connStatus[integration.provider] === 'testing' ? (
-                    <>
-                      <Loader2 size={14} className="mr-1.5 animate-spin" />
-                      Testing...
-                    </>
-                  ) : (
-                    'Test Connection'
-                  )}
+                  Test Connection
                 </Button>
                 {connError[integration.provider] && (
-                  <span className="text-xs text-destructive max-w-[200px] truncate">
-                    {connError[integration.provider]}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="max-w-[200px] truncate text-caption text-destructive">
+                        {connError[integration.provider]}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm">
+                      {connError[integration.provider]}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             </CardContent>
@@ -300,12 +396,15 @@ export default function IntegrationsPage() {
             { label: 'Twilio Status', path: '/api/webhooks/twilio/status' },
             { label: 'DocuSign Connect', path: '/api/webhooks/docusign' },
           ].map((wh) => (
-            <div key={wh.path} className="flex items-center justify-between p-3 rounded-md bg-secondary">
+            <div
+              key={wh.path}
+              className="flex items-center justify-between rounded-md border border-border bg-secondary/40 p-3"
+            >
               <div>
-                <div className="text-sm font-medium text-foreground">{wh.label}</div>
-                <div className="text-xs text-muted-foreground">POST {wh.path}</div>
+                <p className="text-body font-medium text-foreground">{wh.label}</p>
+                <p className="text-caption text-muted-foreground">POST {wh.path}</p>
               </div>
-              <code className="text-xs bg-background px-2 py-1 rounded text-muted-foreground">
+              <code className="rounded bg-background px-2 py-1 text-caption text-muted-foreground">
                 http://localhost:3001{wh.path}
               </code>
             </div>
@@ -313,19 +412,15 @@ export default function IntegrationsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Security Note</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            All API keys are encrypted at rest using AES-256-GCM before being stored in
-            the database. Plaintext values are never persisted or returned by the API.
-            Only a masked hint (last 4 characters) is shown in the console for
-            identification.
-          </p>
-        </CardContent>
-      </Card>
+      <Alert variant="info">
+        <ShieldCheck className="h-4 w-4" />
+        <AlertTitle>Encrypted at rest</AlertTitle>
+        <AlertDescription>
+          All API keys are encrypted with AES-256-GCM before being stored. Plaintext values are
+          never persisted or returned by the API; only a 4-character masked hint is shown for
+          identification.
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

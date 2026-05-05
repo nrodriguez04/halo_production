@@ -46,6 +46,22 @@ enum TimelineActorType {
   webhook
 }
 
+// =============================================================================
+// LEGACY: pre-Descope multi-tenant + RBAC models
+// =============================================================================
+// These models predate the Descope-based auth flow that the runtime
+// services use today (see apps/api/src/auth/). They're retained for
+// historical / data-export purposes only - no controller, service, or
+// guard reads or writes them at runtime. Deletion is tracked as a
+// follow-up after a 60-day data retention window.
+//
+//   Account, User, Membership, Role, Permission, RolePermission,
+//   MembershipRole, Session, JobQueue
+//
+// New code MUST NOT add foreign keys or indexes against these tables.
+// The active tenant identifier is `accountId` (a string column on
+// Lead/Property/Deal/etc.) populated from the Descope session claims.
+
 // Multi-tenant support
 model Account {
   id        String   @id @default(cuid())
@@ -692,5 +708,208 @@ model AuditLog {
   @@index([accountId, createdAt])
   @@index([action, createdAt])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// Cost governance / IntegrationCostControlService
+// =============================================================================
+// Every paid external call funnels through `IntegrationCostControlService`.
+// The service writes one `IntegrationCostEvent` per intent (reserved at
+// preflight, finalized in `recordActual`), debits the relevant
+// `IntegrationBudgetBucket` rows, and rolls daily totals into
+// `IntegrationUsageAggregate` for fast dashboard reads.
+// `ai_cost_logs` and `api_cost_logs` remain readable for historical analytics
+// but receive no new writes after the cutover.
+
+model IntegrationProvider {
+  id                String   @id @default(cuid())
+  key               String   @unique // 'attom' | 'rentcast' | 'openai' | 'twilio' | ...
+  displayName       String
+  category          String   // 'property_data' | 'ai' | 'comms' | 'skip_trace' | 'geocoding' | 'esign'
+  enabled           Boolean  @default(true)
+  isFallbackFor     String?  // provider key this can substitute for
+  defaultCostUsd    Float    @default(0)
+  rateLimitPerMin   Int?
+  concurrencyLimit  Int?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  pricingRules ProviderPricingRule[]
+  costEvents   IntegrationCostEvent[]
+  rateLimits   ProviderRateLimit[]
+
+  @@map("integration_providers")
+}
+
+model ProviderPricingRule {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  action      String   // matches CostIntent.action
+  unitCostUsd Float
+  unit        String   // 'per_call' | 'per_1k_input_tokens' | 'per_1k_output_tokens' | 'per_record' | 'per_segment'
+  pricePer    Float    @default(1)
+  effectiveAt DateTime @default(now())
+  expiresAt   DateTime?
+  notes       String?
+
+  @@index([providerId, action, effectiveAt])
+  @@map("provider_pricing_rules")
+}
+
+model ProviderRateLimit {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  scope       String   // 'global' | 'per_account'
+  windowSec   Int      // 60 = per minute
+  maxRequests Int
+  enabled     Boolean  @default(true)
+
+  @@unique([providerId, scope, windowSec])
+  @@map("provider_rate_limits")
+}
+
+model IntegrationBudgetBucket {
+  id              String   @id @default(cuid())
+  accountId       String   // 'GLOBAL' for cross-tenant caps
+  scope           String   // 'global' | 'provider' | 'workflow' | 'campaign' | 'lead'
+  scopeRef        String   // provider key, workflow name, campaignId, leadId, or 'ALL'
+  period          String   // 'day' | 'week' | 'month'
+  hardCapUsd      Float
+  softCapUsd      Float?
+  currentSpendUsd Float    @default(0)
+  periodStartedAt DateTime
+  periodResetsAt  DateTime
+  enabled         Boolean  @default(true)
+  notes           String?
+  updatedAt       DateTime @updatedAt
+
+  @@unique([accountId, scope, scopeRef, period, periodStartedAt])
+  @@index([accountId, periodResetsAt])
+  @@index([accountId, scope, scopeRef, period])
+  @@map("integration_budget_buckets")
+}
+
+model IntegrationCostEvent {
+  id               String   @id @default(cuid())
+  accountId        String
+  providerId       String
+  provider         IntegrationProvider @relation(fields: [providerId], references: [id])
+  providerKey      String   // denormalized for fast group-by
+  action           String
+  reservationId    String   @unique
+  estimatedCostUsd Float
+  actualCostUsd    Float?
+  status           String   // 'reserved' | 'completed' | 'errored' | 'cancelled' | 'cache_hit'
+  decision         String   // CostDecision.kind
+  durationMs       Int?
+  responseCode     Int?
+  retryCount       Int      @default(0)
+  leadId           String?
+  propertyId       String?
+  dealId           String?
+  campaignId       String?
+  automationRunId  String?
+  actor            String   // 'user' | 'system' | 'worker'
+  userId           String?
+  metadata         Json?
+  bucketIds        String[] // budget buckets debited
+  idempotencyKey   String?
+  createdAt        DateTime @default(now())
+  completedAt      DateTime?
+
+  @@index([accountId, createdAt])
+  @@index([accountId, providerKey, createdAt])
+  @@index([accountId, leadId])
+  @@index([accountId, automationRunId])
+  @@index([idempotencyKey, createdAt])
+  @@map("integration_cost_events")
+}
+
+model IntegrationUsageAggregate {
+  id           String   @id @default(cuid())
+  accountId    String
+  providerKey  String
+  action       String
+  period       String   // 'day' | 'month'
+  periodKey    String   // '2026-05-02' | '2026-05'
+  callCount    Int      @default(0)
+  totalCostUsd Float    @default(0)
+  cacheHits    Int      @default(0)
+  errors       Int      @default(0)
+  rateLimited  Int      @default(0)
+  costSavedUsd Float    @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([accountId, providerKey, action, period, periodKey])
+  @@index([accountId, period, periodKey])
+  @@map("integration_usage_aggregates")
+}
+
+model IntegrationFeatureFlag {
+  id        String   @id @default(cuid())
+  accountId String   // 'GLOBAL' for org-wide defaults
+  flag      String   // e.g. 'provider.propertyradar', 'provider.openai'
+  enabled   Boolean  @default(false)
+  reason    String?
+  enabledAt DateTime?
+  expiresAt DateTime?
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, flag])
+  @@index([accountId, enabled])
+  @@map("integration_feature_flags")
+}
+
+model ManualBudgetOverride {
+  id             String   @id @default(cuid())
+  accountId      String
+  scope          String   // 'lead' | 'campaign' | 'workflow'
+  scopeRef       String
+  reason         String
+  approvedBy     String   // userId
+  extraBudgetUsd Float
+  expiresAt      DateTime
+  consumed       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([accountId, scope, scopeRef, expiresAt])
+  @@map("manual_budget_overrides")
+}
+
+model CachedProviderResponse {
+  id           String   @id @default(cuid())
+  accountId    String
+  providerKey  String
+  cacheKey     String   // sha256(provider + action + canonical(payload))
+  payload      Json
+  responseCode Int?
+  fetchedAt    DateTime @default(now())
+  expiresAt    DateTime
+  hitCount     Int      @default(0)
+  costSavedUsd Float    @default(0)
+
+  @@unique([accountId, providerKey, cacheKey])
+  @@index([accountId, providerKey, expiresAt])
+  @@map("cached_provider_responses")
+}
+
+model LeadEnrichmentJob {
+  id             String   @id @default(cuid())
+  accountId      String
+  leadId         String
+  stage          String   // 'queued' | 'normalizing' | 'cheap_filters' | 'attom' | 'rentcast' | 'scoring' | 'skip_trace' | 'completed' | 'rejected'
+  rejectedReason String?
+  totalCostUsd   Float    @default(0)
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  metadata       Json?
+
+  @@index([accountId, stage])
+  @@index([leadId])
+  @@map("lead_enrichment_jobs")
 }
 

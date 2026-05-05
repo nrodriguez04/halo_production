@@ -5,7 +5,12 @@ import { useApiQuery, useQueryClient, apiJson, apiFetch } from '@/lib/api-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FileImage, Film, Mail, RefreshCw, Loader2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/page-header';
+import { LoadingState, EmptyState, SkeletonTable } from '@/components/states';
+import { useReducedMotion, staggerDelay } from '@/lib/motion';
+import { FileImage, Film, Mail, RefreshCw, Megaphone } from 'lucide-react';
 
 interface JobRun {
   id: string;
@@ -24,19 +29,46 @@ interface Deal {
   property?: { address?: string };
 }
 
+type GeneratingKind = 'flyer' | 'video' | 'blast';
+
 export default function MarketingPage() {
   const queryClient = useQueryClient();
+  const reduced = useReducedMotion();
   const { data: deals = [], isPending, refetch } = useApiQuery<Deal[]>('/deals');
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [generating, setGenerating] = useState<{ dealId: string; kind: GeneratingKind } | null>(
+    null,
+  );
 
-  const startJob = async (path: string, dealId: string) => {
-    setGenerating(dealId);
+  const startJob = async (path: string, dealId: string, kind: GeneratingKind, label: string) => {
+    setGenerating({ dealId, kind });
     try {
       const res = await apiFetch(path, { method: 'POST' });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const txt = await res.text();
+        toast.error(`Could not start ${label}`, { description: txt || res.statusText });
+        return;
+      }
       const { jobId } = (await res.json()) as { jobId: string };
+      toast.success(`${label} queued`);
       await pollJob(jobId);
       queryClient.invalidateQueries({ queryKey: ['/deals'] });
+    } catch (err: any) {
+      toast.error(`Could not start ${label}`, { description: err?.message });
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const sendBuyerBlast = async (dealId: string) => {
+    setGenerating({ dealId, kind: 'blast' });
+    try {
+      await apiJson(`/marketing/buyer-blast/${dealId}`, {
+        method: 'POST',
+        body: JSON.stringify({ buyerIds: [] }),
+      });
+      toast.success('Buyer blast queued');
+    } catch (err: any) {
+      toast.error('Buyer blast failed', { description: err?.message });
     } finally {
       setGenerating(null);
     }
@@ -52,70 +84,111 @@ export default function MarketingPage() {
     }
   };
 
-  if (isPending) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading marketing...</div>;
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Marketing</h1>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RefreshCw size={16} className="mr-2" /> Refresh
-        </Button>
-      </div>
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Marketing"
+        description="Generate flyers, video scripts, and blast offers to your buyer list."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw size={16} className="mr-2" />
+            Refresh
+          </Button>
+        }
+      />
 
-      {deals.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No deals to generate marketing for. Create deals first.
-          </CardContent>
-        </Card>
+      {isPending ? (
+        <LoadingState skeleton>
+          <SkeletonTable rows={4} cols={3} />
+        </LoadingState>
+      ) : deals.length === 0 ? (
+        <EmptyState
+          icon={Megaphone}
+          title="No deals to market yet"
+          description="Convert qualified leads into deals to generate marketing assets."
+        />
       ) : (
         <div className="space-y-4">
-          {deals.map((deal) => (
-            <Card key={deal.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-foreground">
-                    {deal.property?.address || `Deal ${deal.id.slice(0, 8)}`}
-                  </CardTitle>
-                  <Badge variant="secondary">{deal.stage}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => startJob(`/marketing/flyer/${deal.id}`, deal.id)}
-                    disabled={generating === deal.id}
-                  >
-                    {generating === deal.id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <FileImage size={14} className="mr-2" />}
-                    Generate Flyer
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => startJob(`/marketing/video-script/${deal.id}`, deal.id)}
-                    disabled={generating === deal.id}
-                  >
-                    <Film size={14} className="mr-2" /> Video Script
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      await apiJson(`/marketing/buyer-blast/${deal.id}`, {
-                        method: 'POST',
-                        body: JSON.stringify({ buyerIds: [] }),
-                      }).catch(() => undefined);
-                    }}
-                  >
-                    <Mail size={14} className="mr-2" /> Buyer Blast
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {deals.map((deal, i) => {
+            const busy = generating?.dealId === deal.id;
+            return (
+              <Card
+                key={deal.id}
+                variant="interactive"
+                className="animate-fade-up"
+                style={{ animationDelay: staggerDelay(i, reduced, 30) }}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <CardTitle className="text-body font-semibold text-foreground">
+                      {deal.property?.address || `Deal ${deal.id.slice(0, 8)}`}
+                    </CardTitle>
+                    <Badge variant="outline">{deal.stage.replace('_', ' ')}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={busy && generating?.kind === 'flyer'}
+                          disabled={busy && generating?.kind !== 'flyer'}
+                          onClick={() =>
+                            startJob(`/marketing/flyer/${deal.id}`, deal.id, 'flyer', 'Flyer')
+                          }
+                        >
+                          <FileImage size={14} className="mr-2" />
+                          Generate Flyer
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Render a printable property flyer</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={busy && generating?.kind === 'video'}
+                          disabled={busy && generating?.kind !== 'video'}
+                          onClick={() =>
+                            startJob(
+                              `/marketing/video-script/${deal.id}`,
+                              deal.id,
+                              'video',
+                              'Video script',
+                            )
+                          }
+                        >
+                          <Film size={14} className="mr-2" />
+                          Video Script
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Generate a 30s walk-through script</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={busy && generating?.kind === 'blast'}
+                          disabled={busy && generating?.kind !== 'blast'}
+                          onClick={() => sendBuyerBlast(deal.id)}
+                        >
+                          <Mail size={14} className="mr-2" />
+                          Buyer Blast
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Email all matching buyers</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

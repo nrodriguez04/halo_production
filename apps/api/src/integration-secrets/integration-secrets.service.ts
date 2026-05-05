@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as crypto from 'crypto';
+import { randomUUID } from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
@@ -130,35 +131,97 @@ export class IntegrationSecretsService {
 
   /**
    * Check connectivity for a given provider using its stored/env keys.
+   * Logs a `connectivity_test` row in `integration_cost_events` with
+   * cost 0 so the audit trail captures every admin connectivity probe.
    */
   async testConnectivity(
     provider: string,
+    accountId?: string,
+    userId?: string,
   ): Promise<{ connected: boolean; error?: string }> {
+    const startedAt = Date.now();
+    let result: { connected: boolean; error?: string };
     try {
       switch (provider) {
         case 'twilio':
-          return this.testTwilio();
+          result = await this.testTwilio();
+          break;
         case 'attom':
-          return this.testAttom();
+          result = await this.testAttom();
+          break;
         case 'openai':
-          return this.testOpenAI();
+          result = await this.testOpenAI();
+          break;
         case 'google_geocoding':
-          return this.testGoogleGeocoding();
+          result = await this.testGoogleGeocoding();
+          break;
         case 'sendgrid':
-          return this.testSendGrid();
+          result = await this.testSendGrid();
+          break;
         case 'rentcast':
-          return this.testRentCast();
+          result = await this.testRentCast();
+          break;
         case 'propertyradar':
-          return this.testPropertyRadar();
+          result = await this.testPropertyRadar();
+          break;
         case 'docusign':
-          return { connected: false, error: 'DocuSign connectivity test requires OAuth flow' };
+          result = { connected: false, error: 'DocuSign connectivity test requires OAuth flow' };
+          break;
         case 'openclaw':
-          return this.testOpenClaw();
+          result = await this.testOpenClaw();
+          break;
         default:
-          return { connected: false, error: `Unknown provider: ${provider}` };
+          result = { connected: false, error: `Unknown provider: ${provider}` };
       }
     } catch (err: any) {
-      return { connected: false, error: err.message };
+      result = { connected: false, error: err.message };
+    }
+
+    if (accountId) {
+      await this.logConnectivityTest(provider, accountId, userId, result, Date.now() - startedAt);
+    }
+    return result;
+  }
+
+  /**
+   * Best-effort cost ledger entry for a connectivity probe. Probes are
+   * free (e.g. OpenAI's /v1/models is no-charge), but the audit trail
+   * still benefits from a row in `integration_cost_events` so admins can
+   * see who ran what test and when.
+   */
+  private async logConnectivityTest(
+    providerKey: string,
+    accountId: string,
+    userId: string | undefined,
+    result: { connected: boolean; error?: string },
+    durationMs: number,
+  ): Promise<void> {
+    try {
+      const provider = await this.prisma.integrationProvider.findUnique({
+        where: { key: providerKey },
+      });
+      if (!provider) return;
+      await this.prisma.integrationCostEvent.create({
+        data: {
+          accountId,
+          providerId: provider.id,
+          providerKey,
+          action: 'connectivity_test',
+          reservationId: randomUUID(),
+          estimatedCostUsd: 0,
+          actualCostUsd: 0,
+          status: result.connected ? 'completed' : 'errored',
+          decision: 'CONNECTIVITY_TEST',
+          durationMs,
+          actor: 'user',
+          userId,
+          bucketIds: [],
+          completedAt: new Date(),
+          metadata: result.error ? { error: result.error } : undefined,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to log connectivity test for ${providerKey}: ${err}`);
     }
   }
 

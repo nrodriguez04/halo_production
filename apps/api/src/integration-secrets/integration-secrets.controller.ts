@@ -83,7 +83,11 @@ export class IntegrationSecretsController {
 
   @Post(':provider/test')
   @Permissions('control_plane:read')
-  async testConnectivity(@Param('provider') provider: string) {
-    return this.service.testConnectivity(provider);
+  async testConnectivity(
+    @CurrentAccountId() accountId: string,
+    @CurrentUserId() userId: string,
+    @Param('provider') provider: string,
+  ) {
+    return this.service.testConnectivity(provider, accountId, userId);
   }
 }

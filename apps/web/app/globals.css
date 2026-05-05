@@ -4,6 +4,11 @@
 
 @layer base {
   :root {
+    /* -------------------------------------------------------------------
+     * Brand colors -- DO NOT TOUCH. The emerald primary and zinc dark
+     * theme are part of the Halo identity. New tokens get added below
+     * but `--primary`, `--background`, etc. are byte-frozen.
+     * ----------------------------------------------------------------- */
     --background: 240 10% 4%;
     --foreground: 240 5% 90%;
     --card: 240 6% 10%;
@@ -22,8 +27,72 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 4% 20%;
     --input: 240 4% 20%;
-    --ring: 142 71% 45%;
+    --ring: 142 71% 60%; /* lighter than --primary so focus is visible
+                           on the green primary surface */
     --radius: 0.5rem;
+
+    /* -------------------------------------------------------------------
+     * Type scale (font-size / line-height pairs).
+     * Used by `text-display`, `text-h1`, ... utilities defined in
+     * `tailwind.config.js`.
+     * ----------------------------------------------------------------- */
+    --text-display: 2.75rem;        /* 44px */
+    --text-display-lh: 1.15;
+    --text-h1: 2rem;                /* 32px */
+    --text-h1-lh: 1.25;
+    --text-h2: 1.5rem;              /* 24px */
+    --text-h2-lh: 1.33;
+    --text-h3: 1.125rem;            /* 18px */
+    --text-h3-lh: 1.55;
+    --text-body: 0.875rem;          /* 14px */
+    --text-body-lh: 1.55;
+    --text-caption: 0.75rem;        /* 12px */
+    --text-caption-lh: 1.4;
+
+    /* -------------------------------------------------------------------
+     * Elevation steps. Tuned for a dark surface so they read as soft
+     * lifts rather than the heavy halos shadows produce on light UIs.
+     * ----------------------------------------------------------------- */
+    --shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --shadow-2: 0 4px 12px -2px rgb(0 0 0 / 0.45),
+                0 2px 4px -2px rgb(0 0 0 / 0.30);
+    --shadow-3: 0 10px 24px -8px rgb(0 0 0 / 0.55),
+                0 4px 8px -4px rgb(0 0 0 / 0.35);
+    --shadow-overlay: 0 24px 48px -12px rgb(0 0 0 / 0.65),
+                      0 8px 16px -8px rgb(0 0 0 / 0.40);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.20),
+                   0 8px 24px -8px hsl(var(--primary) / 0.25);
+
+    /* -------------------------------------------------------------------
+     * Motion. Durations + easings; the prefers-reduced-motion block
+     * below zeroes them so reduced-motion users never see lifts or
+     * shimmers.
+     * ----------------------------------------------------------------- */
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slow: 300ms;
+    --duration-shimmer: 1.6s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Honor system reduced-motion preference globally. */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --duration-fast: 0ms;
+      --duration-base: 0ms;
+      --duration-slow: 0ms;
+      --duration-shimmer: 0ms;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -32,6 +101,87 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+
+  /* Skip link target lives at the top of the layout so keyboard users
+   * can jump past the sidebar. */
+  .skip-link {
+    @apply sr-only;
+  }
+  .skip-link:focus {
+    @apply not-sr-only fixed left-4 top-4 z-50 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-3;
+  }
+
+  /* Tighten Recharts legend / axis colors to match the muted palette
+   * without the per-chart overrides each page used to write. */
+  .recharts-cartesian-axis-tick text {
+    fill: hsl(var(--muted-foreground)) !important;
+  }
+}
+
+/* -------------------------------------------------------------------
+ * Keyframes used by Tailwind utilities + the upgraded Skeleton.
+ * ----------------------------------------------------------------- */
+@keyframes halo-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes halo-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes halo-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes halo-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes halo-slide-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes halo-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }

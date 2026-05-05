@@ -31,6 +31,12 @@ import { AutomationModule } from './automation/automation.module';
 import { DealEconomicsModule } from './deal-economics/deal-economics.module';
 import { IntegrationSecretsModule } from './integration-secrets/integration-secrets.module';
 import { ApiCostModule } from './api-cost/api-cost.module';
+import { CostControlModule } from './cost-control/cost-control.module';
+import { OpenAIModule } from './integrations/openai/openai.module';
+import { TwilioSendModule } from './integrations/twilio-send/twilio-send.module';
+import { EmailSendModule } from './integrations/email/email-send.module';
+import { SkipTraceModule } from './skip-trace/skip-trace.module';
+import { LeadLifecycleModule } from './lead-lifecycle/lead-lifecycle.module';
 import { PrismaService } from './prisma.service';
 import { AuditModule } from './audit/audit.module';
 
@@ -80,6 +86,12 @@ import { AuditModule } from './audit/audit.module';
     DealEconomicsModule,
     IntegrationSecretsModule,
     ApiCostModule,
+    CostControlModule,
+    OpenAIModule,
+    TwilioSendModule,
+    EmailSendModule,
+    SkipTraceModule,
+    LeadLifecycleModule,
   ],
   providers: [
     PrismaService,

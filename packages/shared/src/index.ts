@@ -12,6 +12,7 @@ export * from './utils/compliance';
 // Policy and state machine
 export * from './policy';
 export * from './state-machine/deal-stage';
+export * from './state-machine/lead-status';
 
 // Crypto
 export * from './crypto/pii-envelope';

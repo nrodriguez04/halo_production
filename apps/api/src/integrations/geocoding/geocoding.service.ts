@@ -1,25 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
-import { ApiCostService } from '../../api-cost/api-cost.service';
+import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import * as crypto from 'crypto';
 
 interface GeocodingResponse {
   results: Array<{
     formatted_address: string;
-    geometry: {
-      location: {
-        lat: number;
-        lng: number;
-      };
-    };
-    address_components: Array<{
-      long_name: string;
-      short_name: string;
-      types: string[];
-    }>;
+    geometry: { location: { lat: number; lng: number } };
+    address_components: Array<{ long_name: string; short_name: string; types: string[] }>;
   }>;
   status: string;
+}
+
+export interface GeocodingResult {
+  data: GeocodingResponse;
+  sourceRecordId: string | null;
 }
 
 @Injectable()
@@ -30,168 +27,78 @@ export class GeocodingService {
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
-    private apiCostService: ApiCostService,
+    private costControl: IntegrationCostControlService,
   ) {}
 
-  async geocode(address: string, city?: string, state?: string, zip?: string) {
+  async geocode(
+    address: string,
+    city: string | undefined,
+    state: string | undefined,
+    zip: string | undefined,
+    ctx: CostContext,
+  ): Promise<GeocodingResult | null> {
     if (!(await this.controlPlane.isExternalDataEnabled())) {
       throw new Error('External data access is disabled');
     }
-
     const query = [address, city, state, zip].filter(Boolean).join(', ');
-    const cacheKey = this.generateCacheKey(query);
-    
-    const cached = await this.getCachedResponse(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
-    try {
-      const url = 'https://maps.googleapis.com/maps/api/geocode/json';
-      const params = new URLSearchParams({
-        address: query,
-        key: this.apiKey,
-      });
-
-      const response = await fetch(`${url}?${params.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error(`Geocoding API error: ${response.status}`);
-      }
-
-      const data = await response.json() as GeocodingResponse;
-
-      if (data.status !== 'OK') {
-        throw new Error(`Geocoding failed: ${data.status}`);
-      }
-
-      await this.apiCostService.log({
-        accountId: 'system',
-        provider: 'google',
-        endpoint: `${url}?${params.toString()}`,
-        costUsd: 0.005,
-        responseCode: 200,
-      });
-
-      // Store source record
-      const sourceRecord = await this.storeSourceRecord(
-        'google',
-        url,
-        { address: query },
-        data,
-      );
-
-      // Cache response
-      await this.cacheResponse(cacheKey, data);
-
-      return {
-        data,
-        sourceRecordId: sourceRecord.id,
-      };
-    } catch (error) {
-      this.logger.error(`Geocoding failed: ${error.message}`, error.stack);
-      throw error;
-    }
+    const out = await this.costControl.checkAndCall<{ address: string }, GeocodingResult>({
+      provider: 'google_geocoding',
+      action: 'geocode',
+      payload: { address: query },
+      context: ctx,
+      execute: async () => {
+        const url = 'https://maps.googleapis.com/maps/api/geocode/json';
+        const params = new URLSearchParams({ address: query, key: this.apiKey });
+        const response = await fetch(`${url}?${params.toString()}`);
+        if (!response.ok) throw new Error(`Geocoding API error: ${response.status}`);
+        const data = (await response.json()) as GeocodingResponse;
+        if (data.status !== 'OK') throw new Error(`Geocoding failed: ${data.status}`);
+        const sourceRecord = await this.storeSourceRecord('google_geocoding', url, { address: query }, data);
+        return { data, sourceRecordId: sourceRecord.id };
+      },
+    });
+    return (out.result as GeocodingResult | null) ?? null;
   }
 
-  async reverseGeocode(lat: number, lng: number) {
+  async reverseGeocode(lat: number, lng: number, ctx: CostContext): Promise<GeocodingResult | null> {
     if (!(await this.controlPlane.isExternalDataEnabled())) {
       throw new Error('External data access is disabled');
     }
 
-    const cacheKey = `reverse:${lat},${lng}`;
-    const cached = await this.getCachedResponse(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const url = 'https://maps.googleapis.com/maps/api/geocode/json';
-      const params = new URLSearchParams({
-        latlng: `${lat},${lng}`,
-        key: this.apiKey,
-      });
-
-      const response = await fetch(`${url}?${params.toString()}`);
-      const data = await response.json() as GeocodingResponse;
-
-      if (data.status !== 'OK') {
-        throw new Error(`Reverse geocoding failed: ${data.status}`);
-      }
-
-      await this.apiCostService.log({
-        accountId: 'system',
-        provider: 'google',
-        endpoint: `${url}?${params.toString()}`,
-        costUsd: 0.005,
-        responseCode: 200,
-      });
-
-      const sourceRecord = await this.storeSourceRecord(
-        'google',
-        url,
-        { lat, lng },
-        data,
-      );
-
-      await this.cacheResponse(cacheKey, data);
-
-      return {
-        data,
-        sourceRecordId: sourceRecord.id,
-      };
-    } catch (error) {
-      this.logger.error(`Reverse geocoding failed: ${error.message}`, error.stack);
-      throw error;
-    }
+    const out = await this.costControl.checkAndCall<{ lat: number; lng: number }, GeocodingResult>({
+      provider: 'google_geocoding',
+      action: 'reverse_geocode',
+      payload: { lat, lng },
+      context: ctx,
+      execute: async () => {
+        const url = 'https://maps.googleapis.com/maps/api/geocode/json';
+        const params = new URLSearchParams({ latlng: `${lat},${lng}`, key: this.apiKey });
+        const response = await fetch(`${url}?${params.toString()}`);
+        const data = (await response.json()) as GeocodingResponse;
+        if (data.status !== 'OK') throw new Error(`Reverse geocoding failed: ${data.status}`);
+        const sourceRecord = await this.storeSourceRecord('google_geocoding', url, { lat, lng }, data);
+        return { data, sourceRecordId: sourceRecord.id };
+      },
+    });
+    return (out.result as GeocodingResult | null) ?? null;
   }
 
   private async storeSourceRecord(
     provider: string,
     endpoint: string,
-    request: Record<string, any>,
-    response: any,
+    request: Record<string, unknown>,
+    response: unknown,
   ) {
-    const requestHash = crypto
-      .createHash('sha256')
-      .update(JSON.stringify(request))
-      .digest('hex');
-
+    const requestHash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
     return this.prisma.sourceRecord.create({
       data: {
         provider,
         endpoint,
         requestHash,
-        response: response as any,
-        trustWeight: 0.9, // Google is highly trusted
+        response: response as object,
+        trustWeight: 0.9,
       },
     });
-  }
-
-  private generateCacheKey(...parts: (string | number | undefined)[]): string {
-    return crypto
-      .createHash('sha256')
-      .update(parts.filter(Boolean).join('|'))
-      .digest('hex');
-  }
-
-  private async getCachedResponse(key: string): Promise<any | null> {
-    const recent = await this.prisma.sourceRecord.findFirst({
-      where: {
-        provider: 'google',
-        requestHash: key,
-        createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return recent ? recent.response : null;
-  }
-
-  private async cacheResponse(key: string, data: any): Promise<void> {
-    // In production, store in Redis
   }
 }
-

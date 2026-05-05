@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { AuthProvider } from '@descope/nextjs-sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/toast';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const projectId = process.env.NEXT_PUBLIC_DESCOPE_PROJECT_ID;
@@ -39,7 +41,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider projectId={projectId}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider delayDuration={250} skipDelayDuration={150}>
+          {children}
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
     </AuthProvider>
   );
 }

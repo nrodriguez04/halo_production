@@ -21,6 +21,21 @@ const envSchema = z.object({
   PROPERTYRADAR_API_KEY: z.string().optional(),
   PROPERTYRADAR_BASE_URL: z.string().optional(),
 
+  // Cost-governance back-compat: declared so legacy code paths that read
+  // process.env.OPENAI_DAILY_COST_CAP via parseFloat(...) get a typed,
+  // validated default. Authoritative caps live in
+  // `integration_budget_buckets`; this var is a fallback only.
+  OPENAI_DAILY_COST_CAP: z.coerce.number().default(2),
+  COST_CONTROL_MANUAL_APPROVAL_USD: z.coerce.number().default(5),
+  COST_CONTROL_IDEMPOTENCY_WINDOW_SEC: z.coerce.number().default(60),
+  SKIP_TRACE_PROVIDER: z.enum(['batch', 'stub', 'propertyradar']).default('batch'),
+  BATCH_SKIPTRACE_API_KEY: z.string().optional(),
+  BATCH_SKIPTRACE_BASE_URL: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
+  INTERNAL_API_TOKEN: z.string().optional(),
+
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),

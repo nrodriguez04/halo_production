@@ -1,20 +1,40 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  TimelineActorType,
+  TimelineEntityType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { LeadCreate, LeadUpdate, CSVImportRow } from '@halo/shared';
 import * as reconciliationUtils from '@halo/shared';
+import { TimelineService } from '../timeline/timeline.service';
 
 @Injectable()
 export class LeadsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private timelineService: TimelineService,
+  ) {}
 
-  async create(data: LeadCreate) {
-    return this.prisma.lead.create({
+  async create(data: LeadCreate, actorId: string | null = null) {
+    const lead = await this.prisma.lead.create({
       data,
       include: {
         sourceRecords: true,
         properties: true,
       },
     });
+
+    await this.timelineService.appendEvent({
+      tenantId: lead.accountId,
+      entityType: TimelineEntityType.LEAD,
+      entityId: lead.id,
+      eventType: 'LEAD_CREATED',
+      payload: { status: lead.status, source: 'api' },
+      actorId,
+      actorType: actorId ? TimelineActorType.user : TimelineActorType.system,
+    });
+
+    return lead;
   }
 
   async findAll(

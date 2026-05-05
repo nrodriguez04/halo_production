@@ -23,9 +23,10 @@ export class LeadsController {
   async create(
     @Body() data: unknown,
     @CurrentAccountId() accountId: string,
+    @CurrentUserId() userId: string,
   ) {
     const validated = LeadCreateSchema.parse({ ...(data as any), accountId });
-    return this.leadsService.create(validated);
+    return this.leadsService.create(validated, userId ?? null);
   }
 
   @Get()

@@ -1,4 +1,5 @@
 import { AutomationRunStatus, PrismaClient } from '@prisma/client';
+import { seedCostGovernance } from './seed-providers';
 
 const prisma = new PrismaClient();
 
@@ -430,6 +431,8 @@ async function main() {
     });
   }
   console.log('  Seeded 50 automation runs');
+
+  await seedCostGovernance(prisma, ACCOUNT_ID);
 
   console.log('\n--- Seed complete! ---');
   console.log(`\nSummary:`);

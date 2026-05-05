@@ -3,7 +3,12 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma.service';
 
-@Processor('marketing')
+// Video script jobs ride their own dedicated `marketing-video` queue
+// instead of sharing `marketing` with flyer + buyer-blast jobs. Video
+// generation is much heavier and was throttling the rest of the marketing
+// pipeline whenever a long script ran. The MarketingProcessor stays on
+// the `marketing` queue and routes flyer / buyer-blast jobs only.
+@Processor('marketing-video')
 export class VideoProcessor extends WorkerHost {
   private readonly logger = new Logger(VideoProcessor.name);
 

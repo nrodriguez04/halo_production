@@ -17,22 +17,22 @@ export class ApiCostService {
 
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * @deprecated Cost recording is owned by `IntegrationCostControlService.recordActual`
+   * which writes to `integration_cost_events`. This method is kept as a
+   * fallback for any caller that still hand-rolls a cost write outside the
+   * cost-control pathway; new code MUST go through cost-control.
+   *
+   * The legacy `api_cost_logs` table is read-only after the cutover - this
+   * method is a no-op so we don't pollute the table with un-deduplicated
+   * rows that get double-counted alongside the new ledger.
+   */
   async log(params: LogCostParams) {
-    try {
-      await this.prisma.apiCostLog.create({
-        data: {
-          accountId: params.accountId,
-          provider: params.provider,
-          endpoint: params.endpoint,
-          costUsd: params.costUsd,
-          responseCode: params.responseCode,
-          durationMs: params.durationMs,
-          metadata: params.metadata ?? undefined,
-        },
-      });
-    } catch (err) {
-      this.logger.error(`Failed to log API cost: ${err}`);
-    }
+    this.logger.debug(
+      `ApiCostService.log called for ${params.provider}/${params.endpoint} ` +
+        `($${params.costUsd.toFixed(4)}) - this is a deprecated write path; ` +
+        `route through IntegrationCostControlService instead.`,
+    );
   }
 
   async getTodaySpend(accountId?: string) {
