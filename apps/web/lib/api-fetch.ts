@@ -1,24 +1,23 @@
 'use client';
 
+import { createRetryableAsyncLoader } from './retryable-async-loader';
+
 // The Descope SDK is dynamically imported once and cached at module scope.
-// Previously every apiFetch() call re-evaluated the dynamic import, which on
-// cold cache forced the browser to re-resolve / re-execute the SDK chunk
-// before each request. That added measurable latency to every API call,
-// especially on slow networks and the first few interactions after a page
-// load. Caching the import promise turns it into a one-shot bootstrap.
+// We keep the perf win for successful loads, but if the browser fails to load
+// the chunk once we must clear the cached rejection so later API calls can
+// retry instead of permanently dropping auth headers for the rest of the tab.
 type DescopeClientModule = {
   getSessionToken?: () => string | undefined | Promise<string | undefined>;
 };
 
-let descopeModulePromise: Promise<DescopeClientModule> | null = null;
+const loadDescopeModule = createRetryableAsyncLoader(
+  () => import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>,
+);
 
 async function getJwt(): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
   try {
-    if (!descopeModulePromise) {
-      descopeModulePromise = import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>;
-    }
-    const mod = await descopeModulePromise;
+    const mod = await loadDescopeModule();
     if (!mod?.getSessionToken) return undefined;
     return await Promise.resolve(mod.getSessionToken());
   } catch {
