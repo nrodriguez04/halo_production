@@ -1,7 +1,8 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+import { resolveInternalServiceContext } from '../auth/internal-service-context';
 import { SkipTraceService } from './skip-trace.service';
 
 const SkipTraceBody = z.object({
@@ -22,10 +23,21 @@ export class SkipTraceController {
   @Post('append-contacts')
   async appendContacts(
     @CurrentAccountId() accountId: string,
-    @CurrentUserId() userId: string,
+    @CurrentUserId() userId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-halo-account-id') requestedAccountId: string | undefined,
     @Body() raw: unknown,
   ) {
     const body = SkipTraceBody.parse(raw);
+    const ctx = resolveInternalServiceContext({
+      currentAccountId: accountId,
+      currentUserId: userId,
+      authorizationHeader: authorization,
+      requestedAccountId,
+      internalToken: process.env.INTERNAL_API_TOKEN,
+      internalActor: 'worker',
+    });
+
     // Re-shape into SkipTraceInput so optional fields stay optional and
     // the required `leadId` is preserved.
     return this.service.appendContacts(
@@ -38,7 +50,7 @@ export class SkipTraceController {
         state: body.state,
         zip: body.zip,
       },
-      { accountId, actor: 'user', userId, leadId: body.leadId },
+      { ...ctx, leadId: body.leadId },
     );
   }
 }
