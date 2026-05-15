@@ -305,6 +305,9 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          // The service token itself is single-tenant; forward the lead's
+          // actual tenant so API-side cost governance charges the right account.
+          'X-Halo-Account-Id': accountId,
         },
         body: JSON.stringify({
           leadId,

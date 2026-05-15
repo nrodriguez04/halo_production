@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Headers,
   Param,
   Post,
   UseGuards,
@@ -10,6 +11,7 @@ import { z } from 'zod';
 import { LeadStatus } from '@halo/shared';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+import { resolveInternalServiceContext } from '../auth/internal-service-context';
 import { LeadLifecycleService } from './lead-lifecycle.service';
 
 // HTTP entrypoint to the lead state machine. Workers can call this
@@ -37,7 +39,9 @@ export class LeadLifecycleController {
   @Post(':leadId/transition')
   async transition(
     @CurrentAccountId() accountId: string,
-    @CurrentUserId() userId: string,
+    @CurrentUserId() userId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-halo-account-id') requestedAccountId: string | undefined,
     @Param('leadId') leadId: string,
     @Body() raw: unknown,
   ) {
@@ -47,12 +51,20 @@ export class LeadLifecycleController {
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'invalid body');
     }
+    const ctx = resolveInternalServiceContext({
+      currentAccountId: accountId,
+      currentUserId: userId,
+      authorizationHeader: authorization,
+      requestedAccountId,
+      internalToken: process.env.INTERNAL_API_TOKEN,
+      internalActor: 'worker',
+    });
     return this.lifecycle.transition({
       leadId,
-      accountId,
+      accountId: ctx.accountId,
       next: body.next as LeadStatus,
-      actorId: userId,
-      actorType: 'user',
+      actorId: ctx.userId,
+      actorType: ctx.actor,
       reason: body.reason,
       metadata: body.metadata,
     });
