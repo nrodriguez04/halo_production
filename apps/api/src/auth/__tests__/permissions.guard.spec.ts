@@ -9,7 +9,7 @@ function makeContext(user?: { roles?: string[]; permissions?: string[] }): Execu
     }),
     getHandler: () => PermissionsGuard,
     getClass: () => PermissionsGuard,
-  } as ExecutionContext;
+  } as unknown as ExecutionContext;
 }
 
 describe('PermissionsGuard', () => {
