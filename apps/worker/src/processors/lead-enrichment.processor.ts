@@ -305,6 +305,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'X-Halo-Account-Id': accountId,
         },
         body: JSON.stringify({
           leadId,
