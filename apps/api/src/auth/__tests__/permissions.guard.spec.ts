@@ -19,7 +19,7 @@ describe('PermissionsGuard', () => {
       switchToHttp: () => ({
         getRequest: () => ({ user }),
       }),
-    }) as ExecutionContext;
+    }) as unknown as ExecutionContext;
 
   beforeEach(() => {
     reflector = {
