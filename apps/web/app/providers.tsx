@@ -1,10 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthProvider } from '@descope/nextjs-sdk';
+import { useSession } from '@descope/nextjs-sdk/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toast';
+import { syncApiAuthState } from '@/lib/api-fetch';
+
+function ApiAuthSessionSync() {
+  const { isAuthenticated, isSessionLoading, sessionToken } = useSession();
+
+  useEffect(() => {
+    syncApiAuthState({
+      ready: !isSessionLoading,
+      token: isAuthenticated ? sessionToken : undefined,
+    });
+  }, [isAuthenticated, isSessionLoading, sessionToken]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const projectId = process.env.NEXT_PUBLIC_DESCOPE_PROJECT_ID;
@@ -41,6 +56,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider projectId={projectId}>
+      <ApiAuthSessionSync />
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={250} skipDelayDuration={150}>
           {children}

@@ -1,29 +1,56 @@
 'use client';
 
-// The Descope SDK is dynamically imported once and cached at module scope.
-// Previously every apiFetch() call re-evaluated the dynamic import, which on
-// cold cache forced the browser to re-resolve / re-execute the SDK chunk
-// before each request. That added measurable latency to every API call,
-// especially on slow networks and the first few interactions after a page
-// load. Caching the import promise turns it into a one-shot bootstrap.
-type DescopeClientModule = {
-  getSessionToken?: () => string | undefined | Promise<string | undefined>;
+type ApiAuthState = {
+  ready: boolean;
+  token?: string;
 };
 
-let descopeModulePromise: Promise<DescopeClientModule> | null = null;
+let authState: ApiAuthState = {
+  ready: typeof window === 'undefined',
+  token: undefined,
+};
+const authReadyWaiters = new Set<() => void>();
+
+export function syncApiAuthState(nextState: ApiAuthState) {
+  authState = nextState;
+
+  if (!nextState.ready) {
+    return;
+  }
+
+  for (const resolve of authReadyWaiters) {
+    resolve();
+  }
+  authReadyWaiters.clear();
+}
+
+async function waitForAuthReady(timeoutMs = 3000) {
+  if (typeof window === 'undefined' || authState.ready) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      authReadyWaiters.delete(finish);
+      resolve();
+    };
+
+    authReadyWaiters.add(finish);
+    window.setTimeout(finish, timeoutMs);
+  });
+}
 
 async function getJwt(): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
-  try {
-    if (!descopeModulePromise) {
-      descopeModulePromise = import('@descope/nextjs-sdk/client') as unknown as Promise<DescopeClientModule>;
-    }
-    const mod = await descopeModulePromise;
-    if (!mod?.getSessionToken) return undefined;
-    return await Promise.resolve(mod.getSessionToken());
-  } catch {
-    return undefined;
-  }
+
+  // Requests kicked off during the first client paint need to wait until the
+  // AuthProvider has resolved the current session, otherwise they race the
+  // session bootstrap and get redirected back to sign-in with no bearer token.
+  await waitForAuthReady();
+  return authState.token;
 }
 
 export class ApiError extends Error {
