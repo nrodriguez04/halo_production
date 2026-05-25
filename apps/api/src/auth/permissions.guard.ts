@@ -36,10 +36,10 @@ export class PermissionsGuard implements CanActivate {
     }
 
     if (userPermissions.length === 0) {
-      this.logger.debug(
-        `No permission claims on token — allowing ${requiredPermissions.join(', ')} by default`,
+      this.logger.warn(
+        `Missing permission claims on token for protected route requiring ${requiredPermissions.join(', ')}`,
       );
-      return true;
+      throw new ForbiddenException('Insufficient permissions');
     }
 
     const hasAll = requiredPermissions.every((perm) =>
