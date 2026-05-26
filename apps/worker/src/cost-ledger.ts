@@ -16,8 +16,11 @@
 // which point this helper becomes unnecessary.
 
 import { randomUUID } from 'crypto';
-import type { IntegrationBudgetBucket } from '@prisma/client';
 import { prisma } from './prisma-client';
+
+type BudgetBucket = Awaited<
+  ReturnType<typeof prisma.integrationBudgetBucket.findMany>
+>[number];
 
 export interface WorkerCostEntry {
   accountId: string;
@@ -111,7 +114,7 @@ export async function isOverHardCap(
 async function loadApplicableBuckets(
   accountId: string,
   providerKey: string,
-): Promise<IntegrationBudgetBucket[]> {
+): Promise<BudgetBucket[]> {
   const rows = await prisma.integrationBudgetBucket.findMany({
     where: {
       accountId: { in: [accountId, 'GLOBAL'] },
@@ -128,9 +131,9 @@ async function loadApplicableBuckets(
 }
 
 async function refreshExpiredBucket(
-  row: IntegrationBudgetBucket,
+  row: BudgetBucket,
   now: Date,
-): Promise<IntegrationBudgetBucket> {
+): Promise<BudgetBucket> {
   if (row.periodResetsAt.getTime() > now.getTime()) {
     return row;
   }
