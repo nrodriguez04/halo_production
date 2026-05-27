@@ -18,6 +18,10 @@
 import { randomUUID } from 'crypto';
 import { prisma } from './prisma-client';
 
+type BudgetBucket = Awaited<
+  ReturnType<typeof prisma.integrationBudgetBucket.findMany>
+>[number];
+
 export interface WorkerCostEntry {
   accountId: string;
   providerKey: string;
@@ -55,16 +59,7 @@ export async function recordWorkerCost(entry: WorkerCostEntry): Promise<void> {
     // Find the budget buckets that should have been debited. We only debit
     // the "global" + matching provider buckets; lead/campaign-scoped
     // buckets aren't enforced for raw-fetch worker calls.
-    const buckets = await prisma.integrationBudgetBucket.findMany({
-      where: {
-        accountId: { in: [entry.accountId, 'GLOBAL'] },
-        enabled: true,
-        OR: [
-          { scope: 'global', scopeRef: 'ALL' },
-          { scope: 'provider', scopeRef: entry.providerKey },
-        ],
-      },
-    });
+    const buckets = await loadApplicableBuckets(entry.accountId, entry.providerKey);
 
     await prisma.integrationCostEvent.create({
       data: {
@@ -112,7 +107,15 @@ export async function isOverHardCap(
   accountId: string,
   providerKey: string,
 ): Promise<boolean> {
-  const buckets = await prisma.integrationBudgetBucket.findMany({
+  const buckets = await loadApplicableBuckets(accountId, providerKey);
+  return buckets.some((b) => b.currentSpendUsd >= b.hardCapUsd);
+}
+
+async function loadApplicableBuckets(
+  accountId: string,
+  providerKey: string,
+): Promise<BudgetBucket[]> {
+  const rows = await prisma.integrationBudgetBucket.findMany({
     where: {
       accountId: { in: [accountId, 'GLOBAL'] },
       enabled: true,
@@ -122,5 +125,53 @@ export async function isOverHardCap(
       ],
     },
   });
-  return buckets.some((b) => b.currentSpendUsd >= b.hardCapUsd);
+
+  const now = new Date();
+  return Promise.all(rows.map((row) => refreshExpiredBucket(row, now)));
+}
+
+async function refreshExpiredBucket(
+  row: BudgetBucket,
+  now: Date,
+): Promise<BudgetBucket> {
+  if (row.periodResetsAt.getTime() > now.getTime()) {
+    return row;
+  }
+
+  const { startedAt, resetsAt } = nextPeriod(row.period, now);
+  return prisma.integrationBudgetBucket.update({
+    where: { id: row.id },
+    data: {
+      periodStartedAt: startedAt,
+      periodResetsAt: resetsAt,
+      currentSpendUsd: 0,
+    },
+  });
+}
+
+function nextPeriod(period: string, anchor: Date): { startedAt: Date; resetsAt: Date } {
+  const startedAt = startOfPeriod(period, anchor);
+  const resetsAt = endOfPeriod(period, startedAt);
+  return { startedAt, resetsAt };
+}
+
+function startOfPeriod(period: string, d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  if (period === 'week') {
+    const day = out.getDay();
+    out.setDate(out.getDate() - day);
+  } else if (period === 'month') {
+    out.setDate(1);
+  }
+  return out;
+}
+
+function endOfPeriod(period: string, start: Date): Date {
+  const out = new Date(start);
+  if (period === 'day') out.setDate(out.getDate() + 1);
+  else if (period === 'week') out.setDate(out.getDate() + 7);
+  else if (period === 'month') out.setMonth(out.getMonth() + 1);
+  else out.setDate(out.getDate() + 1);
+  return out;
 }
