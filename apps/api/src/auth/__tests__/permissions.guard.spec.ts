@@ -22,7 +22,7 @@ describe('PermissionsGuard', () => {
     reflector = {
       getAllAndOverride: jest.fn(),
     };
-    guard = new PermissionsGuard(reflector as Reflector);
+    guard = new PermissionsGuard(reflector as unknown as Reflector);
   });
 
   it('allows routes with no declared permissions', () => {
