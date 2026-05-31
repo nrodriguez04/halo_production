@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { getExpiredBudgetBucketReset, wouldExceedHardCap } from '@halo/shared';
+import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import type { CostIntent } from './dto/cost-intent.dto';
@@ -27,8 +28,6 @@ export interface ApplicableBucket {
 
 @Injectable()
 export class BudgetService {
-  private readonly logger = new Logger(BudgetService.name);
-
   constructor(private prisma: PrismaService) {}
 
   async findApplicable(intent: CostIntent): Promise<ApplicableBucket[]> {
@@ -58,20 +57,28 @@ export class BudgetService {
     const now = new Date();
     const refreshed = await Promise.all(
       rows.map(async (row) => {
-        if (row.periodResetsAt.getTime() <= now.getTime()) {
-          // Roll the bucket forward into the new period and zero the spend.
-          const { startedAt, resetsAt } = nextPeriod(row.period, now);
-          const updated = await this.prisma.integrationBudgetBucket.update({
-            where: { id: row.id },
-            data: {
-              periodStartedAt: startedAt,
-              periodResetsAt: resetsAt,
-              currentSpendUsd: 0,
-            },
-          });
-          return updated;
+        const resetData = getExpiredBudgetBucketReset(row, now);
+        if (!resetData) {
+          return row;
         }
-        return row;
+
+        // Refresh only if the row is still on the expired window so we do not
+        // clobber spend another concurrent request has already rolled forward.
+        const refresh = await this.prisma.integrationBudgetBucket.updateMany({
+          where: {
+            id: row.id,
+            periodResetsAt: row.periodResetsAt,
+          },
+          data: resetData,
+        });
+
+        if (refresh.count === 0) {
+          return this.prisma.integrationBudgetBucket.findUniqueOrThrow({
+            where: { id: row.id },
+          });
+        }
+
+        return { ...row, ...resetData };
       }),
     );
 
@@ -93,7 +100,13 @@ export class BudgetService {
    */
   findOverHardCap(buckets: ApplicableBucket[], estimatedCostUsd: number): ApplicableBucket | null {
     return (
-      buckets.find((b) => b.currentSpendUsd + estimatedCostUsd > b.hardCapUsd) ?? null
+      buckets.find((b) =>
+        wouldExceedHardCap(
+          b.currentSpendUsd,
+          b.hardCapUsd,
+          estimatedCostUsd,
+        ),
+      ) ?? null
     );
   }
 
@@ -121,31 +134,4 @@ export class BudgetService {
       data: { currentSpendUsd: { increment: amountUsd } },
     });
   }
-}
-
-export function nextPeriod(period: string, anchor: Date): { startedAt: Date; resetsAt: Date } {
-  const startedAt = startOfPeriod(period, anchor);
-  const resetsAt = endOfPeriod(period, startedAt);
-  return { startedAt, resetsAt };
-}
-
-export function startOfPeriod(period: string, d: Date): Date {
-  const out = new Date(d);
-  out.setHours(0, 0, 0, 0);
-  if (period === 'week') {
-    const day = out.getDay();
-    out.setDate(out.getDate() - day);
-  } else if (period === 'month') {
-    out.setDate(1);
-  }
-  return out;
-}
-
-export function endOfPeriod(period: string, start: Date): Date {
-  const out = new Date(start);
-  if (period === 'day') out.setDate(out.getDate() + 1);
-  else if (period === 'week') out.setDate(out.getDate() + 7);
-  else if (period === 'month') out.setMonth(out.getMonth() + 1);
-  else out.setDate(out.getDate() + 1);
-  return out;
 }

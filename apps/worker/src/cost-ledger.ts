@@ -15,6 +15,8 @@
 // Long-term plan: migrate worker enrichment to call the api over HTTP, at
 // which point this helper becomes unnecessary.
 
+import { getExpiredBudgetBucketReset, wouldExceedHardCap } from '@halo/shared';
+import type { IntegrationBudgetBucket } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { prisma } from './prisma-client';
 
@@ -32,6 +34,57 @@ export interface WorkerCostEntry {
   campaignId?: string;
   automationRunId?: string;
   metadata?: Record<string, unknown>;
+}
+
+async function loadApplicableBuckets(
+  accountId: string,
+  providerKey: string,
+): Promise<IntegrationBudgetBucket[]> {
+  const rows = await prisma.integrationBudgetBucket.findMany({
+    where: {
+      accountId: { in: [accountId, 'GLOBAL'] },
+      enabled: true,
+      OR: [
+        { scope: 'global', scopeRef: 'ALL' },
+        { scope: 'provider', scopeRef: providerKey },
+      ],
+    },
+  });
+
+  return refreshExpiredBuckets(rows);
+}
+
+async function refreshExpiredBuckets(
+  rows: IntegrationBudgetBucket[],
+): Promise<IntegrationBudgetBucket[]> {
+  const now = new Date();
+
+  return Promise.all(
+    rows.map(async (row) => {
+      const resetData = getExpiredBudgetBucketReset(row, now);
+      if (!resetData) {
+        return row;
+      }
+
+      // Match the api's rollover semantics without overwriting spend that a
+      // concurrent request has already moved into the new period.
+      const refresh = await prisma.integrationBudgetBucket.updateMany({
+        where: {
+          id: row.id,
+          periodResetsAt: row.periodResetsAt,
+        },
+        data: resetData,
+      });
+
+      if (refresh.count === 0) {
+        return prisma.integrationBudgetBucket.findUniqueOrThrow({
+          where: { id: row.id },
+        });
+      }
+
+      return { ...row, ...resetData };
+    }),
+  );
 }
 
 export async function recordWorkerCost(entry: WorkerCostEntry): Promise<void> {
@@ -55,16 +108,7 @@ export async function recordWorkerCost(entry: WorkerCostEntry): Promise<void> {
     // Find the budget buckets that should have been debited. We only debit
     // the "global" + matching provider buckets; lead/campaign-scoped
     // buckets aren't enforced for raw-fetch worker calls.
-    const buckets = await prisma.integrationBudgetBucket.findMany({
-      where: {
-        accountId: { in: [entry.accountId, 'GLOBAL'] },
-        enabled: true,
-        OR: [
-          { scope: 'global', scopeRef: 'ALL' },
-          { scope: 'provider', scopeRef: entry.providerKey },
-        ],
-      },
-    });
+    const buckets = await loadApplicableBuckets(entry.accountId, entry.providerKey);
 
     await prisma.integrationCostEvent.create({
       data: {
@@ -103,24 +147,19 @@ export async function recordWorkerCost(entry: WorkerCostEntry): Promise<void> {
 }
 
 /**
- * Returns true if the global or provider monthly bucket has already
- * exceeded its hard cap. Worker callers can short-circuit before making
- * a paid call; matches the cost-control service's BLOCK_OVER_BUDGET
- * decision in spirit (without rate limits / fallbacks).
+ * Returns true if the next worker-paid call would push the current-period
+ * global or provider bucket over its hard cap. Worker callers can
+ * short-circuit before making a paid call; matches the cost-control
+ * service's BLOCK_OVER_BUDGET decision in spirit (without rate limits /
+ * fallbacks).
  */
 export async function isOverHardCap(
   accountId: string,
   providerKey: string,
+  estimatedCostUsd: number = 0,
 ): Promise<boolean> {
-  const buckets = await prisma.integrationBudgetBucket.findMany({
-    where: {
-      accountId: { in: [accountId, 'GLOBAL'] },
-      enabled: true,
-      OR: [
-        { scope: 'global', scopeRef: 'ALL' },
-        { scope: 'provider', scopeRef: providerKey },
-      ],
-    },
-  });
-  return buckets.some((b) => b.currentSpendUsd >= b.hardCapUsd);
+  const buckets = await loadApplicableBuckets(accountId, providerKey);
+  return buckets.some((b) =>
+    wouldExceedHardCap(b.currentSpendUsd, b.hardCapUsd, estimatedCostUsd),
+  );
 }

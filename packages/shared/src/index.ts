@@ -8,6 +8,7 @@ export * from './agents/prompts';
 // Utilities
 export * from './utils/reconciliation';
 export * from './utils/compliance';
+export * from './budget-periods';
 
 // Policy and state machine
 export * from './policy';
