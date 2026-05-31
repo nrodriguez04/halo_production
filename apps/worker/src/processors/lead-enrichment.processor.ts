@@ -179,7 +179,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     zip: string | undefined,
     leadId: string,
   ): Promise<{ sourceRecordId: string | null; cost: number }> {
-    if (await isOverHardCap(accountId, 'google_geocoding')) {
+    if (await isOverHardCap(accountId, 'google_geocoding', GEOCODE_COST_USD)) {
       console.warn(`Geocoding skipped: budget exceeded for ${accountId}`);
       return { sourceRecordId: null, cost: 0 };
     }
@@ -228,7 +228,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     zip: string | undefined,
     leadId: string,
   ): Promise<{ sourceRecordId: string | null; cost: number }> {
-    if (await isOverHardCap(accountId, 'attom')) {
+    if (await isOverHardCap(accountId, 'attom', ATTOM_COST_USD)) {
       console.warn(`ATTOM skipped: budget exceeded for ${accountId}`);
       return { sourceRecordId: null, cost: 0 };
     }
