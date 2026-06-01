@@ -24,6 +24,31 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing bearer token');
     }
 
+    const internalToken = process.env.INTERNAL_API_TOKEN;
+    if (internalToken && token === internalToken) {
+      const accountId = this.readHeader(request.headers['x-internal-account-id']);
+      if (!accountId) {
+        throw new ForbiddenException(
+          'Internal service token requires x-internal-account-id',
+        );
+      }
+      const actorHeader = this.readHeader(request.headers['x-internal-actor']);
+      const actor = actorHeader === 'worker' ? 'worker' : 'system';
+      (request as any).user = {
+        userId: undefined,
+        accountId,
+        permissions: [],
+        roles: [],
+        claims: {},
+        session: null,
+        internal: true,
+      };
+      (request as any).userId = undefined;
+      (request as any).accountId = accountId;
+      (request as any).authActor = actor;
+      return true;
+    }
+
     try {
       const session = await (descope as any).validateSession(token);
       const claims = this.getClaims(session);
@@ -60,6 +85,7 @@ export class AuthGuard implements CanActivate {
       (request as any).user = user;
       (request as any).userId = userId;
       (request as any).accountId = accountId;
+      (request as any).authActor = 'user';
     } catch (err) {
       if (err instanceof ForbiddenException) throw err;
       if (err instanceof UnauthorizedException) throw err;
@@ -132,6 +158,11 @@ export class AuthGuard implements CanActivate {
       return value.split(' ').filter(Boolean);
     }
     return [];
+  }
+
+  private readHeader(value: string | string[] | undefined): string | undefined {
+    if (Array.isArray(value)) return value[0];
+    return value;
   }
 }
 

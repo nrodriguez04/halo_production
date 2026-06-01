@@ -305,6 +305,8 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'X-Internal-Account-Id': accountId,
+          'X-Internal-Actor': 'worker',
         },
         body: JSON.stringify({
           leadId,
@@ -330,8 +332,6 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       return { phone, email, costUsd: result.costUsd ?? 0 };
     } catch (err) {
       console.warn('[lead-enrichment] skip-trace call failed:', err);
-      // We deliberately swallow — accountId is the unused-vars dodge
-      void accountId;
       return { phone: null, email: null, costUsd: 0 };
     }
   }

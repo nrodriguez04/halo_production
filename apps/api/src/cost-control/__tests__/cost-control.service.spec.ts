@@ -97,6 +97,7 @@ describe('IntegrationCostControlService', () => {
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: null };
       return null;
     });
 
@@ -176,6 +177,33 @@ describe('IntegrationCostControlService', () => {
     if (decision.kind === 'DOWNGRADE_PROVIDER') {
       expect(['datazapp', 'propertyradar']).toContain(decision.suggestedProvider);
     }
+  });
+
+  it('blocks after exhausting skip-trace fallbacks instead of cycling forever', async () => {
+    budgets.findOverHardCap.mockReturnValue({
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'batch_skiptrace',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
+    const exec = jest.fn(async () => ({ ok: true }));
+    const out = await service.checkAndCall({
+      ...baseIntent(),
+      provider: 'batch_skiptrace',
+      action: 'append_contacts',
+      execute: exec as any,
+    });
+    expect(out.decision.kind).toBe('BLOCK_OVER_BUDGET');
+    expect(exec).not.toHaveBeenCalled();
+    expect(
+      prisma.integrationProvider.findUnique.mock.calls.map((call: any[]) => call[0].where.key),
+    ).toEqual(
+      expect.arrayContaining(['batch_skiptrace', 'datazapp', 'propertyradar']),
+    );
   });
 
   it('blocks when lead score is below the configured threshold', async () => {
