@@ -209,11 +209,26 @@ export class LeadsService {
     }
 
     if (toCreate.length) {
-      const result = await this.prisma.lead.createMany({
-        data: toCreate,
-        skipDuplicates: true,
-      });
-      results.created = result.count;
+      try {
+        const result = await this.prisma.lead.createMany({
+          data: toCreate,
+          skipDuplicates: true,
+        });
+        results.created = result.count;
+      } catch (_bulkError) {
+        // Preserve the legacy row-level isolation: one malformed record
+        // should not abort the entire import batch.
+        for (const row of toCreate) {
+          try {
+            await this.prisma.lead.create({ data: row });
+            results.created++;
+          } catch (error) {
+            results.errors.push(
+              `Row ${row.canonicalAddress}: ${(error as Error).message}`,
+            );
+          }
+        }
+      }
     }
 
     return results;
