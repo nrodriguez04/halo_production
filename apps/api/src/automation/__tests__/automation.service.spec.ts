@@ -82,8 +82,16 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        workflowName: 'test',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'COMPLETED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -106,8 +114,15 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+        entityType: 'deal',
+        entityId: 'deal-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'FAILED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -118,6 +133,18 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('approveRun', () => {
+    it('should reject cross-tenant run mutations', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.approveRun('run-1', 'tenant-2', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 
