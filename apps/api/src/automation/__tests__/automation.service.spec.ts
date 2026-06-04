@@ -82,6 +82,10 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
@@ -96,6 +100,10 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('COMPLETED');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        select: { id: true },
+      });
       expect(timelineService.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: 'AUTOMATION_RUN_COMPLETED',
@@ -106,6 +114,10 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
@@ -119,6 +131,28 @@ describe('AutomationService', () => {
 
       expect(result.status).toBe('FAILED');
     });
+  });
+
+  describe('tenant-scoped lifecycle mutations', () => {
+    it.each([
+      ['startRun', () => service.startRun('run-1', 'tenant-2')],
+      ['completeRun', () => service.completeRun('run-1', 'tenant-2')],
+      ['failRun', () => service.failRun('run-1', 'tenant-2')],
+      ['cancelRun', () => service.cancelRun('run-1', 'tenant-2')],
+      ['approveRun', () => service.approveRun('run-1', 'tenant-2', 'user-1')],
+    ])(
+      'should reject %s when the run belongs to another tenant',
+      async (_method, invoke) => {
+        prisma.automationRun.findFirst.mockResolvedValue(null);
+
+        await expect(invoke()).rejects.toThrow(NotFoundException);
+        expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+          where: { id: 'run-1', tenantId: 'tenant-2' },
+          select: { id: true },
+        });
+        expect(prisma.automationRun.update).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('getRun', () => {
