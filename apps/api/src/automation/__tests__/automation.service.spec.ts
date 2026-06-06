@@ -82,8 +82,13 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'COMPLETED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -96,8 +101,12 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('COMPLETED');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
       expect(timelineService.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
+          tenantId: 'tenant-1',
           eventType: 'AUTOMATION_RUN_COMPLETED',
         }),
       );
@@ -106,8 +115,13 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'FAILED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -118,6 +132,24 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
+    });
+  });
+
+  describe('tenant-scoped mutations', () => {
+    it.each([
+      ['startRun', () => service.startRun('run-1', 'tenant-1')],
+      ['completeRun', () => service.completeRun('run-1', 'tenant-1')],
+      ['failRun', () => service.failRun('run-1', 'tenant-1')],
+      ['cancelRun', () => service.cancelRun('run-1', 'tenant-1')],
+      ['approveRun', () => service.approveRun('run-1', 'tenant-1', 'user-1')],
+    ])('throws NotFoundException when %s targets another tenant', async (_name, invoke) => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(invoke()).rejects.toThrow(NotFoundException);
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 
