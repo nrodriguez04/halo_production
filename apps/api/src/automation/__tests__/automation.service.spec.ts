@@ -10,13 +10,14 @@ describe('AutomationService', () => {
   let prisma: any;
   let timelineService: any;
   let controlPlaneService: any;
+  const ownedRun = { id: 'run-1', tenantId: 'tenant-1' };
 
   beforeEach(async () => {
     prisma = {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(ownedRun),
         findMany: jest.fn(),
       },
       message: {
@@ -84,6 +85,7 @@ describe('AutomationService', () => {
     it('should mark run as completed with output', async () => {
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'COMPLETED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -108,6 +110,7 @@ describe('AutomationService', () => {
     it('should mark run as failed with error', async () => {
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'FAILED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -140,6 +143,43 @@ describe('AutomationService', () => {
       await expect(
         service.getRun('missing', 'tenant-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('tenant ownership enforcement', () => {
+    it.each([
+      ['startRun', () => service.startRun('run-1', 'tenant-2')],
+      [
+        'completeRun',
+        () => service.completeRun('run-1', 'tenant-2', { outputJson: { ok: true } }),
+      ],
+      ['failRun', () => service.failRun('run-1', 'tenant-2', { code: 'ERR' })],
+      ['cancelRun', () => service.cancelRun('run-1', 'tenant-2')],
+      ['approveRun', () => service.approveRun('run-1', 'tenant-2', 'user-1')],
+    ])('throws NotFoundException when %s targets another tenant run', async (_name, call) => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(call()).rejects.toThrow(NotFoundException);
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+    });
+
+    it('scopes the ownership lookup by both run id and tenant id', async () => {
+      prisma.automationRun.update.mockResolvedValue({
+        ...ownedRun,
+        status: 'CANCELLED',
+      });
+
+      await service.cancelRun('run-1', 'tenant-1');
+
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        select: { id: true },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1' },
+        }),
+      );
     });
   });
 
