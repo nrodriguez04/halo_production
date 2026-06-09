@@ -58,7 +58,8 @@ describe('AgentService', () => {
       },
       automationRun: {
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
-        update: jest.fn().mockResolvedValue({ id: 'run-1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       },
       quietHours: {
@@ -137,6 +138,13 @@ describe('AgentService', () => {
       expect(timelineService.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'AGENT_DRAFT_CREATED' }),
       );
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        data: {
+          status: 'AWAITING_APPROVAL',
+          outputJson: { messageId: 'msg-1' },
+        },
+      });
     });
 
     it('should throw NotFoundException for missing deal', async () => {
@@ -147,6 +155,20 @@ describe('AgentService', () => {
           content: 'Hi',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject automation runs owned by another tenant', async () => {
+      prisma.deal.findFirst.mockResolvedValue(mockDeal);
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+          content: 'Hello',
+          automationRunId: 'run-foreign',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
     });
   });
 
@@ -172,6 +194,10 @@ describe('AgentService', () => {
           data: { status: 'pending_approval' },
         }),
       );
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        data: { status: 'AWAITING_APPROVAL' },
+      });
     });
 
     it('should reject non-draft messages', async () => {

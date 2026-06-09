@@ -16,6 +16,7 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
       },
@@ -78,13 +79,28 @@ describe('AutomationService', () => {
         }),
       );
     });
+
+    it('should reject a parent run owned by another tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createRun({
+          tenantId: 'tenant-1',
+          parentRunId: 'run-foreign',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.automationRun.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
-      prisma.automationRun.update.mockResolvedValue({
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
+        tenantId: 'tenant-1',
         entityType: 'deal',
         entityId: 'deal-1',
         workflowName: 'test',
@@ -96,6 +112,11 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('COMPLETED');
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1', tenantId: 'tenant-1' },
+        }),
+      );
       expect(timelineService.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: 'AUTOMATION_RUN_COMPLETED',
@@ -106,9 +127,11 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
-      prisma.automationRun.update.mockResolvedValue({
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
+        tenantId: 'tenant-1',
         entityType: 'deal',
         entityId: 'deal-1',
       });
@@ -118,6 +141,21 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('tenant ownership', () => {
+    it('should reject cross-tenant lifecycle mutations', async () => {
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.cancelRun('run-foreign', 'tenant-1')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith({
+        where: { id: 'run-foreign', tenantId: 'tenant-1' },
+        data: expect.objectContaining({ status: 'CANCELLED' }),
+      });
     });
   });
 
@@ -132,6 +170,13 @@ describe('AutomationService', () => {
 
       const result = await service.getRun('run-1', 'tenant-1');
       expect(result.id).toBe('run-1');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        include: {
+          messages: { where: { accountId: 'tenant-1' } },
+          childRuns: { where: { tenantId: 'tenant-1' } },
+        },
+      });
     });
 
     it('should throw NotFoundException for missing run', async () => {
@@ -202,6 +247,12 @@ describe('AutomationService', () => {
             status: 'COMPLETED',
             workflowName: 'draft-seller-sms',
           }),
+          include: {
+            messages: {
+              where: { accountId: 'tenant-1' },
+              select: { id: true, status: true, channel: true },
+            },
+          },
         }),
       );
     });
