@@ -268,7 +268,9 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
-    if (!automationRunId) {
+    if (automationRunId) {
+      await this.ensureOwnedAutomationRun(automationRunId, accountId);
+    } else {
       const run = await this.prisma.automationRun.create({
         data: {
           tenantId: accountId,
@@ -330,13 +332,15 @@ export class AgentService {
       actorType: TimelineActorType.system,
     });
 
-    await this.prisma.automationRun.update({
-      where: { id: automationRunId },
-      data: {
-        status: 'AWAITING_APPROVAL',
-        outputJson: { messageId: message.id },
-      },
-    });
+    const runUpdated = await this.setAutomationRunAwaitingApproval(
+      automationRunId,
+      accountId,
+      { messageId: message.id },
+    );
+
+    if (!runUpdated) {
+      throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+    }
 
     return {
       message,
@@ -411,10 +415,10 @@ export class AgentService {
     });
 
     if (message.automationRunId) {
-      await this.prisma.automationRun.update({
-        where: { id: message.automationRunId },
-        data: { status: 'AWAITING_APPROVAL' },
-      });
+      await this.setAutomationRunAwaitingApproval(
+        message.automationRunId,
+        accountId,
+      );
     }
 
     return {
@@ -577,5 +581,32 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async ensureOwnedAutomationRun(runId: string, accountId: string) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId: accountId },
+      select: { id: true },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+  }
+
+  private async setAutomationRunAwaitingApproval(
+    runId: string,
+    accountId: string,
+    outputJson?: Record<string, any>,
+  ) {
+    const result = await this.prisma.automationRun.updateMany({
+      where: { id: runId, tenantId: accountId },
+      data: {
+        status: 'AWAITING_APPROVAL',
+        ...(outputJson ? { outputJson } : {}),
+      },
+    });
+
+    return result.count > 0;
   }
 }
