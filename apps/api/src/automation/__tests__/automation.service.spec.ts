@@ -82,6 +82,10 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
@@ -106,6 +110,10 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
@@ -118,6 +126,53 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('tenant ownership checks', () => {
+    it.each([
+      ['startRun', () => service.startRun('run-1', 'tenant-2')],
+      ['completeRun', () => service.completeRun('run-1', 'tenant-2', { outputJson: {} })],
+      ['failRun', () => service.failRun('run-1', 'tenant-2', { code: 'ERR' })],
+      ['cancelRun', () => service.cancelRun('run-1', 'tenant-2')],
+      ['approveRun', () => service.approveRun('run-1', 'tenant-2', 'user-1')],
+    ])(
+      'rejects %s when the run does not belong to the caller tenant',
+      async (_methodName, call) => {
+        prisma.automationRun.findFirst.mockResolvedValue(null);
+
+        await expect(call()).rejects.toThrow(NotFoundException);
+        expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+          where: { id: 'run-1', tenantId: 'tenant-2' },
+          select: { id: true },
+        });
+        expect(prisma.automationRun.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows approveRun when the run belongs to the caller tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
+      prisma.automationRun.update.mockResolvedValue({
+        id: 'run-1',
+        approvedByUserId: 'user-1',
+      });
+
+      await service.approveRun('run-1', 'tenant-1', 'user-1');
+
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        select: { id: true },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith({
+        where: { id: 'run-1' },
+        data: {
+          approvedByUserId: 'user-1',
+          approvedAt: expect.any(Date),
+        },
+      });
     });
   });
 
