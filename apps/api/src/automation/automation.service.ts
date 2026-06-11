@@ -1,13 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
-import { ControlPlaneService } from '../control-plane/control-plane.service';
-import { TimelineService } from '../timeline/timeline.service';
 import {
+  type AutomationRun,
   AutomationRunStatus,
   AutomationTriggerType,
+  type Prisma,
   TimelineActorType,
   TimelineEntityType,
 } from '@prisma/client';
+import { PrismaService } from '../prisma.service';
+import { ControlPlaneService } from '../control-plane/control-plane.service';
+import { TimelineService } from '../timeline/timeline.service';
 
 @Injectable()
 export class AutomationService {
@@ -77,12 +79,9 @@ export class AutomationService {
   }
 
   async startRun(runId: string, tenantId: string) {
-    return this.prisma.automationRun.update({
-      where: { id: runId },
-      data: {
-        status: AutomationRunStatus.RUNNING,
-        startedAt: new Date(),
-      },
+    return this.updateRunForTenant(runId, tenantId, {
+      status: AutomationRunStatus.RUNNING,
+      startedAt: new Date(),
     });
   }
 
@@ -99,24 +98,21 @@ export class AutomationService {
       toolCostUsd?: number;
     },
   ) {
-    const run = await this.prisma.automationRun.update({
-      where: { id: runId },
-      data: {
-        status: AutomationRunStatus.COMPLETED,
-        completedAt: new Date(),
-        outputJson: output?.outputJson,
-        decisionJson: output?.decisionJson,
-        estimatedValueUsd: output?.estimatedValueUsd,
-        realizedValueUsd: output?.realizedValueUsd,
-        aiCostUsd: output?.aiCostUsd,
-        messageCostUsd: output?.messageCostUsd,
-        toolCostUsd: output?.toolCostUsd,
-      },
+    const run = await this.updateRunForTenant(runId, tenantId, {
+      status: AutomationRunStatus.COMPLETED,
+      completedAt: new Date(),
+      outputJson: output?.outputJson,
+      decisionJson: output?.decisionJson,
+      estimatedValueUsd: output?.estimatedValueUsd,
+      realizedValueUsd: output?.realizedValueUsd,
+      aiCostUsd: output?.aiCostUsd,
+      messageCostUsd: output?.messageCostUsd,
+      toolCostUsd: output?.toolCostUsd,
     });
 
     if (run.entityType && run.entityId) {
       await this.timelineService.appendEvent({
-        tenantId,
+        tenantId: run.tenantId,
         entityType: this.mapEntityType(run.entityType),
         entityId: run.entityId,
         eventType: 'AUTOMATION_RUN_COMPLETED',
@@ -133,18 +129,15 @@ export class AutomationService {
   }
 
   async failRun(runId: string, tenantId: string, errorJson?: any) {
-    const run = await this.prisma.automationRun.update({
-      where: { id: runId },
-      data: {
-        status: AutomationRunStatus.FAILED,
-        completedAt: new Date(),
-        errorJson,
-      },
+    const run = await this.updateRunForTenant(runId, tenantId, {
+      status: AutomationRunStatus.FAILED,
+      completedAt: new Date(),
+      errorJson,
     });
 
     if (run.entityType && run.entityId) {
       await this.timelineService.appendEvent({
-        tenantId,
+        tenantId: run.tenantId,
         entityType: this.mapEntityType(run.entityType),
         entityId: run.entityId,
         eventType: 'AUTOMATION_RUN_FAILED',
@@ -161,22 +154,16 @@ export class AutomationService {
   }
 
   async cancelRun(runId: string, tenantId: string) {
-    return this.prisma.automationRun.update({
-      where: { id: runId },
-      data: {
-        status: AutomationRunStatus.CANCELLED,
-        completedAt: new Date(),
-      },
+    return this.updateRunForTenant(runId, tenantId, {
+      status: AutomationRunStatus.CANCELLED,
+      completedAt: new Date(),
     });
   }
 
   async approveRun(runId: string, tenantId: string, userId: string) {
-    return this.prisma.automationRun.update({
-      where: { id: runId },
-      data: {
-        approvedByUserId: userId,
-        approvedAt: new Date(),
-      },
+    return this.updateRunForTenant(runId, tenantId, {
+      approvedByUserId: userId,
+      approvedAt: new Date(),
     });
   }
 
@@ -322,6 +309,31 @@ export class AutomationService {
     }
 
     return { attributed: false };
+  }
+
+  private async updateRunForTenant(
+    runId: string,
+    tenantId: string,
+    data: Prisma.AutomationRunUpdateManyMutationInput,
+  ): Promise<AutomationRun> {
+    const result = await this.prisma.automationRun.updateMany({
+      where: { id: runId, tenantId },
+      data,
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+
+    return run;
   }
 
   private mapEntityType(type: string): TimelineEntityType {

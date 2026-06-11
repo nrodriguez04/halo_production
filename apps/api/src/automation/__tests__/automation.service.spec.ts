@@ -16,6 +16,7 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
       },
@@ -82,9 +83,11 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
-      prisma.automationRun.update.mockResolvedValue({
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
+        tenantId: 'tenant-1',
         entityType: 'deal',
         entityId: 'deal-1',
         workflowName: 'test',
@@ -106,9 +109,11 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
-      prisma.automationRun.update.mockResolvedValue({
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
+        tenantId: 'tenant-1',
         entityType: 'deal',
         entityId: 'deal-1',
       });
@@ -118,6 +123,37 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('cancelRun', () => {
+    it('should scope cancellation updates to the current tenant', async () => {
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+        status: 'CANCELLED',
+      });
+
+      const result = await service.cancelRun('run-1', 'tenant-1');
+
+      expect(result.status).toBe('CANCELLED');
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        data: expect.objectContaining({
+          status: 'CANCELLED',
+        }),
+      });
+    });
+
+    it('should throw NotFoundException when another tenant owns the run', async () => {
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.cancelRun('run-1', 'tenant-2')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(prisma.automationRun.findFirst).not.toHaveBeenCalled();
     });
   });
 
