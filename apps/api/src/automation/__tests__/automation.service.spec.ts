@@ -82,6 +82,9 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce({
+        id: 'run-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
@@ -106,6 +109,9 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce({
+        id: 'run-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
@@ -118,6 +124,27 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('tenant ownership checks', () => {
+    it.each([
+      ['startRun', () => service.startRun('run-1', 'tenant-2')],
+      [
+        'completeRun',
+        () =>
+          service.completeRun('run-1', 'tenant-2', {
+            outputJson: { success: true },
+          }),
+      ],
+      ['failRun', () => service.failRun('run-1', 'tenant-2', { code: 'TEST_ERROR' })],
+      ['cancelRun', () => service.cancelRun('run-1', 'tenant-2')],
+      ['approveRun', () => service.approveRun('run-1', 'tenant-2', 'user-1')],
+    ])('rejects cross-tenant mutation attempts in %s', async (_name, invoke) => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(invoke()).rejects.toThrow(NotFoundException);
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 
