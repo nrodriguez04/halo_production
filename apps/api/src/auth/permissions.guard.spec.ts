@@ -23,7 +23,7 @@ describe('PermissionsGuard', () => {
     reflector = {
       getAllAndOverride: jest.fn(),
     };
-    guard = new PermissionsGuard(reflector as Reflector);
+    guard = new PermissionsGuard(reflector as unknown as Reflector);
   });
 
   it('denies permission-gated routes when the token has no permission claims', () => {
