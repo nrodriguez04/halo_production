@@ -77,6 +77,7 @@ export class AutomationService {
   }
 
   async startRun(runId: string, tenantId: string) {
+    await this.findOwnedRunOrThrow(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -99,6 +100,7 @@ export class AutomationService {
       toolCostUsd?: number;
     },
   ) {
+    await this.findOwnedRunOrThrow(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -116,7 +118,7 @@ export class AutomationService {
 
     if (run.entityType && run.entityId) {
       await this.timelineService.appendEvent({
-        tenantId,
+        tenantId: run.tenantId,
         entityType: this.mapEntityType(run.entityType),
         entityId: run.entityId,
         eventType: 'AUTOMATION_RUN_COMPLETED',
@@ -133,6 +135,7 @@ export class AutomationService {
   }
 
   async failRun(runId: string, tenantId: string, errorJson?: any) {
+    await this.findOwnedRunOrThrow(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -144,7 +147,7 @@ export class AutomationService {
 
     if (run.entityType && run.entityId) {
       await this.timelineService.appendEvent({
-        tenantId,
+        tenantId: run.tenantId,
         entityType: this.mapEntityType(run.entityType),
         entityId: run.entityId,
         eventType: 'AUTOMATION_RUN_FAILED',
@@ -161,6 +164,7 @@ export class AutomationService {
   }
 
   async cancelRun(runId: string, tenantId: string) {
+    await this.findOwnedRunOrThrow(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -171,6 +175,7 @@ export class AutomationService {
   }
 
   async approveRun(runId: string, tenantId: string, userId: string) {
+    await this.findOwnedRunOrThrow(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -333,5 +338,17 @@ export class AutomationService {
       job: TimelineEntityType.JOB,
     };
     return map[type.toLowerCase()] || TimelineEntityType.DEAL;
+  }
+
+  private async findOwnedRunOrThrow(runId: string, tenantId: string) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+
+    return run;
   }
 }
