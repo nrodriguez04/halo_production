@@ -47,6 +47,10 @@ describe('AutomationService', () => {
     }).compile();
 
     service = module.get<AutomationService>(AutomationService);
+    prisma.automationRun.findFirst.mockResolvedValue({
+      id: 'run-1',
+      tenantId: 'tenant-1',
+    });
   });
 
   describe('createRun', () => {
@@ -84,6 +88,7 @@ describe('AutomationService', () => {
     it('should mark run as completed with output', async () => {
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'COMPLETED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -108,6 +113,7 @@ describe('AutomationService', () => {
     it('should mark run as failed with error', async () => {
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'FAILED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -118,6 +124,36 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('tenant-scoped mutations', () => {
+    it('should scope lifecycle updates to the caller tenant', async () => {
+      prisma.automationRun.update.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+        status: 'RUNNING',
+      });
+
+      await service.startRun('run-1', 'tenant-1');
+
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1' },
+        }),
+      );
+    });
+
+    it('should reject run mutations when the run is not owned by the tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.cancelRun('run-1', 'tenant-2')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 

@@ -97,6 +97,7 @@ describe('IntegrationCostControlService', () => {
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: null };
       return null;
     });
 
@@ -176,6 +177,34 @@ describe('IntegrationCostControlService', () => {
     if (decision.kind === 'DOWNGRADE_PROVIDER') {
       expect(['datazapp', 'propertyradar']).toContain(decision.suggestedProvider);
     }
+  });
+
+  it('blocks after every provider in a circular fallback chain is already over budget', async () => {
+    budgets.findApplicable.mockImplementation(async (intent: any) => [
+      {
+        id: `b_${intent.provider}`,
+        scope: 'provider',
+        scopeRef: intent.provider,
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      },
+    ]);
+    budgets.findOverHardCap.mockImplementation((buckets: any[]) => buckets[0]);
+    const exec = jest.fn(async () => ({ ok: true }));
+
+    const out = await service.checkAndCall({
+      ...baseIntent({
+        execute: exec,
+      }),
+      provider: 'batch_skiptrace',
+      action: 'append_contacts',
+    });
+
+    expect(out.decision.kind).toBe('BLOCK_OVER_BUDGET');
+    expect(exec).not.toHaveBeenCalled();
   });
 
   it('blocks when lead score is below the configured threshold', async () => {
