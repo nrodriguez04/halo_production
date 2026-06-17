@@ -16,6 +16,7 @@
 // which point this helper becomes unnecessary.
 
 import { randomUUID } from 'crypto';
+import type { IntegrationBudgetBucket } from '@prisma/client';
 import { prisma } from './prisma-client';
 
 export interface WorkerCostEntry {
@@ -109,28 +110,25 @@ export async function isOverHardCap(
   return refreshedBuckets.some((b) => b.currentSpendUsd >= b.hardCapUsd);
 }
 
-async function findApplicableBuckets(accountId: string, providerKey: string) {
+async function findApplicableBuckets(
+  accountId: string,
+  providerKey: string,
+): Promise<IntegrationBudgetBucket[]> {
   return prisma.integrationBudgetBucket.findMany({
-      where: {
-        accountId: { in: [accountId, 'GLOBAL'] },
-        enabled: true,
-        OR: [
-          { scope: 'global', scopeRef: 'ALL' },
-          { scope: 'provider', scopeRef: providerKey },
-        ],
-      },
-    });
+    where: {
+      accountId: { in: [accountId, 'GLOBAL'] },
+      enabled: true,
+      OR: [
+        { scope: 'global', scopeRef: 'ALL' },
+        { scope: 'provider', scopeRef: providerKey },
+      ],
+    },
+  });
 }
 
-async function refreshExpiredBuckets<
-  TBucket extends {
-    id: string;
-    period: string;
-    periodResetsAt: Date;
-    currentSpendUsd: number;
-    hardCapUsd: number;
-  },
->(buckets: TBucket[]): Promise<TBucket[]> {
+async function refreshExpiredBuckets(
+  buckets: IntegrationBudgetBucket[],
+): Promise<IntegrationBudgetBucket[]> {
   const now = new Date();
 
   return Promise.all(
@@ -147,7 +145,7 @@ async function refreshExpiredBuckets<
           periodResetsAt: resetsAt,
           currentSpendUsd: 0,
         },
-      }) as Promise<TBucket>;
+      });
     }),
   );
 }
