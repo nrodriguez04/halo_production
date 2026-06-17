@@ -77,6 +77,7 @@ export class AutomationService {
   }
 
   async startRun(runId: string, tenantId: string) {
+    await this.getOwnedRunOrThrow(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -99,6 +100,7 @@ export class AutomationService {
       toolCostUsd?: number;
     },
   ) {
+    await this.getOwnedRunOrThrow(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -133,6 +135,7 @@ export class AutomationService {
   }
 
   async failRun(runId: string, tenantId: string, errorJson?: any) {
+    await this.getOwnedRunOrThrow(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -161,6 +164,7 @@ export class AutomationService {
   }
 
   async cancelRun(runId: string, tenantId: string) {
+    await this.getOwnedRunOrThrow(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -171,6 +175,7 @@ export class AutomationService {
   }
 
   async approveRun(runId: string, tenantId: string, userId: string) {
+    await this.getOwnedRunOrThrow(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -181,16 +186,10 @@ export class AutomationService {
   }
 
   async getRun(runId: string, tenantId: string) {
-    const run = await this.prisma.automationRun.findFirst({
-      where: { id: runId, tenantId },
-      include: { messages: true, childRuns: true },
+    return this.getOwnedRunOrThrow(runId, tenantId, {
+      messages: true,
+      childRuns: true,
     });
-
-    if (!run) {
-      throw new NotFoundException(`AutomationRun ${runId} not found`);
-    }
-
-    return run;
   }
 
   async listRuns(
@@ -333,5 +332,22 @@ export class AutomationService {
       job: TimelineEntityType.JOB,
     };
     return map[type.toLowerCase()] || TimelineEntityType.DEAL;
+  }
+
+  private async getOwnedRunOrThrow<TInclude extends object | undefined = undefined>(
+    runId: string,
+    tenantId: string,
+    include?: TInclude,
+  ) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId },
+      ...(include ? { include } : {}),
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+
+    return run;
   }
 }

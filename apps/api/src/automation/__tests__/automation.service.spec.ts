@@ -16,7 +16,10 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'run-1',
+          tenantId: 'tenant-1',
+        }),
         findMany: jest.fn(),
       },
       message: {
@@ -101,6 +104,9 @@ describe('AutomationService', () => {
           eventType: 'AUTOMATION_RUN_COMPLETED',
         }),
       );
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
     });
   });
 
@@ -140,6 +146,35 @@ describe('AutomationService', () => {
       await expect(
         service.getRun('missing', 'tenant-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('tenant ownership checks', () => {
+    it('throws NotFoundException instead of mutating another tenant run', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.cancelRun('run-foreign', 'tenant-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+    });
+
+    it('looks up approveRun by both run id and tenant id', async () => {
+      prisma.automationRun.update.mockResolvedValue({
+        id: 'run-1',
+        approvedByUserId: 'user-1',
+      });
+
+      await service.approveRun('run-1', 'tenant-1', 'user-1');
+
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1' },
+        }),
+      );
     });
   });
 
