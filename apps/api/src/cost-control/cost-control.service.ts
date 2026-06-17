@@ -100,7 +100,7 @@ export class IntegrationCostControlService {
   ): Promise<CheckAndCallResult<R>> {
     triedProviders.add(intent.provider);
 
-    const decision = await this.preflight(intent);
+    const decision = await this.preflight(intent, triedProviders);
 
     switch (decision.kind) {
       case 'BLOCK_FEATURE_DISABLED':
@@ -143,10 +143,16 @@ export class IntegrationCostControlService {
    * row, idempotency mark, and rate-limit token consumption — all of
    * which are reverted/credited if the call ultimately fails.
    */
-  async preflight<P>(intent: CostIntent<P, unknown>): Promise<CostDecision> {
+  async preflight<P>(
+    intent: CostIntent<P, unknown>,
+    triedProviders?: Set<string>,
+  ): Promise<CostDecision> {
     if (!intent.context.accountId || intent.context.accountId === 'system') {
       throw new Error('CostIntent.context.accountId is required and must not be "system"');
     }
+
+    const attemptedProviders = triedProviders ?? new Set<string>();
+    attemptedProviders.add(intent.provider);
 
     // 1. Provider feature flag (registry + tenant override)
     const provider = await this.findProvider(intent.provider);
@@ -208,7 +214,7 @@ export class IntegrationCostControlService {
       const overHard = this.budgets.findOverHardCap(buckets, estimatedCost);
       if (overHard) {
         if (hasFallback(intent.provider)) {
-          const candidate = nextFallback(intent.provider, new Set([intent.provider]));
+          const candidate = nextFallback(intent.provider, attemptedProviders);
           if (candidate) {
             return {
               kind: 'DOWNGRADE_PROVIDER',

@@ -97,6 +97,7 @@ describe('IntegrationCostControlService', () => {
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: null };
       return null;
     });
 
@@ -258,5 +259,44 @@ describe('IntegrationCostControlService', () => {
     expect(exec).not.toHaveBeenCalled();
     expect(out.fromCache).toBe(true);
     expect((out.result as any).cachedOk).toBe(true);
+  });
+
+  it('blocks after exhausting circular skip-trace fallbacks', async () => {
+    let preflightCalls = 0;
+
+    budgets.findApplicable.mockImplementation(async (intent: CostIntent) => {
+      preflightCalls += 1;
+      if (preflightCalls > 4) {
+        throw new Error('fallback loop detected');
+      }
+
+      return [
+        {
+          id: `b_${intent.provider}`,
+          scope: 'provider',
+          scopeRef: intent.provider,
+          period: 'month',
+          hardCapUsd: 100,
+          softCapUsd: 80,
+          currentSpendUsd: 99.95,
+          enabled: true,
+        },
+      ];
+    });
+    budgets.findOverHardCap.mockImplementation((buckets: Array<any>) => buckets[0]);
+
+    const exec = jest.fn(async () => ({ ok: true }));
+    const out = await service.checkAndCall({
+      ...baseIntent(),
+      provider: 'batch_skiptrace',
+      action: 'append_contacts',
+      execute: exec,
+    });
+
+    expect(out.decision.kind).toBe('BLOCK_OVER_BUDGET');
+    expect(out.result).toBeNull();
+    expect(out.fromCache).toBe(false);
+    expect(exec).not.toHaveBeenCalled();
+    expect(preflightCalls).toBe(3);
   });
 });
