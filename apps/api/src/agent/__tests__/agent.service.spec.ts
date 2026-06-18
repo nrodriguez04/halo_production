@@ -58,6 +58,10 @@ describe('AgentService', () => {
       },
       automationRun: {
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'run-1',
+          tenantId: 'tenant-1',
+        }),
         update: jest.fn().mockResolvedValue({ id: 'run-1' }),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -147,6 +151,21 @@ describe('AgentService', () => {
           content: 'Hi',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject automation runs that belong to another tenant', async () => {
+      prisma.deal.findFirst.mockResolvedValue(mockDeal);
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+          content: 'Hello',
+          automationRunId: 'foreign-run',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 
