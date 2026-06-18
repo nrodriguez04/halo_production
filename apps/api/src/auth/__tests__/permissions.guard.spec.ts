@@ -49,5 +49,5 @@ function makeContext(user: {
     switchToHttp: () => ({
       getRequest: () => ({ user }),
     }),
-  } as ExecutionContext;
+  } as unknown as ExecutionContext;
 }
