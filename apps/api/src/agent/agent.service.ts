@@ -291,6 +291,8 @@ export class AgentService {
         },
       });
       automationRunId = run.id;
+    } else {
+      await this.requireOwnedAutomationRun(automationRunId, accountId);
     }
 
     const message = await this.prisma.message.create({
@@ -411,6 +413,7 @@ export class AgentService {
     });
 
     if (message.automationRunId) {
+      await this.requireOwnedAutomationRun(message.automationRunId, accountId);
       await this.prisma.automationRun.update({
         where: { id: message.automationRunId },
         data: { status: 'AWAITING_APPROVAL' },
@@ -577,5 +580,17 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async requireOwnedAutomationRun(runId: string, accountId: string) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId: accountId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+
+    return run;
   }
 }
