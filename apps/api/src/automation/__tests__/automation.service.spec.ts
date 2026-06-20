@@ -80,10 +80,41 @@ describe('AutomationService', () => {
     });
   });
 
-  describe('completeRun', () => {
-    it('should mark run as completed with output', async () => {
+  describe('startRun', () => {
+    it('should only start runs owned by the current tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
+        status: 'RUNNING',
+      });
+
+      const result = await service.startRun('run-1', 'tenant-1');
+
+      expect(result.status).toBe('RUNNING');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1' },
+        }),
+      );
+    });
+  });
+
+  describe('completeRun', () => {
+    it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
+      prisma.automationRun.update.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'COMPLETED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -96,8 +127,12 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('COMPLETED');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+      });
       expect(timelineService.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
+          tenantId: 'tenant-1',
           eventType: 'AUTOMATION_RUN_COMPLETED',
         }),
       );
@@ -106,8 +141,13 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
+        tenantId: 'tenant-1',
         status: 'FAILED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -118,6 +158,18 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('approveRun', () => {
+    it('should reject cross-tenant approval attempts', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.approveRun('run-foreign', 'tenant-1', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 

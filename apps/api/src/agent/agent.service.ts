@@ -291,6 +291,8 @@ export class AgentService {
         },
       });
       automationRunId = run.id;
+    } else {
+      await this.assertAutomationRunOwnership(automationRunId, accountId);
     }
 
     const message = await this.prisma.message.create({
@@ -388,6 +390,13 @@ export class AgentService {
     if (!channelEnabled) {
       throw new ForbiddenException(
         `Channel ${message.channel} is currently disabled`,
+      );
+    }
+
+    if (message.automationRunId) {
+      await this.assertAutomationRunOwnership(
+        message.automationRunId,
+        accountId,
       );
     }
 
@@ -577,5 +586,17 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async assertAutomationRunOwnership(runId: string, accountId: string) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId: accountId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+
+    return run;
   }
 }
