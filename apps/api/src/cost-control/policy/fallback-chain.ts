@@ -26,7 +26,10 @@ const FALLBACK_CHAINS: Record<string, string[]> = {
   google_geocoding: [],
 };
 
-export function nextFallback(providerKey: string, alreadyTried: Set<string>): string | null {
+export function nextFallback(
+  providerKey: string,
+  alreadyTried: ReadonlySet<string>,
+): string | null {
   const chain = FALLBACK_CHAINS[providerKey] ?? [];
   for (const candidate of chain) {
     if (!alreadyTried.has(candidate)) return candidate;
