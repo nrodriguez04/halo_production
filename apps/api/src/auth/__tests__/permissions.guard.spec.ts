@@ -19,13 +19,13 @@ describe('PermissionsGuard', () => {
       switchToHttp: () => ({
         getRequest: () => ({ user }),
       }),
-    }) as ExecutionContext;
+    }) as unknown as ExecutionContext;
 
   beforeEach(() => {
     reflector = {
       getAllAndOverride: jest.fn(),
     };
-    guard = new PermissionsGuard(reflector as Reflector);
+    guard = new PermissionsGuard(reflector as unknown as Reflector);
   });
 
   it('allows requests without permission metadata', () => {
