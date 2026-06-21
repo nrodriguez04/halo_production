@@ -97,6 +97,7 @@ describe('IntegrationCostControlService', () => {
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: null };
       return null;
     });
 
@@ -176,6 +177,46 @@ describe('IntegrationCostControlService', () => {
     if (decision.kind === 'DOWNGRADE_PROVIDER') {
       expect(['datazapp', 'propertyradar']).toContain(decision.suggestedProvider);
     }
+  });
+
+  it('fails closed after exhausting a circular fallback chain', async () => {
+    const overCapBucket = (provider: string) => ({
+      id: `b_${provider}`,
+      scope: 'provider',
+      scopeRef: provider,
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
+
+    const seenProviders: string[] = [];
+    budgets.findApplicable.mockImplementation(async (intent: any) => {
+      seenProviders.push(intent.provider);
+      if (seenProviders.indexOf(intent.provider) !== seenProviders.length - 1) {
+        throw new Error(`provider repeated: ${intent.provider}`);
+      }
+      return [overCapBucket(intent.provider)];
+    });
+    budgets.findOverHardCap.mockImplementation((buckets: any[]) => buckets[0] ?? null);
+
+    const execute = jest.fn(async () => ({ ok: true }));
+    const result = await service.checkAndCall({
+      ...baseIntent(),
+      provider: 'batch_skiptrace',
+      action: 'append_contacts',
+      execute,
+    });
+
+    expect(result.decision.kind).toBe('BLOCK_OVER_BUDGET');
+    expect(result.result).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    expect(seenProviders).toEqual([
+      'batch_skiptrace',
+      'datazapp',
+      'propertyradar',
+    ]);
   });
 
   it('blocks when lead score is below the configured threshold', async () => {
