@@ -37,6 +37,10 @@ export class AutomationService {
       throw new Error('System is disabled — automation runs cannot be created');
     }
 
+    if (input.parentRunId) {
+      await this.assertRunOwnership(input.parentRunId, input.tenantId);
+    }
+
     const run = await this.prisma.automationRun.create({
       data: {
         tenantId: input.tenantId,
@@ -77,6 +81,7 @@ export class AutomationService {
   }
 
   async startRun(runId: string, tenantId: string) {
+    await this.assertRunOwnership(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -99,6 +104,7 @@ export class AutomationService {
       toolCostUsd?: number;
     },
   ) {
+    await this.assertRunOwnership(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -133,6 +139,7 @@ export class AutomationService {
   }
 
   async failRun(runId: string, tenantId: string, errorJson?: any) {
+    await this.assertRunOwnership(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -161,6 +168,7 @@ export class AutomationService {
   }
 
   async cancelRun(runId: string, tenantId: string) {
+    await this.assertRunOwnership(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -171,6 +179,7 @@ export class AutomationService {
   }
 
   async approveRun(runId: string, tenantId: string, userId: string) {
+    await this.assertRunOwnership(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -183,7 +192,10 @@ export class AutomationService {
   async getRun(runId: string, tenantId: string) {
     const run = await this.prisma.automationRun.findFirst({
       where: { id: runId, tenantId },
-      include: { messages: true, childRuns: true },
+      include: {
+        messages: { where: { accountId: tenantId } },
+        childRuns: { where: { tenantId } },
+      },
     });
 
     if (!run) {
@@ -322,6 +334,16 @@ export class AutomationService {
     }
 
     return { attributed: false };
+  }
+
+  private async assertRunOwnership(runId: string, tenantId: string) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
   }
 
   private mapEntityType(type: string): TimelineEntityType {

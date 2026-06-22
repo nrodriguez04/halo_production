@@ -4,7 +4,11 @@ import { PrismaService } from '../../prisma.service';
 import { CommunicationsService } from '../../communications/communications.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
 describe('AgentService', () => {
   let service: AgentService;
@@ -58,6 +62,7 @@ describe('AgentService', () => {
       },
       automationRun: {
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
+        findFirst: jest.fn(),
         update: jest.fn().mockResolvedValue({ id: 'run-1' }),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -139,6 +144,21 @@ describe('AgentService', () => {
       );
     });
 
+    it('rejects caller-supplied automation runs from another tenant', async () => {
+      prisma.deal.findFirst.mockResolvedValue(mockDeal);
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+          content: 'Hello',
+          automationRunId: 'run-foreign',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundException for missing deal', async () => {
       prisma.deal.findFirst.mockResolvedValue(null);
 
@@ -159,6 +179,7 @@ describe('AgentService', () => {
         channel: 'sms',
         automationRunId: 'run-1',
       });
+      prisma.automationRun.findFirst.mockResolvedValue({ id: 'run-1' });
       prisma.message.update.mockResolvedValue({
         id: 'msg-1',
         status: 'pending_approval',
@@ -172,6 +193,27 @@ describe('AgentService', () => {
           data: { status: 'pending_approval' },
         }),
       );
+    });
+
+    it('does not update automation runs outside the caller tenant', async () => {
+      prisma.message.findFirst.mockResolvedValue({
+        id: 'msg-1',
+        accountId: 'tenant-1',
+        status: 'draft',
+        channel: 'sms',
+        automationRunId: 'run-foreign',
+      });
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+      prisma.message.update.mockResolvedValue({
+        id: 'msg-1',
+        status: 'pending_approval',
+      });
+
+      await service.requestSend('msg-1', 'tenant-1');
+
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+      const timelinePayload = timelineService.appendEvent.mock.calls[0][0].payload;
+      expect(timelinePayload.automationRunId).toBeUndefined();
     });
 
     it('should reject non-draft messages', async () => {

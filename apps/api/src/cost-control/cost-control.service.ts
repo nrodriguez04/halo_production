@@ -100,7 +100,7 @@ export class IntegrationCostControlService {
   ): Promise<CheckAndCallResult<R>> {
     triedProviders.add(intent.provider);
 
-    const decision = await this.preflight(intent);
+    const decision = await this.preflight(intent, triedProviders);
 
     switch (decision.kind) {
       case 'BLOCK_FEATURE_DISABLED':
@@ -143,7 +143,10 @@ export class IntegrationCostControlService {
    * row, idempotency mark, and rate-limit token consumption — all of
    * which are reverted/credited if the call ultimately fails.
    */
-  async preflight<P>(intent: CostIntent<P, unknown>): Promise<CostDecision> {
+  async preflight<P>(
+    intent: CostIntent<P, unknown>,
+    triedProviders: Set<string> = new Set([intent.provider]),
+  ): Promise<CostDecision> {
     if (!intent.context.accountId || intent.context.accountId === 'system') {
       throw new Error('CostIntent.context.accountId is required and must not be "system"');
     }
@@ -208,7 +211,11 @@ export class IntegrationCostControlService {
       const overHard = this.budgets.findOverHardCap(buckets, estimatedCost);
       if (overHard) {
         if (hasFallback(intent.provider)) {
-          const candidate = nextFallback(intent.provider, new Set([intent.provider]));
+          const candidate = await this.findAvailableFallbackProvider(
+            intent.provider,
+            intent.context.accountId,
+            triedProviders,
+          );
           if (candidate) {
             return {
               kind: 'DOWNGRADE_PROVIDER',
@@ -368,6 +375,33 @@ export class IntegrationCostControlService {
   }
 
   // -- Internals --------------------------------------------------------
+
+  private async findAvailableFallbackProvider(
+    providerKey: string,
+    accountId: string,
+    triedProviders: Set<string>,
+  ): Promise<string | null> {
+    const attemptedProviders = new Set(triedProviders);
+    let candidate = nextFallback(providerKey, attemptedProviders);
+
+    while (candidate) {
+      const provider = await this.findProvider(candidate);
+      if (provider?.enabled) {
+        const tenantFlag = await this.findTenantFlag(
+          accountId,
+          `provider.${candidate}`,
+        );
+        if (!tenantFlag || tenantFlag.enabled) {
+          return candidate;
+        }
+      }
+
+      attemptedProviders.add(candidate);
+      candidate = nextFallback(providerKey, attemptedProviders);
+    }
+
+    return null;
+  }
 
   private async runAndRecord<P, R>(
     intent: CostIntent<P, R>,

@@ -178,6 +178,31 @@ describe('IntegrationCostControlService', () => {
     }
   });
 
+  it('skips disabled fallback providers when selecting a downgrade', async () => {
+    prisma.integrationProvider.findUnique.mockImplementation(async (args: any) => {
+      if (args.where.key === 'attom') return { id: 'p_attom', key: 'attom', enabled: true, rateLimitPerMin: 60 };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: false, rateLimitPerMin: null };
+      if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
+      if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      return null;
+    });
+    budgets.findApplicable.mockResolvedValueOnce([
+      { id: 'b_1', scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
+    ]);
+    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true });
+
+    const decision = await service.preflight({
+      ...baseIntent(),
+      provider: 'batch_skiptrace',
+      action: 'append_contacts',
+    });
+
+    expect(decision.kind).toBe('DOWNGRADE_PROVIDER');
+    if (decision.kind === 'DOWNGRADE_PROVIDER') {
+      expect(decision.suggestedProvider).toBe('propertyradar');
+    }
+  });
+
   it('blocks when lead score is below the configured threshold', async () => {
     pricing.estimate.mockResolvedValue(0.1);
     const decision = await service.preflight({
@@ -258,5 +283,37 @@ describe('IntegrationCostControlService', () => {
     expect(exec).not.toHaveBeenCalled();
     expect(out.fromCache).toBe(true);
     expect((out.result as any).cachedOk).toBe(true);
+  });
+
+  it('returns BLOCK_OVER_BUDGET after exhausting a circular fallback chain', async () => {
+    prisma.integrationProvider.findUnique.mockImplementation(async (args: any) => {
+      if (args.where.key === 'attom') return { id: 'p_attom', key: 'attom', enabled: true, rateLimitPerMin: 60 };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
+      if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      return null;
+    });
+    const overHard = {
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'batch_skiptrace',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    };
+    budgets.findApplicable.mockResolvedValue(overHard ? [overHard] : []);
+    budgets.findOverHardCap.mockReturnValue(overHard);
+
+    const exec = jest.fn(async () => ({ ok: true }));
+    const result = await service.checkAndCall({
+      ...baseIntent({ execute: exec }),
+      provider: 'batch_skiptrace',
+      action: 'append_contacts',
+    });
+
+    expect(result.decision.kind).toBe('BLOCK_OVER_BUDGET');
+    expect(exec).not.toHaveBeenCalled();
   });
 });

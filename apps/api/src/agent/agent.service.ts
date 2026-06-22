@@ -268,7 +268,9 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
-    if (!automationRunId) {
+    if (automationRunId) {
+      await this.getAutomationRunForAccount(automationRunId, accountId);
+    } else {
       const run = await this.prisma.automationRun.create({
         data: {
           tenantId: accountId,
@@ -391,6 +393,13 @@ export class AgentService {
       );
     }
 
+    const automationRun = message.automationRunId
+      ? await this.findAutomationRunForAccount(
+          message.automationRunId,
+          accountId,
+        )
+      : null;
+
     const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { status: 'pending_approval' },
@@ -404,15 +413,15 @@ export class AgentService {
       payload: {
         source: 'openclaw',
         agentName: input?.agentName,
-        automationRunId: input?.automationRunId || message.automationRunId,
+        ...(automationRun ? { automationRunId: automationRun.id } : {}),
       },
       actorId: null,
       actorType: TimelineActorType.system,
     });
 
-    if (message.automationRunId) {
+    if (automationRun) {
       await this.prisma.automationRun.update({
-        where: { id: message.automationRunId },
+        where: { id: automationRun.id },
         data: { status: 'AWAITING_APPROVAL' },
       });
     }
@@ -453,6 +462,21 @@ export class AgentService {
     });
 
     return { event, logged: true };
+  }
+
+  private async getAutomationRunForAccount(runId: string, accountId: string) {
+    const run = await this.findAutomationRunForAccount(runId, accountId);
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${runId} not found`);
+    }
+    return run;
+  }
+
+  private findAutomationRunForAccount(runId: string, accountId: string) {
+    return this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId: accountId },
+      select: { id: true },
+    });
   }
 
   async classifyInbound(

@@ -78,10 +78,27 @@ describe('AutomationService', () => {
         }),
       );
     });
+
+    it('rejects parent runs owned by another tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createRun({
+          tenantId: 'tenant-1',
+          parentRunId: 'run-parent',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.automationRun.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
@@ -102,10 +119,24 @@ describe('AutomationService', () => {
         }),
       );
     });
+
+    it('rejects completion when the run is outside the caller tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(service.completeRun('run-1', 'tenant-1')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
@@ -132,6 +163,13 @@ describe('AutomationService', () => {
 
       const result = await service.getRun('run-1', 'tenant-1');
       expect(result.id).toBe('run-1');
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        include: {
+          messages: { where: { accountId: 'tenant-1' } },
+          childRuns: { where: { tenantId: 'tenant-1' } },
+        },
+      });
     });
 
     it('should throw NotFoundException for missing run', async () => {
