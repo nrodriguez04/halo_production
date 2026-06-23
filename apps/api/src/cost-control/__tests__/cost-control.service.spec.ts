@@ -95,6 +95,7 @@ describe('IntegrationCostControlService', () => {
     prisma.integrationProvider.findUnique.mockImplementation(async (args: any) => {
       if (args.where.key === 'attom') return { id: 'p_attom', key: 'attom', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
       return null;
@@ -176,6 +177,33 @@ describe('IntegrationCostControlService', () => {
     if (decision.kind === 'DOWNGRADE_PROVIDER') {
       expect(['datazapp', 'propertyradar']).toContain(decision.suggestedProvider);
     }
+  });
+
+  it('blocks once every provider in a circular fallback chain has already been tried', async () => {
+    budgets.findApplicable.mockResolvedValueOnce([
+      { id: 'b_1', scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
+    ]);
+    budgets.findOverHardCap.mockReturnValueOnce({
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'batch_skiptrace',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
+
+    const decision = await service.preflight(
+      {
+        ...baseIntent(),
+        provider: 'batch_skiptrace',
+        action: 'append_contacts',
+      },
+      new Set(['batch_skiptrace', 'datazapp', 'propertyradar']),
+    );
+
+    expect(decision.kind).toBe('BLOCK_OVER_BUDGET');
   });
 
   it('blocks when lead score is below the configured threshold', async () => {

@@ -20,6 +20,36 @@ export class AuthGuard implements CanActivate {
       ? authHeader.slice(7)
       : null;
 
+    if (token && this.isInternalToken(token)) {
+      const accountId = this.normalizeHeaderValue(
+        request.headers['x-internal-account-id'],
+      );
+      if (!accountId) {
+        throw new ForbiddenException(
+          'Internal API token requires X-Internal-Account-Id',
+        );
+      }
+
+      const actor = this.normalizeInternalActor(
+        this.normalizeHeaderValue(request.headers['x-internal-actor']),
+      );
+      const user = {
+        userId: actor,
+        accountId,
+        permissions: [],
+        roles: [],
+        claims: {},
+        session: null,
+        actor,
+      };
+
+      (request as any).user = user;
+      (request as any).userId = user.userId;
+      (request as any).accountId = accountId;
+      (request as any).actor = actor;
+      return true;
+    }
+
     if (!token) {
       throw new UnauthorizedException('Missing bearer token');
     }
@@ -55,11 +85,13 @@ export class AuthGuard implements CanActivate {
         roles,
         claims,
         session,
+        actor: 'user' as const,
       };
 
       (request as any).user = user;
       (request as any).userId = userId;
       (request as any).accountId = accountId;
+      (request as any).actor = user.actor;
     } catch (err) {
       if (err instanceof ForbiddenException) throw err;
       if (err instanceof UnauthorizedException) throw err;
@@ -132,6 +164,29 @@ export class AuthGuard implements CanActivate {
       return value.split(' ').filter(Boolean);
     }
     return [];
+  }
+
+  private isInternalToken(token: string): boolean {
+    const configured = process.env.INTERNAL_API_TOKEN;
+    return Boolean(configured) && token === configured;
+  }
+
+  private normalizeHeaderValue(
+    value: string | string[] | undefined,
+  ): string | undefined {
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  }
+
+  private normalizeInternalActor(
+    actor: string | undefined,
+  ): 'system' | 'worker' | 'user' {
+    if (actor === 'worker' || actor === 'user' || actor === 'system') {
+      return actor;
+    }
+    return 'system';
   }
 }
 

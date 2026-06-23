@@ -267,7 +267,10 @@ export class AgentService {
       throw new NotFoundException(`Deal ${dealId} not found`);
     }
 
-    let automationRunId = input.automationRunId;
+    let automationRunId = await this.getOwnedAutomationRunId(
+      accountId,
+      input.automationRunId,
+    );
     if (!automationRunId) {
       const run = await this.prisma.automationRun.create({
         data: {
@@ -391,6 +394,17 @@ export class AgentService {
       );
     }
 
+    const messageAutomationRunId = await this.getOwnedAutomationRunId(
+      accountId,
+      message.automationRunId ?? undefined,
+    );
+    const requestedAutomationRunId = await this.getOwnedAutomationRunId(
+      accountId,
+      input?.automationRunId,
+    );
+    const timelineAutomationRunId =
+      requestedAutomationRunId ?? messageAutomationRunId;
+
     const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { status: 'pending_approval' },
@@ -404,15 +418,15 @@ export class AgentService {
       payload: {
         source: 'openclaw',
         agentName: input?.agentName,
-        automationRunId: input?.automationRunId || message.automationRunId,
+        automationRunId: timelineAutomationRunId,
       },
       actorId: null,
       actorType: TimelineActorType.system,
     });
 
-    if (message.automationRunId) {
+    if (messageAutomationRunId) {
       await this.prisma.automationRun.update({
-        where: { id: message.automationRunId },
+        where: { id: messageAutomationRunId },
         data: { status: 'AWAITING_APPROVAL' },
       });
     }
@@ -437,6 +451,11 @@ export class AgentService {
       throw new NotFoundException(`Deal ${dealId} not found`);
     }
 
+    const automationRunId = await this.getOwnedAutomationRunId(
+      accountId,
+      input.automationRunId,
+    );
+
     const event = await this.timelineService.appendEvent({
       tenantId: accountId,
       entityType: TimelineEntityType.DEAL,
@@ -446,7 +465,7 @@ export class AgentService {
         text: input.text,
         source: 'openclaw',
         agentName: input.agentName,
-        automationRunId: input.automationRunId,
+        automationRunId,
       },
       actorId: null,
       actorType: TimelineActorType.system,
@@ -577,5 +596,25 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async getOwnedAutomationRunId(
+    accountId: string,
+    automationRunId: string | undefined,
+  ) {
+    if (!automationRunId) {
+      return undefined;
+    }
+
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: automationRunId, tenantId: accountId },
+      select: { id: true },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+    }
+
+    return run.id;
   }
 }
