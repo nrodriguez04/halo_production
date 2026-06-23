@@ -37,6 +37,11 @@ describe('AutomationService', () => {
       getSettings: jest.fn().mockResolvedValue({ enabled: true }),
     };
 
+    prisma.automationRun.findFirst.mockResolvedValue({
+      id: 'run-1',
+      tenantId: 'tenant-1',
+    });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AutomationService,
@@ -101,6 +106,17 @@ describe('AutomationService', () => {
           eventType: 'AUTOMATION_RUN_COMPLETED',
         }),
       );
+    });
+  });
+
+  describe('tenant ownership checks', () => {
+    it('rejects lifecycle mutations for runs outside the caller tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.cancelRun('run-foreign', 'tenant-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 
