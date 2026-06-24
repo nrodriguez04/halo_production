@@ -1,7 +1,7 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
-import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+import { CurrentAccountId, CurrentUser, CurrentUserId } from '../auth/decorators';
 import { SkipTraceService } from './skip-trace.service';
 
 const SkipTraceBody = z.object({
@@ -23,9 +23,15 @@ export class SkipTraceController {
   async appendContacts(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
+    @CurrentUser()
+    user?: { actor?: 'user' | 'system' | 'worker'; userId?: string },
     @Body() raw: unknown,
   ) {
     const body = SkipTraceBody.parse(raw);
+    const actor =
+      user?.actor === 'worker' || user?.actor === 'system'
+        ? user.actor
+        : 'user';
     // Re-shape into SkipTraceInput so optional fields stay optional and
     // the required `leadId` is preserved.
     return this.service.appendContacts(
@@ -38,7 +44,7 @@ export class SkipTraceController {
         state: body.state,
         zip: body.zip,
       },
-      { accountId, actor: 'user', userId, leadId: body.leadId },
+      { accountId, actor, userId, leadId: body.leadId },
     );
   }
 }

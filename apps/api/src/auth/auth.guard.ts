@@ -9,6 +9,10 @@ import {
 import { Request } from 'express';
 import { descope } from './descope.client';
 
+const INTERNAL_ACCOUNT_HEADER = 'x-internal-account-id';
+const INTERNAL_ACTOR_HEADER = 'x-internal-actor';
+const INTERNAL_ACTORS = new Set(['system', 'user', 'worker']);
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
@@ -22,6 +26,11 @@ export class AuthGuard implements CanActivate {
 
     if (!token) {
       throw new UnauthorizedException('Missing bearer token');
+    }
+
+    if (this.isInternalToken(token)) {
+      this.authenticateInternalRequest(request);
+      return true;
     }
 
     try {
@@ -67,6 +76,40 @@ export class AuthGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private isInternalToken(token: string): boolean {
+    const expected = process.env.INTERNAL_API_TOKEN;
+    return Boolean(expected && token === expected);
+  }
+
+  private authenticateInternalRequest(request: Request): void {
+    const accountId = this.readHeader(request, INTERNAL_ACCOUNT_HEADER);
+    if (!accountId) {
+      throw new ForbiddenException(
+        'Internal requests must include X-Internal-Account-Id',
+      );
+    }
+
+    const actorHeader =
+      this.readHeader(request, INTERNAL_ACTOR_HEADER)?.toLowerCase() ??
+      'system';
+    const actor = INTERNAL_ACTORS.has(actorHeader) ? actorHeader : 'system';
+    const userId = actor === 'user' ? undefined : actor;
+
+    const user = {
+      userId,
+      accountId,
+      permissions: [],
+      roles: [],
+      claims: { internal: true, actor },
+      session: null,
+      actor,
+    };
+
+    (request as any).user = user;
+    (request as any).userId = userId;
+    (request as any).accountId = accountId;
   }
 
   /**
@@ -132,6 +175,17 @@ export class AuthGuard implements CanActivate {
       return value.split(' ').filter(Boolean);
     }
     return [];
+  }
+
+  private readHeader(request: Request, name: string): string | undefined {
+    const value = request.headers[name];
+    if (Array.isArray(value)) {
+      return value[0]?.trim() || undefined;
+    }
+    if (typeof value === 'string') {
+      return value.trim() || undefined;
+    }
+    return undefined;
   }
 }
 
