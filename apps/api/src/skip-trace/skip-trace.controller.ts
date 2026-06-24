@@ -24,7 +24,7 @@ export class SkipTraceController {
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
     @CurrentUser()
-    user?: { actor?: 'user' | 'system' | 'worker'; userId?: string },
+    user: { actor?: 'user' | 'system' | 'worker'; userId?: string } | undefined,
     @Body() raw: unknown,
   ) {
     const body = SkipTraceBody.parse(raw);
