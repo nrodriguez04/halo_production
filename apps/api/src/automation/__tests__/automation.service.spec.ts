@@ -16,7 +16,7 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: 'run-1', tenantId: 'tenant-1' }),
         findMany: jest.fn(),
       },
       message: {
@@ -119,6 +119,24 @@ describe('AutomationService', () => {
 
       expect(result.status).toBe('FAILED');
     });
+  });
+
+  describe('tenant ownership enforcement', () => {
+    it.each([
+      ['startRun', () => service.startRun('run-foreign', 'tenant-1')],
+      ['completeRun', () => service.completeRun('run-foreign', 'tenant-1')],
+      ['failRun', () => service.failRun('run-foreign', 'tenant-1', { code: 'X' })],
+      ['cancelRun', () => service.cancelRun('run-foreign', 'tenant-1')],
+      ['approveRun', () => service.approveRun('run-foreign', 'tenant-1', 'user-1')],
+    ])(
+      'should refuse to mutate a run outside the tenant via %s',
+      async (_name, invoke) => {
+        prisma.automationRun.findFirst.mockResolvedValue(null);
+
+        await expect(invoke()).rejects.toThrow(NotFoundException);
+        expect(prisma.automationRun.update).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('getRun', () => {
