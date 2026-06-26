@@ -268,7 +268,9 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
-    if (!automationRunId) {
+    if (automationRunId) {
+      await this.requireOwnedAutomationRun(automationRunId, accountId);
+    } else {
       const run = await this.prisma.automationRun.create({
         data: {
           tenantId: accountId,
@@ -577,5 +579,21 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async requireOwnedAutomationRun(
+    automationRunId: string,
+    tenantId: string,
+  ) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: automationRunId, tenantId },
+      select: { id: true },
+    });
+    if (!run) {
+      throw new NotFoundException(
+        `AutomationRun ${automationRunId} not found`,
+      );
+    }
+    return run;
   }
 }

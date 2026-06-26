@@ -59,6 +59,7 @@ describe('AgentService', () => {
       automationRun: {
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
         update: jest.fn().mockResolvedValue({ id: 'run-1' }),
+        findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       },
       quietHours: {
@@ -147,6 +148,50 @@ describe('AgentService', () => {
           content: 'Hi',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject caller-supplied automation runs from another tenant', async () => {
+      prisma.deal.findFirst.mockResolvedValue(mockDeal);
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+          content: 'Hello',
+          automationRunId: 'foreign-run',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+    });
+
+    it('should reuse an owned caller-supplied automation run', async () => {
+      prisma.deal.findFirst.mockResolvedValue(mockDeal);
+      prisma.automationRun.findFirst.mockResolvedValue({ id: 'run-existing' });
+      prisma.message.create.mockResolvedValue({
+        id: 'msg-1',
+        status: 'draft',
+        channel: 'sms',
+        automationRunId: 'run-existing',
+      });
+
+      const result = await service.draftMessage(
+        'deal-1',
+        'tenant-1',
+        'sms',
+        'seller',
+        {
+          content: 'Hello',
+          automationRunId: 'run-existing',
+        },
+      );
+
+      expect(result.automationRunId).toBe('run-existing');
+      expect(prisma.automationRun.create).not.toHaveBeenCalled();
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-existing' },
+        }),
+      );
     });
   });
 
