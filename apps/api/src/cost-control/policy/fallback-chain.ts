@@ -7,14 +7,19 @@
 // data.
 
 const FALLBACK_CHAINS: Record<string, string[]> = {
-  // Property data — PropertyRadar can substitute when re-enabled
-  attom: ['propertyradar'],
+  // Cross-provider property-data fallbacks are disabled until the caller
+  // can dispatch the downgraded request to the alternate adapter. Failing
+  // closed is safer than reserving budget on one provider while still
+  // calling another.
+  attom: [],
   rentcast: [],
 
-  // Skip trace — try cheaper providers first
-  batch_skiptrace: ['datazapp', 'propertyradar'],
-  datazapp: ['batch_skiptrace', 'propertyradar'],
-  propertyradar: ['batch_skiptrace', 'datazapp'],
+  // Skip-trace fallbacks previously declared circular chains that the
+  // adapter layer could not actually honor. Leave them disabled until the
+  // execution path can route across providers safely.
+  batch_skiptrace: [],
+  datazapp: [],
+  propertyradar: [],
 
   // Email — fall back to SMTP if Resend is over budget
   resend: ['smtp'],
