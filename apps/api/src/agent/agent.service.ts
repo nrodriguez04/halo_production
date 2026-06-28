@@ -268,7 +268,9 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
-    if (!automationRunId) {
+    if (automationRunId) {
+      await this.getOwnedAutomationRun(automationRunId, accountId);
+    } else {
       const run = await this.prisma.automationRun.create({
         data: {
           tenantId: accountId,
@@ -391,6 +393,11 @@ export class AgentService {
       );
     }
 
+    const linkedRunId = message.automationRunId;
+    if (linkedRunId) {
+      await this.getOwnedAutomationRun(linkedRunId, accountId);
+    }
+
     const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { status: 'pending_approval' },
@@ -404,15 +411,15 @@ export class AgentService {
       payload: {
         source: 'openclaw',
         agentName: input?.agentName,
-        automationRunId: input?.automationRunId || message.automationRunId,
+        automationRunId: linkedRunId,
       },
       actorId: null,
       actorType: TimelineActorType.system,
     });
 
-    if (message.automationRunId) {
+    if (linkedRunId) {
       await this.prisma.automationRun.update({
-        where: { id: message.automationRunId },
+        where: { id: linkedRunId },
         data: { status: 'AWAITING_APPROVAL' },
       });
     }
@@ -577,5 +584,17 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async getOwnedAutomationRun(automationRunId: string, accountId: string) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: automationRunId, tenantId: accountId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+    }
+
+    return run;
   }
 }

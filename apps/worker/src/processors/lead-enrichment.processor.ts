@@ -305,6 +305,8 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'X-Internal-Account-Id': accountId,
+          'X-Internal-Actor': 'worker',
         },
         body: JSON.stringify({
           leadId,
