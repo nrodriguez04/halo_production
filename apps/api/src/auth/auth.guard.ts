@@ -9,6 +9,10 @@ import {
 import { Request } from 'express';
 import { descope } from './descope.client';
 
+const INTERNAL_ACCOUNT_HEADER = 'x-internal-account-id';
+const INTERNAL_ACTOR_HEADER = 'x-internal-actor';
+const INTERNAL_USER_HEADER = 'x-internal-user-id';
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
@@ -22,6 +26,12 @@ export class AuthGuard implements CanActivate {
 
     if (!token) {
       throw new UnauthorizedException('Missing bearer token');
+    }
+
+    const internalUser = this.authenticateInternalRequest(request, token);
+    if (internalUser) {
+      this.attachUser(request, internalUser);
+      return true;
     }
 
     try {
@@ -53,13 +63,12 @@ export class AuthGuard implements CanActivate {
         accountId,
         permissions,
         roles,
+        actor: 'user' as const,
         claims,
         session,
       };
 
-      (request as any).user = user;
-      (request as any).userId = userId;
-      (request as any).accountId = accountId;
+      this.attachUser(request, user);
     } catch (err) {
       if (err instanceof ForbiddenException) throw err;
       if (err instanceof UnauthorizedException) throw err;
@@ -67,6 +76,35 @@ export class AuthGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private authenticateInternalRequest(request: Request, token: string) {
+    const internalToken = process.env.INTERNAL_API_TOKEN;
+    if (!internalToken || token !== internalToken) {
+      return null;
+    }
+
+    const accountId = this.readHeader(request, INTERNAL_ACCOUNT_HEADER);
+    if (!accountId) {
+      throw new ForbiddenException(
+        'Internal token requires X-Internal-Account-Id',
+      );
+    }
+
+    const actor = this.normalizeInternalActor(
+      this.readHeader(request, INTERNAL_ACTOR_HEADER),
+    );
+    const userId = this.readHeader(request, INTERNAL_USER_HEADER);
+
+    return {
+      userId,
+      accountId,
+      permissions: [],
+      roles: [],
+      actor,
+      claims: {},
+      session: null,
+    };
   }
 
   /**
@@ -132,6 +170,31 @@ export class AuthGuard implements CanActivate {
       return value.split(' ').filter(Boolean);
     }
     return [];
+  }
+
+  private normalizeInternalActor(value: string | undefined) {
+    switch (value) {
+      case 'user':
+      case 'worker':
+      case 'system':
+        return value;
+      default:
+        return 'system';
+    }
+  }
+
+  private readHeader(request: Request, name: string): string | undefined {
+    const value = request.headers[name];
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private attachUser(request: Request, user: Record<string, unknown>) {
+    (request as any).user = user;
+    (request as any).userId = user.userId;
+    (request as any).accountId = user.accountId;
   }
 }
 
