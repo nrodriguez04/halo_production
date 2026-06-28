@@ -34,7 +34,7 @@ describe('AuthGuard', () => {
     };
 
     await expect(guard.canActivate(makeContext(request))).resolves.toBe(true);
-    expect((descope.validateSession as jest.Mock)).not.toHaveBeenCalled();
+    expect(((descope as any).validateSession as jest.Mock)).not.toHaveBeenCalled();
     expect(request).toMatchObject({
       accountId: 'tenant-1',
       user: expect.objectContaining({
@@ -67,7 +67,7 @@ describe('AuthGuard', () => {
         authorization: 'Bearer session-token',
       },
     };
-    (descope.validateSession as jest.Mock).mockResolvedValue({
+    ((descope as any).validateSession as jest.Mock).mockResolvedValue({
       userId: 'user-1',
       claims: {
         tenants: {
