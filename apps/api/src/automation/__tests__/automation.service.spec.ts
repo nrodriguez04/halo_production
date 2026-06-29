@@ -16,7 +16,10 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'run-1',
+          tenantId: 'tenant-1',
+        }),
         findMany: jest.fn(),
       },
       message: {
@@ -82,6 +85,10 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
@@ -106,6 +113,10 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
@@ -118,6 +129,17 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('startRun', () => {
+    it('should reject run mutations outside the tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.startRun('run-1', 'tenant-2')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 
