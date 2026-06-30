@@ -7,20 +7,19 @@
 // data.
 
 const FALLBACK_CHAINS: Record<string, string[]> = {
-  // Property data — PropertyRadar can substitute when re-enabled
-  attom: ['propertyradar'],
+  // Only keep fallbacks for callers that actually dispatch on
+  // `resolved.provider`. Cross-provider chains elsewhere would debit one
+  // provider while still calling another, so they must fail closed.
+  attom: [],
   rentcast: [],
+  batch_skiptrace: [],
+  datazapp: [],
+  propertyradar: [],
 
-  // Skip trace — try cheaper providers first
-  batch_skiptrace: ['datazapp', 'propertyradar'],
-  datazapp: ['batch_skiptrace', 'propertyradar'],
-  propertyradar: ['batch_skiptrace', 'datazapp'],
-
-  // Email — fall back to SMTP if Resend is over budget
+  // EmailSendService switches on `resolved.provider`, so resend -> smtp is safe.
   resend: ['smtp'],
   smtp: [],
 
-  // No fallback for AI / SMS / geocoding — those services either work or fail closed
   openai: [],
   twilio: [],
   google_geocoding: [],

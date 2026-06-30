@@ -9,6 +9,8 @@ import {
 import { Request } from 'express';
 import { descope } from './descope.client';
 
+type AuthActor = 'user' | 'system' | 'worker';
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
@@ -22,6 +24,15 @@ export class AuthGuard implements CanActivate {
 
     if (!token) {
       throw new UnauthorizedException('Missing bearer token');
+    }
+
+    const internalUser = this.tryBuildInternalUser(request, token);
+    if (internalUser) {
+      (request as any).user = internalUser;
+      (request as any).userId = internalUser.userId;
+      (request as any).accountId = internalUser.accountId;
+      (request as any).actor = internalUser.actor;
+      return true;
     }
 
     try {
@@ -53,6 +64,7 @@ export class AuthGuard implements CanActivate {
         accountId,
         permissions,
         roles,
+        actor: 'user' as AuthActor,
         claims,
         session,
       };
@@ -60,6 +72,7 @@ export class AuthGuard implements CanActivate {
       (request as any).user = user;
       (request as any).userId = userId;
       (request as any).accountId = accountId;
+      (request as any).actor = user.actor;
     } catch (err) {
       if (err instanceof ForbiddenException) throw err;
       if (err instanceof UnauthorizedException) throw err;
@@ -132,6 +145,53 @@ export class AuthGuard implements CanActivate {
       return value.split(' ').filter(Boolean);
     }
     return [];
+  }
+
+  private tryBuildInternalUser(request: Request, token: string) {
+    const internalToken = process.env.INTERNAL_API_TOKEN;
+    if (!internalToken || token !== internalToken) {
+      return null;
+    }
+
+    const accountId = this.readHeader(request, 'x-internal-account-id');
+    if (!accountId) {
+      throw new ForbiddenException(
+        'Internal service calls must include X-Internal-Account-Id',
+      );
+    }
+
+    return {
+      userId: undefined,
+      accountId,
+      permissions: [] as string[],
+      roles: [] as string[],
+      actor: this.normalizeActor(
+        this.readHeader(request, 'x-internal-actor'),
+      ),
+      claims: {},
+      session: null,
+      isInternal: true,
+    };
+  }
+
+  private readHeader(request: Request, headerName: string): string | undefined {
+    const value = request.headers[headerName];
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private normalizeActor(value: string | undefined): AuthActor {
+    switch ((value ?? '').toLowerCase()) {
+      case 'worker':
+        return 'worker';
+      case 'user':
+        return 'user';
+      case 'system':
+      default:
+        return 'system';
+    }
   }
 }
 
