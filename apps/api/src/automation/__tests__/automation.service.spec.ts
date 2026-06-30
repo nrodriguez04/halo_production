@@ -82,6 +82,10 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
@@ -106,6 +110,10 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        id: 'run-1',
+        tenantId: 'tenant-1',
+      });
       prisma.automationRun.update.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
@@ -118,6 +126,17 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('approveRun', () => {
+    it('should reject updates to runs owned by another tenant', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.approveRun('run-1', 'tenant-1', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
     });
   });
 

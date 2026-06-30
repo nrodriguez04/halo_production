@@ -268,7 +268,12 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
-    if (!automationRunId) {
+    if (automationRunId) {
+      automationRunId = await this.requireOwnedAutomationRun(
+        automationRunId,
+        accountId,
+      );
+    } else {
       const run = await this.prisma.automationRun.create({
         data: {
           tenantId: accountId,
@@ -391,6 +396,10 @@ export class AgentService {
       );
     }
 
+    const requestedAutomationRunId = input?.automationRunId
+      ? await this.requireOwnedAutomationRun(input.automationRunId, accountId)
+      : undefined;
+
     const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { status: 'pending_approval' },
@@ -404,7 +413,7 @@ export class AgentService {
       payload: {
         source: 'openclaw',
         agentName: input?.agentName,
-        automationRunId: input?.automationRunId || message.automationRunId,
+        automationRunId: requestedAutomationRunId || message.automationRunId,
       },
       actorId: null,
       actorType: TimelineActorType.system,
@@ -577,5 +586,23 @@ export class AgentService {
       instructions:
         'Use the draft endpoint to create this as a Hālo draft. Do not send directly.',
     };
+  }
+
+  private async requireOwnedAutomationRun(
+    automationRunId: string,
+    accountId: string,
+  ): Promise<string> {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: automationRunId, tenantId: accountId },
+      select: { id: true },
+    });
+
+    if (!run) {
+      throw new NotFoundException(
+        `AutomationRun ${automationRunId} not found`,
+      );
+    }
+
+    return run.id;
   }
 }
