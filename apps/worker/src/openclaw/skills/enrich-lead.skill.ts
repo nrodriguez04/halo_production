@@ -9,7 +9,8 @@ export class EnrichLeadSkill {
   getDefinition(): SkillDefinition {
     return {
       name: 'leads.enrich',
-      description: 'Enqueue lead enrichment (ATTOM + geocoding)',
+      description:
+        'Unavailable: lead enrichment queueing is not wired in this build',
       inputSchema: { leadId: 'string', tenantId: 'string' },
       execute: async (input) => {
         const lead = await this.prisma.lead.findFirst({
@@ -18,7 +19,9 @@ export class EnrichLeadSkill {
 
         if (!lead) return { error: 'Lead not found' };
 
-        return { leadId: lead.id, status: 'enrichment_enqueued', message: 'Lead enrichment job queued' };
+        throw new Error(
+          'Lead enrichment is unavailable: no enrichment job was enqueued.',
+        );
       },
     };
   }
