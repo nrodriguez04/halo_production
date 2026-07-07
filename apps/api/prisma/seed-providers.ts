@@ -153,6 +153,17 @@ const BUDGET_TEMPLATES = [
 export async function seedCostGovernance(prisma: PrismaClient, accountId: string) {
   console.log('Seeding cost governance...');
 
+  await seedCostGovernanceReferenceData(prisma);
+  console.log(`  ${PROVIDERS.length} providers seeded`);
+
+  const bucketAccounts = Array.from(new Set([accountId, 'GLOBAL']));
+  for (const acct of bucketAccounts) {
+    await seedCostGovernanceBudgetBuckets(prisma, acct);
+  }
+  console.log(`  ${BUDGET_TEMPLATES.length * bucketAccounts.length} budget buckets seeded`);
+}
+
+export async function seedCostGovernanceReferenceData(prisma: PrismaClient) {
   // 1. Providers + pricing rules + rate limits
   for (const p of PROVIDERS) {
     const provider = await prisma.integrationProvider.upsert({
@@ -201,40 +212,40 @@ export async function seedCostGovernance(prisma: PrismaClient, accountId: string
       });
     }
   }
-  console.log(`  ${PROVIDERS.length} providers seeded`);
+}
 
-  // 2. Budget buckets - one set scoped to the seed account, plus a GLOBAL set
-  for (const acct of [accountId, 'GLOBAL']) {
-    for (const tpl of BUDGET_TEMPLATES) {
-      const { startedAt, resetsAt } = currentPeriod(tpl.period);
-      await prisma.integrationBudgetBucket.upsert({
-        where: {
-          accountId_scope_scopeRef_period_periodStartedAt: {
-            accountId: acct,
-            scope: tpl.scope,
-            scopeRef: tpl.scopeRef,
-            period: tpl.period,
-            periodStartedAt: startedAt,
-          },
-        },
-        update: {
-          hardCapUsd: tpl.hardCapUsd,
-          softCapUsd: tpl.softCapUsd,
-        },
-        create: {
-          accountId: acct,
+export async function seedCostGovernanceBudgetBuckets(
+  prisma: PrismaClient,
+  accountId: string,
+) {
+  for (const tpl of BUDGET_TEMPLATES) {
+    const { startedAt, resetsAt } = currentPeriod(tpl.period);
+    await prisma.integrationBudgetBucket.upsert({
+      where: {
+        accountId_scope_scopeRef_period_periodStartedAt: {
+          accountId,
           scope: tpl.scope,
           scopeRef: tpl.scopeRef,
           period: tpl.period,
-          hardCapUsd: tpl.hardCapUsd,
-          softCapUsd: tpl.softCapUsd,
           periodStartedAt: startedAt,
-          periodResetsAt: resetsAt,
         },
-      });
-    }
+      },
+      update: {
+        hardCapUsd: tpl.hardCapUsd,
+        softCapUsd: tpl.softCapUsd,
+      },
+      create: {
+        accountId,
+        scope: tpl.scope,
+        scopeRef: tpl.scopeRef,
+        period: tpl.period,
+        hardCapUsd: tpl.hardCapUsd,
+        softCapUsd: tpl.softCapUsd,
+        periodStartedAt: startedAt,
+        periodResetsAt: resetsAt,
+      },
+    });
   }
-  console.log(`  ${BUDGET_TEMPLATES.length * 2} budget buckets seeded`);
 }
 
 function currentPeriod(period: string) {
