@@ -5,6 +5,7 @@ import { AggregatorService } from './aggregator.service';
 import { AlertsService } from './alerts.service';
 import { BudgetService } from './budget.service';
 import { ResponseCacheService } from './cache/response-cache.service';
+import { CostGovernanceBootstrapService } from './cost-governance-bootstrap.service';
 import { CostControlController } from './cost-control.controller';
 import { IntegrationCostControlService } from './cost-control.service';
 import { PricingService } from './pricing/pricing.service';
@@ -25,6 +26,7 @@ import { RateLimitService } from './rate-limit/rate-limit.service';
     RateLimitService,
     AggregatorService,
     AlertsService,
+    CostGovernanceBootstrapService,
     IntegrationCostControlService,
   ],
   exports: [
