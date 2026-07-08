@@ -95,6 +95,7 @@ describe('IntegrationCostControlService', () => {
     prisma.integrationProvider.findUnique.mockImplementation(async (args: any) => {
       if (args.where.key === 'attom') return { id: 'p_attom', key: 'attom', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
+      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
       return null;
@@ -258,5 +259,38 @@ describe('IntegrationCostControlService', () => {
     expect(exec).not.toHaveBeenCalled();
     expect(out.fromCache).toBe(true);
     expect((out.result as any).cachedOk).toBe(true);
+  });
+
+  it('checkAndCall advances to an untried fallback provider instead of looping', async () => {
+    const overCap = (scopeRef: string) => ({
+      id: `b_${scopeRef}`,
+      scope: 'provider',
+      scopeRef,
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
+
+    budgets.findApplicable.mockImplementation(async (intent: any) => {
+      if (intent.provider === 'batch_skiptrace') return [overCap('batch_skiptrace')];
+      if (intent.provider === 'datazapp') return [overCap('datazapp')];
+      return [];
+    });
+    budgets.findOverHardCap.mockImplementation((buckets: any[]) => buckets[0] ?? null);
+
+    const exec = jest.fn(async ({ provider }: { provider: string }) => ({ provider }));
+    const out = await service.checkAndCall({
+      ...baseIntent({
+        provider: 'batch_skiptrace',
+        action: 'append_contacts',
+        execute: exec as any,
+      }),
+    });
+
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec).toHaveBeenCalledWith({ provider: 'propertyradar' });
+    expect((out.result as any).provider).toBe('propertyradar');
   });
 });
