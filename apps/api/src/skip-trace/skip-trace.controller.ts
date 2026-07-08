@@ -1,7 +1,7 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
-import { AuthGuard } from '../auth/auth.guard';
-import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+import { AuthOrInternalTokenGuard } from '../auth/auth-or-internal-token.guard';
+import { CurrentAccountId, CurrentUser, CurrentUserId } from '../auth/decorators';
 import { SkipTraceService } from './skip-trace.service';
 
 const SkipTraceBody = z.object({
@@ -15,17 +15,19 @@ const SkipTraceBody = z.object({
 });
 
 @Controller('skip-trace')
-@UseGuards(AuthGuard)
+@UseGuards(AuthOrInternalTokenGuard)
 export class SkipTraceController {
   constructor(private readonly service: SkipTraceService) {}
 
   @Post('append-contacts')
   async appendContacts(
     @CurrentAccountId() accountId: string,
-    @CurrentUserId() userId: string,
+    @CurrentUserId() userId: string | undefined,
+    @CurrentUser() user: { authType?: 'internal' } | undefined,
     @Body() raw: unknown,
   ) {
     const body = SkipTraceBody.parse(raw);
+    const isInternalWorker = user?.authType === 'internal';
     // Re-shape into SkipTraceInput so optional fields stay optional and
     // the required `leadId` is preserved.
     return this.service.appendContacts(
@@ -38,7 +40,12 @@ export class SkipTraceController {
         state: body.state,
         zip: body.zip,
       },
-      { accountId, actor: 'user', userId, leadId: body.leadId },
+      {
+        accountId,
+        actor: isInternalWorker ? 'worker' : 'user',
+        userId,
+        leadId: body.leadId,
+      },
     );
   }
 }
