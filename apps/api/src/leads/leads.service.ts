@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   TimelineActorType,
   TimelineEntityType,
@@ -101,6 +101,11 @@ export class LeadsService {
   }
 
   async update(id: string, accountId: string, data: LeadUpdate) {
+    if (data.accountId !== undefined || data.status !== undefined) {
+      throw new BadRequestException(
+        'Lead accountId and status cannot be updated via PUT /leads/:id',
+      );
+    }
     const lead = await this.findOne(id, accountId);
     return this.prisma.lead.update({
       where: { id: lead.id },
