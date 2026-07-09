@@ -51,7 +51,10 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       // worker can't talk to LeadLifecycleService directly without an
       // HTTP roundtrip, so it imports the same validator from
       // `@halo/shared` and writes through Prisma.
-      await this.markStatus(leadId, accountId, lead.status, 'enriching');
+      const markedEnriching = await this.markStatus(leadId, accountId, 'enriching');
+      if (!markedEnriching) {
+        return { success: false, leadId, reason: 'status_transition_blocked' };
+      }
 
       const enrichmentJob = await prisma.leadEnrichmentJob.create({
         data: { accountId, leadId, stage: 'normalizing' },
@@ -101,13 +104,15 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       if (contacts.phone && !lead.canonicalPhone) additional.canonicalPhone = contacts.phone;
       if (contacts.email && !lead.canonicalEmail) additional.canonicalEmail = contacts.email;
 
-      await this.markStatus(
+      const markedEnriched = await this.markStatus(
         leadId,
         accountId,
-        'enriching',
         'enriched',
         additional,
       );
+      if (!markedEnriched) {
+        return { success: false, leadId, reason: 'status_transition_blocked' };
+      }
       await prisma.leadEnrichmentJob.update({
         where: { id: enrichmentJob.id },
         data: {
@@ -129,33 +134,49 @@ export class LeadEnrichmentProcessor extends WorkerHost {
    * Apply a status transition via the shared `@halo/shared` validator
    * and write a `lead.status.<next>` row to the timeline so the audit
    * trail matches what `LeadLifecycleService` produces on the api side.
-   * Skips the update silently if the transition is illegal so a hung
-   * job re-running can't corrupt the state.
+   * Reads the live row inside a transaction so a stale worker copy can't
+   * overwrite a newer user/api transition.
    */
   private async markStatus(
     leadId: string,
     accountId: string,
-    current: string,
     next: LeadStatus,
     additionalUpdate: Record<string, unknown> = {},
-  ): Promise<void> {
-    const result = transitionLeadStatus(current, next, {
-      accountId,
-      actorId: null,
-      actorType: 'worker',
-    });
-    if (!result.allowed) {
-      console.warn(
-        `[lead-enrichment] illegal transition ${current} -> ${next} for lead ${leadId}: ${result.reason}`,
-      );
-      return;
-    }
-    await prisma.$transaction([
-      prisma.lead.update({
-        where: { id: leadId },
+  ): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: { id: leadId, accountId },
+        select: { status: true },
+      });
+      if (!lead) {
+        throw new Error(`Lead ${leadId} not found`);
+      }
+
+      const current = lead.status;
+      const result = transitionLeadStatus(current, next, {
+        accountId,
+        actorId: null,
+        actorType: 'worker',
+      });
+      if (!result.allowed) {
+        console.warn(
+          `[lead-enrichment] illegal transition ${current} -> ${next} for lead ${leadId}: ${result.reason}`,
+        );
+        return false;
+      }
+
+      const updated = await tx.lead.updateMany({
+        where: { id: leadId, accountId, status: current },
         data: { status: next, ...additionalUpdate },
-      }),
-      prisma.timelineEvent.create({
+      });
+      if (updated.count !== 1) {
+        console.warn(
+          `[lead-enrichment] status changed before ${current} -> ${next} could be applied for lead ${leadId}`,
+        );
+        return false;
+      }
+
+      await tx.timelineEvent.create({
         data: {
           tenantId: accountId,
           entityType: 'LEAD',
@@ -165,8 +186,9 @@ export class LeadEnrichmentProcessor extends WorkerHost {
           actorId: null,
           payloadJson: { from: current, to: next },
         },
-      }),
-    ]);
+      });
+      return true;
+    });
   }
 
   // -- enrichment steps -------------------------------------------------
