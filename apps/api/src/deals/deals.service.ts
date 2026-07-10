@@ -90,12 +90,48 @@ export class DealsService {
   }
 
   async update(id: string, accountId: string, data: DealUpdate) {
+    if (data.accountId !== undefined) {
+      throw new BadRequestException(
+        'accountId cannot be updated via the generic deal update endpoint',
+      );
+    }
+
+    if (data.stage !== undefined) {
+      throw new BadRequestException(
+        'Deal stage must be updated via the dedicated stage transition endpoint',
+      );
+    }
+
     const deal = await this.prisma.deal.findFirst({
       where: { id, accountId },
     });
 
     if (!deal) {
       throw new NotFoundException(`Deal with ID ${id} not found`);
+    }
+
+    if (data.leadId !== undefined) {
+      const lead = await this.prisma.lead.findFirst({
+        where: { id: data.leadId, accountId },
+      });
+
+      if (!lead) {
+        throw new BadRequestException(
+          'leadId must reference a lead in the authenticated account',
+        );
+      }
+    }
+
+    if (data.propertyId !== undefined) {
+      const property = await this.prisma.property.findFirst({
+        where: { id: data.propertyId, accountId },
+      });
+
+      if (!property) {
+        throw new BadRequestException(
+          'propertyId must reference a property in the authenticated account',
+        );
+      }
     }
 
     return this.prisma.deal.update({
