@@ -59,6 +59,8 @@ describe('AgentService', () => {
       automationRun: {
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
         update: jest.fn().mockResolvedValue({ id: 'run-1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'run-1', tenantId: 'tenant-1' }),
         findMany: jest.fn().mockResolvedValue([]),
       },
       quietHours: {
@@ -139,6 +141,20 @@ describe('AgentService', () => {
       );
     });
 
+    it('should reject a foreign automation run id', async () => {
+      prisma.deal.findFirst.mockResolvedValue(mockDeal);
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+          content: 'Hello',
+          automationRunId: 'run-foreign',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundException for missing deal', async () => {
       prisma.deal.findFirst.mockResolvedValue(null);
 
@@ -167,6 +183,11 @@ describe('AgentService', () => {
       const result = await service.requestSend('msg-1', 'tenant-1');
 
       expect(result.status).toBe('pending_approval');
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1', tenantId: 'tenant-1' },
+        }),
+      );
       expect(prisma.message.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { status: 'pending_approval' },
@@ -217,6 +238,23 @@ describe('AgentService', () => {
       await expect(
         service.requestSend('msg-1', 'tenant-1'),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should reject messages linked to a foreign automation run', async () => {
+      prisma.message.findFirst.mockResolvedValue({
+        id: 'msg-1',
+        accountId: 'tenant-1',
+        status: 'draft',
+        channel: 'sms',
+        automationRunId: 'run-foreign',
+      });
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.requestSend('msg-1', 'tenant-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.message.update).not.toHaveBeenCalled();
     });
   });
 

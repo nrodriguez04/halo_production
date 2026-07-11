@@ -268,6 +268,10 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
+    if (automationRunId) {
+      await this.assertAutomationRunBelongsToTenant(automationRunId, accountId);
+    }
+
     if (!automationRunId) {
       const run = await this.prisma.automationRun.create({
         data: {
@@ -330,13 +334,11 @@ export class AgentService {
       actorType: TimelineActorType.system,
     });
 
-    await this.prisma.automationRun.update({
-      where: { id: automationRunId },
-      data: {
-        status: 'AWAITING_APPROVAL',
-        outputJson: { messageId: message.id },
-      },
-    });
+    await this.markAutomationRunAwaitingApproval(
+      automationRunId,
+      accountId,
+      message.id,
+    );
 
     return {
       message,
@@ -391,6 +393,13 @@ export class AgentService {
       );
     }
 
+    if (message.automationRunId) {
+      await this.assertAutomationRunBelongsToTenant(
+        message.automationRunId,
+        accountId,
+      );
+    }
+
     const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { status: 'pending_approval' },
@@ -411,10 +420,10 @@ export class AgentService {
     });
 
     if (message.automationRunId) {
-      await this.prisma.automationRun.update({
-        where: { id: message.automationRunId },
-        data: { status: 'AWAITING_APPROVAL' },
-      });
+      await this.markAutomationRunAwaitingApproval(
+        message.automationRunId,
+        accountId,
+      );
     }
 
     return {
@@ -453,6 +462,42 @@ export class AgentService {
     });
 
     return { event, logged: true };
+  }
+
+  private async assertAutomationRunBelongsToTenant(
+    automationRunId: string,
+    accountId: string,
+  ) {
+    const run = await this.prisma.automationRun.findFirst({
+      where: { id: automationRunId, tenantId: accountId },
+      select: { id: true },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+    }
+  }
+
+  private async markAutomationRunAwaitingApproval(
+    automationRunId: string,
+    accountId: string,
+    messageId?: string,
+  ) {
+    const result = await this.prisma.automationRun.updateMany({
+      where: { id: automationRunId, tenantId: accountId },
+      data: {
+        status: 'AWAITING_APPROVAL',
+        ...(messageId
+          ? {
+              outputJson: { messageId },
+            }
+          : {}),
+      },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+    }
   }
 
   async classifyInbound(
