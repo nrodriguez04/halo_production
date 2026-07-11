@@ -16,6 +16,7 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
       },
@@ -82,9 +83,11 @@ describe('AutomationService', () => {
 
   describe('completeRun', () => {
     it('should mark run as completed with output', async () => {
-      prisma.automationRun.update.mockResolvedValue({
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
         id: 'run-1',
         status: 'COMPLETED',
+        tenantId: 'tenant-1',
         entityType: 'deal',
         entityId: 'deal-1',
         workflowName: 'test',
@@ -96,6 +99,11 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('COMPLETED');
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1', tenantId: 'tenant-1' },
+        }),
+      );
       expect(timelineService.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: 'AUTOMATION_RUN_COMPLETED',
@@ -106,9 +114,11 @@ describe('AutomationService', () => {
 
   describe('failRun', () => {
     it('should mark run as failed with error', async () => {
-      prisma.automationRun.update.mockResolvedValue({
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 1 });
+      prisma.automationRun.findFirst.mockResolvedValue({
         id: 'run-1',
         status: 'FAILED',
+        tenantId: 'tenant-1',
         entityType: 'deal',
         entityId: 'deal-1',
       });
@@ -118,6 +128,16 @@ describe('AutomationService', () => {
       });
 
       expect(result.status).toBe('FAILED');
+    });
+  });
+
+  describe('tenant scoping', () => {
+    it('should throw NotFoundException when a run is outside the tenant', async () => {
+      prisma.automationRun.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.cancelRun('run-1', 'tenant-2')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
