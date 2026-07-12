@@ -67,6 +67,7 @@ describe('PropertiesService', () => {
           accountId: 'account-1',
           address: '123 Main St',
           city: 'Austin',
+          confidence: 1,
           state: 'TX',
           zip: '78701',
         },
