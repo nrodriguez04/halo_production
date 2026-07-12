@@ -8,6 +8,20 @@ export class PropertiesService {
   constructor(private prisma: PrismaService) {}
 
   async create(data: PropertyCreate) {
+    if (data.leadId) {
+      const lead = await this.prisma.lead.findFirst({
+        where: {
+          id: data.leadId,
+          accountId: data.accountId,
+        },
+        select: { id: true },
+      });
+
+      if (!lead) {
+        throw new NotFoundException(`Lead with ID ${data.leadId} not found`);
+      }
+    }
+
     return this.prisma.property.create({
       data,
       include: {

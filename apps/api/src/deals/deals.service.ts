@@ -21,6 +21,34 @@ export class DealsService {
   ) {}
 
   async create(data: DealCreate, actorId: string | null = null) {
+    if (data.leadId) {
+      const lead = await this.prisma.lead.findFirst({
+        where: {
+          id: data.leadId,
+          accountId: data.accountId,
+        },
+        select: { id: true },
+      });
+
+      if (!lead) {
+        throw new NotFoundException(`Lead with ID ${data.leadId} not found`);
+      }
+    }
+
+    if (data.propertyId) {
+      const property = await this.prisma.property.findFirst({
+        where: {
+          id: data.propertyId,
+          accountId: data.accountId,
+        },
+        select: { id: true },
+      });
+
+      if (!property) {
+        throw new NotFoundException(`Property with ID ${data.propertyId} not found`);
+      }
+    }
+
     const deal = await this.prisma.deal.create({
       data,
       include: {

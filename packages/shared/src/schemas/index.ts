@@ -66,6 +66,10 @@ export const BuyerCreateSchema = z.object({
   preferences: z.record(z.any()).optional(),
 });
 
+export const BuyerUpdateSchema = BuyerCreateSchema.omit({
+  accountId: true,
+}).partial().strict();
+
 // CSV Import schema
 export const CSVImportRowSchema = z.object({
   address: z.string(),
@@ -85,4 +89,5 @@ export type DealCreate = z.infer<typeof DealCreateSchema>;
 export type DealUpdate = z.infer<typeof DealUpdateSchema>;
 export type MessageCreate = z.infer<typeof MessageCreateSchema>;
 export type BuyerCreate = z.infer<typeof BuyerCreateSchema>;
+export type BuyerUpdate = z.infer<typeof BuyerUpdateSchema>;
 export type CSVImportRow = z.infer<typeof CSVImportRowSchema>;
