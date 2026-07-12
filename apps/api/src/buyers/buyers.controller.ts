@@ -12,7 +12,7 @@ import {
 import { BuyersService } from './buyers.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
-import { BuyerCreateSchema } from '@halo/shared';
+import { BuyerCreateSchema, BuyerUpdateSchema } from '@halo/shared';
 
 @Controller('buyers')
 @UseGuards(AuthGuard)
@@ -62,7 +62,8 @@ export class BuyersController {
     @Body() data: unknown,
     @CurrentAccountId() accountId: string,
   ) {
-    return this.buyersService.update(id, accountId, data as any);
+    const validated = BuyerUpdateSchema.parse(data);
+    return this.buyersService.update(id, accountId, validated);
   }
 
   @Delete(':id')
