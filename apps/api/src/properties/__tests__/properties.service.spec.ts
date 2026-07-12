@@ -42,6 +42,7 @@ describe('PropertiesService', () => {
           city: 'Austin',
           state: 'TX',
           zip: '78701',
+          confidence: 1,
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -57,6 +58,7 @@ describe('PropertiesService', () => {
         city: 'Austin',
         state: 'TX',
         zip: '78701',
+        confidence: 1,
       });
 
       expect(prisma.lead.findFirst).not.toHaveBeenCalled();
@@ -85,6 +87,7 @@ describe('PropertiesService', () => {
         city: 'Austin',
         state: 'TX',
         zip: '78701',
+        confidence: 1,
       };
 
       await service.create(data);
