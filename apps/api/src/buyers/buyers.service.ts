@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { BuyerCreate } from '@halo/shared';
+import { BuyerCreate, BuyerUpdate } from '@halo/shared';
 
 @Injectable()
 export class BuyersService {
@@ -39,7 +39,11 @@ export class BuyersService {
     return buyer;
   }
 
-  async update(id: string, accountId: string, data: Partial<BuyerCreate>) {
+  async update(id: string, accountId: string, data: BuyerUpdate) {
+    if (Object.prototype.hasOwnProperty.call(data, 'accountId')) {
+      throw new BadRequestException('accountId cannot be updated');
+    }
+
     await this.findOne(id, accountId);
     return this.prisma.buyer.update({
       where: { id },
