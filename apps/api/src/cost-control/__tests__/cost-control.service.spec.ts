@@ -97,6 +97,8 @@ describe('IntegrationCostControlService', () => {
       if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
       if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
       if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'resend') return { id: 'p_resend', key: 'resend', enabled: true, rateLimitPerMin: null };
+      if (args.where.key === 'smtp') return { id: 'p_smtp', key: 'smtp', enabled: true, rateLimitPerMin: null };
       return null;
     });
 
@@ -162,7 +164,16 @@ describe('IntegrationCostControlService', () => {
     expect(decision.kind).toBe('BLOCK_OVER_BUDGET');
   });
 
-  it('returns DOWNGRADE_PROVIDER when over hard cap and provider has a fallback', async () => {
+  it('blocks ATTOM when over hard cap because cross-provider fallback is unsupported', async () => {
+    budgets.findApplicable.mockResolvedValueOnce([
+      { id: 'b_1', scope: 'provider', scopeRef: 'attom', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
+    ]);
+    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'attom', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true });
+    const decision = await service.preflight(baseIntent());
+    expect(decision.kind).toBe('BLOCK_OVER_BUDGET');
+  });
+
+  it('blocks skip-trace when over hard cap because cross-provider fallback is unsupported', async () => {
     budgets.findApplicable.mockResolvedValueOnce([
       { id: 'b_1', scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
     ]);
@@ -172,9 +183,22 @@ describe('IntegrationCostControlService', () => {
       provider: 'batch_skiptrace',
       action: 'append_contacts',
     });
+    expect(decision.kind).toBe('BLOCK_OVER_BUDGET');
+  });
+
+  it('returns DOWNGRADE_PROVIDER when over hard cap and provider has a supported fallback', async () => {
+    budgets.findApplicable.mockResolvedValueOnce([
+      { id: 'b_1', scope: 'provider', scopeRef: 'resend', period: 'month', hardCapUsd: 20, softCapUsd: 16, currentSpendUsd: 19.95, enabled: true },
+    ]);
+    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'resend', period: 'month', hardCapUsd: 20, softCapUsd: 16, currentSpendUsd: 19.95, enabled: true });
+    const decision = await service.preflight({
+      ...baseIntent(),
+      provider: 'resend',
+      action: 'send_email',
+    });
     expect(decision.kind).toBe('DOWNGRADE_PROVIDER');
     if (decision.kind === 'DOWNGRADE_PROVIDER') {
-      expect(['datazapp', 'propertyradar']).toContain(decision.suggestedProvider);
+      expect(decision.suggestedProvider).toBe('smtp');
     }
   });
 
