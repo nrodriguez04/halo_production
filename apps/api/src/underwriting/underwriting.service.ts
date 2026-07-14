@@ -122,6 +122,14 @@ export class UnderwritingService {
       };
     }
 
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
+    });
+
+    if (!deal) {
+      throw new NotFoundException(`No underwriting result found for deal ${dealId}`);
+    }
+
     const legacy = await this.prisma.underwritingResult.findUnique({
       where: { dealId },
       include: {
