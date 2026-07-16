@@ -184,26 +184,43 @@ export class IntegrationCostControlService {
       intent.hints?.estimatedCostOverrideUsd ??
       (await this.pricing.estimate(intent.provider, intent.action, intent.payload));
 
-    // 5. Manual override
-    if (intent.context.leadId || intent.context.campaignId) {
-      const override = await this.findActiveOverride(intent);
-      if (override && override.extraBudgetUsd >= estimatedCost && !intent.hints?.skipBudget) {
-        const reservationId = await this.reserve(intent, estimatedCost, [], 'ALLOW_WITH_OVERRIDE', cacheKey);
-        return {
-          kind: 'ALLOW_WITH_OVERRIDE',
-          reservationId,
-          estimatedCostUsd: estimatedCost,
-          resolvedProvider: intent.provider,
-          overrideId: override.id,
-        };
-      }
-    }
-
-    // 6. Budget caps (collected, then evaluated)
+    // Load applicable buckets early so override-backed calls still debit
+    // the same caps they are bypassing.
     const buckets = intent.hints?.skipBudget
       ? []
       : await this.budgets.findApplicable(intent);
 
+    // 5. Manual override
+    if (intent.context.leadId || intent.context.campaignId) {
+      const override = await this.findActiveOverride(intent);
+      if (override && override.extraBudgetUsd >= estimatedCost && !intent.hints?.skipBudget) {
+        const claimed = await this.claimOverride(override.id, intent.context.accountId);
+        if (claimed) {
+          try {
+            const reservationId = await this.reserve(
+              intent,
+              estimatedCost,
+              buckets.map((b) => b.id),
+              'ALLOW_WITH_OVERRIDE',
+              cacheKey,
+              { overrideId: override.id },
+            );
+            return {
+              kind: 'ALLOW_WITH_OVERRIDE',
+              reservationId,
+              estimatedCostUsd: estimatedCost,
+              resolvedProvider: intent.provider,
+              overrideId: override.id,
+            };
+          } catch (err) {
+            await this.releaseOverride(override.id, intent.context.accountId);
+            throw err;
+          }
+        }
+      }
+    }
+
+    // 6. Budget caps (collected, then evaluated)
     if (!intent.hints?.skipBudget) {
       const overHard = this.budgets.findOverHardCap(buckets, estimatedCost);
       if (overHard) {
@@ -344,6 +361,15 @@ export class IntegrationCostControlService {
       bucketIds: event.bucketIds,
       deltaUsd: p.actualCostUsd,
     });
+
+    const overrideId = getOverrideId(event.metadata);
+    if (overrideId && p.status !== 'ok') {
+      try {
+        await this.releaseOverride(overrideId, event.accountId);
+      } catch (err) {
+        this.logger.warn(`failed to release override ${overrideId}: ${err}`);
+      }
+    }
   }
 
   /** For probes / admin views. Returns a snapshot without side effects. */
@@ -464,6 +490,7 @@ export class IntegrationCostControlService {
     bucketIds: string[],
     decision: string,
     _cacheKey: string,
+    metadata?: Record<string, unknown>,
   ): Promise<string> {
     const provider = await this.findProvider(intent.provider);
     if (!provider) throw new Error(`unknown provider ${intent.provider}`);
@@ -485,6 +512,7 @@ export class IntegrationCostControlService {
         automationRunId: intent.context.automationRunId,
         actor: intent.context.actor,
         userId: intent.context.userId,
+        metadata: metadata as object | undefined,
         bucketIds,
         idempotencyKey: intent.hints?.idempotencyKey,
       },
@@ -603,6 +631,31 @@ export class IntegrationCostControlService {
     this.hasOverridesCache.set(accountId, hasAny, hasAny ? 5_000 : 60_000);
     return hasAny;
   }
+
+  private async claimOverride(overrideId: string, accountId: string): Promise<boolean> {
+    const result = await this.prisma.manualBudgetOverride.updateMany({
+      where: {
+        id: overrideId,
+        accountId,
+        consumed: false,
+        expiresAt: { gt: new Date() },
+      },
+      data: { consumed: true },
+    });
+    if (result.count > 0) {
+      this.invalidateOverrideCache(accountId);
+      return true;
+    }
+    return false;
+  }
+
+  private async releaseOverride(overrideId: string, accountId: string): Promise<void> {
+    await this.prisma.manualBudgetOverride.updateMany({
+      where: { id: overrideId, accountId, consumed: true },
+      data: { consumed: false },
+    });
+    this.invalidateOverrideCache(accountId);
+  }
 }
 
 function blocked(decision: CostDecision): CheckAndCallBlocked {
@@ -621,4 +674,12 @@ function mergeJson(
   const baseObj = (base && typeof base === 'object' && !Array.isArray(base) ? (base as Record<string, unknown>) : {});
   if (!extra && Object.keys(baseObj).length === 0) return undefined;
   return { ...baseObj, ...(extra ?? {}) };
+}
+
+function getOverrideId(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null;
+  }
+  const overrideId = (metadata as Record<string, unknown>).overrideId;
+  return typeof overrideId === 'string' && overrideId.length > 0 ? overrideId : null;
 }
