@@ -50,6 +50,7 @@ describe('IntegrationCostControlService', () => {
       manualBudgetOverride: {
         findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(1),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
 
@@ -222,6 +223,18 @@ describe('IntegrationCostControlService', () => {
   });
 
   it('returns ALLOW_WITH_OVERRIDE when an active manual override covers the cost', async () => {
+    budgets.findApplicable.mockResolvedValueOnce([
+      {
+        id: 'b_1',
+        scope: 'lead',
+        scopeRef: 'lead_1',
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      },
+    ]);
     prisma.manualBudgetOverride.findFirst.mockResolvedValueOnce({
       id: 'o_1', extraBudgetUsd: 100, expiresAt: new Date(Date.now() + 86400000),
     });
@@ -230,6 +243,83 @@ describe('IntegrationCostControlService', () => {
       context: { accountId: 'acc_1', actor: 'system', leadId: 'lead_1' },
     });
     expect(decision.kind).toBe('ALLOW_WITH_OVERRIDE');
+    expect(prisma.manualBudgetOverride.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'o_1',
+        accountId: 'acc_1',
+        consumed: false,
+        expiresAt: { gt: expect.any(Date) },
+      },
+      data: { consumed: true },
+    });
+    expect(prisma.integrationCostEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          bucketIds: ['b_1'],
+          metadata: { overrideId: 'o_1' },
+        }),
+      }),
+    );
+    expect(budgets.debit).toHaveBeenCalledWith(['b_1'], 0.1);
+  });
+
+  it('releases a claimed manual override when the provider call fails', async () => {
+    budgets.findApplicable.mockResolvedValueOnce([
+      {
+        id: 'b_1',
+        scope: 'lead',
+        scopeRef: 'lead_1',
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      },
+    ]);
+    prisma.manualBudgetOverride.findFirst.mockResolvedValueOnce({
+      id: 'o_1', extraBudgetUsd: 100, expiresAt: new Date(Date.now() + 86400000),
+    });
+    prisma.integrationCostEvent.findUnique.mockResolvedValueOnce({
+      reservationId: 'res-1',
+      accountId: 'acc_1',
+      providerKey: 'attom',
+      action: 'property_expanded_profile',
+      estimatedCostUsd: 0.1,
+      bucketIds: ['b_1'],
+      metadata: { overrideId: 'o_1' },
+      decision: 'ALLOW_WITH_OVERRIDE',
+    });
+
+    const exec = jest.fn(async () => {
+      throw new Error('boom');
+    });
+
+    await expect(
+      service.checkAndCall({
+        ...baseIntent({
+          context: { accountId: 'acc_1', actor: 'system', leadId: 'lead_1' },
+          execute: exec as any,
+        }),
+      }),
+    ).rejects.toThrow('boom');
+
+    expect(prisma.manualBudgetOverride.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'o_1',
+          accountId: 'acc_1',
+          consumed: false,
+        }),
+        data: { consumed: true },
+      }),
+    );
+    expect(prisma.manualBudgetOverride.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 'o_1', accountId: 'acc_1', consumed: true },
+      data: { consumed: false },
+    });
+    expect(budgets.debit).toHaveBeenNthCalledWith(1, ['b_1'], 0.1);
+    expect(budgets.debit).toHaveBeenNthCalledWith(2, ['b_1'], -0.1);
   });
 
   it('returns ALLOW for the happy path', async () => {
