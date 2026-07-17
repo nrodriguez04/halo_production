@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
@@ -127,7 +128,9 @@ export class DocuSignService {
     }
   }
 
-  async getEnvelopeStatus(envelopeId: string) {
+  async getEnvelopeStatus(envelopeId: string, accountId: string) {
+    await this.assertEnvelopeOwnership(envelopeId, accountId);
+
     try {
       const token = await this.getAccessToken();
       const response = await fetch(
@@ -151,7 +154,9 @@ export class DocuSignService {
     }
   }
 
-  async downloadPDF(envelopeId: string) {
+  async downloadPDF(envelopeId: string, accountId: string) {
+    await this.assertEnvelopeOwnership(envelopeId, accountId);
+
     try {
       const token = await this.getAccessToken();
       const response = await fetch(
@@ -173,6 +178,29 @@ export class DocuSignService {
     } catch (error) {
       this.logger.error(`Failed to download PDF: ${error.message}`);
       throw error;
+    }
+  }
+
+  private async assertEnvelopeOwnership(
+    envelopeId: string,
+    accountId: string,
+  ): Promise<void> {
+    const contract = await this.prisma.contract.findFirst({
+      where: {
+        docusignEnvelopeId: envelopeId,
+        deal: {
+          is: {
+            accountId,
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundException('Envelope not found');
     }
   }
 
