@@ -18,13 +18,22 @@ export class DocuSignController {
   }
 
   @Get('envelopes/:envelopeId/status')
-  async getEnvelopeStatus(@Param('envelopeId') envelopeId: string) {
-    return this.docuSignService.getEnvelopeStatus(envelopeId);
+  async getEnvelopeStatus(
+    @Param('envelopeId') envelopeId: string,
+    @CurrentAccountId() accountId: string,
+  ) {
+    return this.docuSignService.getEnvelopeStatus(envelopeId, accountId);
   }
 
   @Get('envelopes/:envelopeId/pdf')
-  async downloadPDF(@Param('envelopeId') envelopeId: string) {
-    const pdfBuffer = await this.docuSignService.downloadPDF(envelopeId);
+  async downloadPDF(
+    @Param('envelopeId') envelopeId: string,
+    @CurrentAccountId() accountId: string,
+  ) {
+    const pdfBuffer = await this.docuSignService.downloadPDF(
+      envelopeId,
+      accountId,
+    );
     return {
       pdf: pdfBuffer.toString('base64'),
       contentType: 'application/pdf',
