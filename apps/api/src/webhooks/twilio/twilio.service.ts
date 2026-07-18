@@ -141,43 +141,71 @@ export class TwilioService {
     toPhone: string,
     fromPhone: string,
   ): Promise<string> {
-    const normalized = complianceUtils.normalizePhoneNumber(fromPhone);
+    const accountIds = await this.findMatchingAccountIds(fromPhone);
 
-    const recentOutbound = await this.prisma.message.findFirst({
-      where: {
-        direction: 'outbound',
-        metadata: {
-          path: ['to'],
-          string_contains: normalized,
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { accountId: true },
-    });
-
-    if (recentOutbound?.accountId) {
-      return recentOutbound.accountId;
+    if (accountIds.length === 1) {
+      return accountIds[0];
     }
 
-    const lead = await this.prisma.lead.findFirst({
-      where: {
-        OR: [
-          { canonicalPhone: normalized },
-          { canonicalPhone: fromPhone },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { accountId: true },
-    });
-
-    if (lead?.accountId) {
-      return lead.accountId;
+    if (accountIds.length > 1) {
+      // We currently use a shared Twilio sender number, so a sender phone that
+      // matches multiple tenants must fail closed instead of leaking the reply
+      // to whichever tenant happened to write most recently.
+      this.logger.warn(
+        `Ambiguous accountId for inbound Twilio message from=${fromPhone} to=${toPhone}; matched ${accountIds.length} tenants, defaulting to 'unknown'`,
+      );
+      return 'unknown';
     }
 
     this.logger.warn(
       `Could not resolve accountId for from=${fromPhone} to=${toPhone}, defaulting to 'unknown'`,
     );
     return 'unknown';
+  }
+
+  private async findMatchingAccountIds(fromPhone: string): Promise<string[]> {
+    const phoneCandidates = this.buildPhoneCandidates(fromPhone);
+
+    const [outboundMatches, leadMatches] = await Promise.all([
+      this.prisma.message.findMany({
+        where: {
+          direction: 'outbound',
+          OR: phoneCandidates.map((phone) => ({
+            metadata: {
+              path: ['to'],
+              string_contains: phone,
+            },
+          })),
+        },
+        select: { accountId: true },
+        distinct: ['accountId'],
+        take: 2,
+      }),
+      this.prisma.lead.findMany({
+        where: {
+          OR: phoneCandidates.map((phone) => ({
+            canonicalPhone: phone,
+          })),
+        },
+        select: { accountId: true },
+        distinct: ['accountId'],
+        take: 2,
+      }),
+    ]);
+
+    return Array.from(
+      new Set(
+        [...outboundMatches, ...leadMatches]
+          .map((match) => match.accountId)
+          .filter((accountId): accountId is string => !!accountId),
+      ),
+    );
+  }
+
+  private buildPhoneCandidates(phone: string): string[] {
+    const trimmed = phone.trim();
+    const normalized = complianceUtils.normalizePhoneNumber(trimmed);
+    return Array.from(new Set([trimmed, normalized].filter(Boolean)));
   }
 
   private mapTwilioStatus(status: string): string {
