@@ -11,10 +11,7 @@ import {
   TimelineEntityType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
-import {
-  PolicyViolationError,
-  assertPolicy,
-} from '@halo/shared';
+import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
 
@@ -26,8 +23,14 @@ export class MarketingService {
     private timelineService: TimelineService,
   ) {}
 
-  async generateFlyer(accountId: string, actorId: string | null, dealId: string) {
-    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, accountId } });
+  async generateFlyer(
+    accountId: string,
+    actorId: string | null,
+    dealId: string,
+  ) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
+    });
     if (!deal) {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
@@ -51,7 +54,7 @@ export class MarketingService {
         globalDailySpendUsd: globalTodayCost,
         globalDailyCapUsd: dailyCap,
         sideEffectsEnabled: controlPlane.enabled,
-        aiEnabled: controlPlane.enabled && controlPlane.externalDataEnabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
       const run = await this.prisma.jobRun.create({
@@ -120,7 +123,7 @@ export class MarketingService {
         actorType: 'user',
         now: new Date(),
         requestedAction: 'marketing.generate_buyer_blast_draft',
-        channel: 'buyer_blast',
+        channel: 'marketing_buyer_blast',
         dealId,
         dailySpendUsd: todayCost,
         dailyCapUsd: dailyCap,
@@ -128,7 +131,7 @@ export class MarketingService {
         globalDailySpendUsd: globalTodayCost,
         globalDailyCapUsd: dailyCap,
         sideEffectsEnabled: controlPlane.enabled,
-        aiEnabled: controlPlane.enabled && controlPlane.externalDataEnabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
       const run = await this.prisma.jobRun.create({
@@ -196,6 +199,45 @@ export class MarketingService {
   }
 
   async generateVideoScript(accountId: string, userId: string, dealId: string) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
+    });
+    if (!deal) {
+      throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
+
+    const controlPlane = await this.getControlPlane();
+    const todayCost = await this.getTodayCost(accountId);
+    const globalTodayCost = await this.getTodayCost();
+    const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
+
+    try {
+      assertPolicy({
+        tenantId: accountId,
+        actorId: userId,
+        actorType: 'user',
+        now: new Date(),
+        requestedAction: 'marketing.generate_video_script',
+        channel: 'marketing_video',
+        dealId,
+        dailySpendUsd: todayCost,
+        dailyCapUsd: dailyCap,
+        perTenantCapUsd: dailyCap,
+        globalDailySpendUsd: globalTodayCost,
+        globalDailyCapUsd: dailyCap,
+        sideEffectsEnabled: controlPlane.enabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
+      });
+    } catch (error) {
+      if (error instanceof PolicyViolationError) {
+        throw new ForbiddenException({
+          code: error.code,
+          reason: error.reason,
+        });
+      }
+      throw error;
+    }
+
     const jobRun = await this.prisma.jobRun.create({
       data: {
         tenantId: accountId,
@@ -241,9 +283,8 @@ export class MarketingService {
         emailEnabled: true,
         docusignEnabled: true,
         externalDataEnabled: true,
+        aiEnabled: true,
       }
     );
   }
 }
-
-
