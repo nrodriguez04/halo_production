@@ -1,32 +1,32 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Job } from "bullmq";
 import {
   JobRunStatus,
   TimelineActorType,
   TimelineEntityType,
-} from '@prisma/client';
-import * as crypto from 'crypto';
-import OpenAI from 'openai';
-import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
-import { prisma } from '../prisma-client';
+} from "@prisma/client";
+import * as crypto from "crypto";
+import OpenAI from "openai";
+import { assertPolicy, prompts, renderPrompt } from "@halo/shared";
+import { prisma } from "../prisma-client";
 
 type MarketingPayload = {
   jobRunId: string;
   tenantId: string;
   dealId: string;
-  type: 'GENERATE_FLYER_DRAFT' | 'GENERATE_BUYER_BLAST_DRAFT';
+  type: "GENERATE_FLYER_DRAFT" | "GENERATE_BUYER_BLAST_DRAFT";
   buyerIds?: string[];
   actorId?: string | null;
 };
 
-@Processor('marketing')
+@Processor("marketing")
 export class MarketingProcessor extends WorkerHost {
   private _openai: OpenAI | null = null;
 
   private get openai(): OpenAI {
     if (!this._openai) {
       if (!process.env.OPENAI_API_KEY) {
-        throw new Error('OPENAI_API_KEY environment variable is required');
+        throw new Error("OPENAI_API_KEY environment variable is required");
       }
       this._openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -36,7 +36,14 @@ export class MarketingProcessor extends WorkerHost {
   }
 
   async process(job: Job<MarketingPayload>) {
-    const { jobRunId, tenantId, dealId, type, buyerIds = [], actorId } = job.data;
+    const {
+      jobRunId,
+      tenantId,
+      dealId,
+      type,
+      buyerIds = [],
+      actorId,
+    } = job.data;
 
     await prisma.jobRun.update({
       where: { id: jobRunId },
@@ -55,19 +62,19 @@ export class MarketingProcessor extends WorkerHost {
       const controlPlane = await this.getControlPlane();
       const todayCost = await this.getTodayCost(tenantId);
       const globalTodayCost = await this.getTodayCost();
-      const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
+      const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || "2.0");
 
       assertPolicy({
         tenantId,
         actorId: actorId || null,
-        actorType: 'system',
+        actorType: "system",
         now: new Date(),
         requestedAction:
-          type === 'GENERATE_FLYER_DRAFT'
-            ? 'marketing.generate_flyer_draft'
-            : 'marketing.generate_buyer_blast_draft',
+          type === "GENERATE_FLYER_DRAFT"
+            ? "marketing.generate_flyer_draft"
+            : "marketing.generate_buyer_blast_draft",
         channel:
-          type === 'GENERATE_FLYER_DRAFT' ? 'marketing_flyer' : 'buyer_blast',
+          type === "GENERATE_FLYER_DRAFT" ? "marketing_flyer" : "buyer_blast",
         dealId,
         dailySpendUsd: todayCost,
         dailyCapUsd: dailyCap,
@@ -75,18 +82,18 @@ export class MarketingProcessor extends WorkerHost {
         globalDailySpendUsd: globalTodayCost,
         globalDailyCapUsd: dailyCap,
         sideEffectsEnabled: controlPlane.enabled,
-        aiEnabled: controlPlane.enabled && controlPlane.externalDataEnabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
       const result =
-        type === 'GENERATE_FLYER_DRAFT'
+        type === "GENERATE_FLYER_DRAFT"
           ? await this.generateFlyer(dealId, deal)
           : await this.generateBuyerBlast(dealId, deal, buyerIds);
 
       const resultHash = crypto
-        .createHash('sha256')
+        .createHash("sha256")
         .update(JSON.stringify(result))
-        .digest('hex');
+        .digest("hex");
 
       await prisma.jobRun.update({
         where: { id: jobRunId },
@@ -104,9 +111,9 @@ export class MarketingProcessor extends WorkerHost {
           entityType: TimelineEntityType.JOB,
           entityId: jobRunId,
           eventType:
-            type === 'GENERATE_FLYER_DRAFT'
-              ? 'MARKETING_FLYER_COMPLETED'
-              : 'MARKETING_BUYER_BLAST_COMPLETED',
+            type === "GENERATE_FLYER_DRAFT"
+              ? "MARKETING_FLYER_COMPLETED"
+              : "MARKETING_BUYER_BLAST_COMPLETED",
           payloadJson: { dealId, resultHash },
           actorId: actorId || null,
           actorType: TimelineActorType.system,
@@ -128,7 +135,7 @@ export class MarketingProcessor extends WorkerHost {
           tenantId,
           entityType: TimelineEntityType.JOB,
           entityId: jobRunId,
-          eventType: 'MARKETING_JOB_FAILED',
+          eventType: "MARKETING_JOB_FAILED",
           payloadJson: { dealId, type, error: (error as Error).message },
           actorId: actorId || null,
           actorType: TimelineActorType.system,
@@ -154,26 +161,27 @@ export class MarketingProcessor extends WorkerHost {
     });
 
     const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4',
+      model: "gpt-4",
       messages: [
         {
-          role: 'system',
-          content: 'You are a marketing expert creating real estate property flyers.',
+          role: "system",
+          content:
+            "You are a marketing expert creating real estate property flyers.",
         },
-        { role: 'user', content: prompt },
+        { role: "user", content: prompt },
       ],
       temperature: 0.7,
     });
 
-    const content = completion.choices[0].message.content || '';
+    const content = completion.choices[0].message.content || "";
     const cost = this.estimateCost(
       completion.usage?.prompt_tokens || 0,
       completion.usage?.completion_tokens || 0,
     );
     await prisma.aICostLog.create({
       data: {
-        provider: 'openai',
-        model: 'gpt-4',
+        provider: "openai",
+        model: "gpt-4",
         tokensIn: completion.usage?.prompt_tokens,
         tokensOut: completion.usage?.completion_tokens,
         cost,
@@ -184,10 +192,10 @@ export class MarketingProcessor extends WorkerHost {
     const material = await prisma.marketingMaterial.create({
       data: {
         dealId,
-        type: 'flyer',
+        type: "flyer",
         content,
         metadata: {
-          model: 'gpt-4',
+          model: "gpt-4",
           tokensUsed: completion.usage?.total_tokens,
           cost,
         },
@@ -232,26 +240,27 @@ export class MarketingProcessor extends WorkerHost {
     });
 
     const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4',
+      model: "gpt-4",
       messages: [
         {
-          role: 'system',
-          content: 'You are a real estate marketing expert creating buyer blast emails.',
+          role: "system",
+          content:
+            "You are a real estate marketing expert creating buyer blast emails.",
         },
-        { role: 'user', content: prompt },
+        { role: "user", content: prompt },
       ],
       temperature: 0.7,
     });
 
-    const content = completion.choices[0].message.content || '';
+    const content = completion.choices[0].message.content || "";
     const cost = this.estimateCost(
       completion.usage?.prompt_tokens || 0,
       completion.usage?.completion_tokens || 0,
     );
     await prisma.aICostLog.create({
       data: {
-        provider: 'openai',
-        model: 'gpt-4',
+        provider: "openai",
+        model: "gpt-4",
         tokensIn: completion.usage?.prompt_tokens,
         tokensOut: completion.usage?.completion_tokens,
         cost,
@@ -263,14 +272,14 @@ export class MarketingProcessor extends WorkerHost {
       data: {
         accountId: deal.accountId,
         dealId,
-        channel: 'email',
-        direction: 'outbound',
-        status: 'pending_approval',
+        channel: "email",
+        direction: "outbound",
+        status: "pending_approval",
         content,
         metadata: {
-          type: 'buyer_blast',
+          type: "buyer_blast",
           buyerIds,
-          model: 'gpt-4',
+          model: "gpt-4",
           tokensUsed: completion.usage?.total_tokens,
           cost,
         } as any,
@@ -280,7 +289,7 @@ export class MarketingProcessor extends WorkerHost {
     const material = await prisma.marketingMaterial.create({
       data: {
         dealId,
-        type: 'buyer_blast',
+        type: "buyer_blast",
         content,
         metadata: {
           buyerIds,
@@ -299,7 +308,9 @@ export class MarketingProcessor extends WorkerHost {
   private estimateCost(tokensIn: number, tokensOut: number): number {
     const inputCostPer1k = 0.03;
     const outputCostPer1k = 0.06;
-    return (tokensIn / 1000) * inputCostPer1k + (tokensOut / 1000) * outputCostPer1k;
+    return (
+      (tokensIn / 1000) * inputCostPer1k + (tokensOut / 1000) * outputCostPer1k
+    );
   }
 
   private async getTodayCost(accountId?: string): Promise<number> {
@@ -325,6 +336,7 @@ export class MarketingProcessor extends WorkerHost {
         emailEnabled: true,
         docusignEnabled: true,
         externalDataEnabled: true,
+        aiEnabled: true,
       }
     );
   }

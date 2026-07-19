@@ -1,23 +1,23 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Job } from "bullmq";
 import {
   JobRunStatus,
   TimelineActorType,
   TimelineEntityType,
-} from '@prisma/client';
-import * as crypto from 'crypto';
-import OpenAI from 'openai';
-import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
-import { prisma } from '../prisma-client';
+} from "@prisma/client";
+import * as crypto from "crypto";
+import OpenAI from "openai";
+import { assertPolicy, prompts, renderPrompt } from "@halo/shared";
+import { prisma } from "../prisma-client";
 
-@Processor('underwriting')
+@Processor("underwriting")
 export class UnderwritingProcessor extends WorkerHost {
   private _openai: OpenAI | null = null;
 
   private get openai(): OpenAI {
     if (!this._openai) {
       if (!process.env.OPENAI_API_KEY) {
-        throw new Error('OPENAI_API_KEY environment variable is required');
+        throw new Error("OPENAI_API_KEY environment variable is required");
       }
       this._openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -56,15 +56,15 @@ export class UnderwritingProcessor extends WorkerHost {
       const controlPlane = await this.getControlPlane();
       const todayCost = await this.getTodayCost(tenantId);
       const globalTodayCost = await this.getTodayCost();
-      const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
+      const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || "2.0");
 
       assertPolicy({
         tenantId,
         actorId: actorId || null,
-        actorType: 'system',
+        actorType: "system",
         now: new Date(),
-        requestedAction: 'underwriting.execute',
-        channel: 'ai_underwrite',
+        requestedAction: "underwriting.execute",
+        channel: "ai_underwrite",
         dealId,
         dailySpendUsd: todayCost,
         dailyCapUsd: dailyCap,
@@ -72,7 +72,7 @@ export class UnderwritingProcessor extends WorkerHost {
         globalDailySpendUsd: globalTodayCost,
         globalDailyCapUsd: dailyCap,
         sideEffectsEnabled: controlPlane.enabled,
-        aiEnabled: controlPlane.enabled && controlPlane.externalDataEnabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
       const propertyData = {
@@ -86,19 +86,19 @@ export class UnderwritingProcessor extends WorkerHost {
 
       const prompt = renderPrompt(prompts.underwriting.user, {
         propertyData: JSON.stringify(propertyData, null, 2),
-        marketContext: 'Standard wholesale market analysis',
+        marketContext: "Standard wholesale market analysis",
       });
 
       const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
+        model: "gpt-4",
         messages: [
-          { role: 'system', content: prompts.underwriting.system },
-          { role: 'user', content: prompt },
+          { role: "system", content: prompts.underwriting.system },
+          { role: "user", content: prompt },
         ],
         temperature: 0.3,
       });
 
-      const response = completion.choices[0].message.content || '';
+      const response = completion.choices[0].message.content || "";
       const analysis = this.parseAnalysis(response);
       const cost = this.estimateCost(
         completion.usage?.prompt_tokens || 0,
@@ -107,8 +107,8 @@ export class UnderwritingProcessor extends WorkerHost {
 
       await prisma.aICostLog.create({
         data: {
-          provider: 'openai',
-          model: 'gpt-4',
+          provider: "openai",
+          model: "gpt-4",
           tokensIn: completion.usage?.prompt_tokens,
           tokensOut: completion.usage?.completion_tokens,
           cost,
@@ -128,7 +128,7 @@ export class UnderwritingProcessor extends WorkerHost {
           rationale: analysis.rationale,
           compsSummary: analysis.compsSummary,
           evaluationMetadata: {
-            model: 'gpt-4',
+            model: "gpt-4",
             tokensUsed: completion.usage?.total_tokens,
             cost,
           },
@@ -141,7 +141,7 @@ export class UnderwritingProcessor extends WorkerHost {
           rationale: analysis.rationale,
           compsSummary: analysis.compsSummary,
           evaluationMetadata: {
-            model: 'gpt-4',
+            model: "gpt-4",
             tokensUsed: completion.usage?.total_tokens,
             cost,
           },
@@ -165,9 +165,9 @@ export class UnderwritingProcessor extends WorkerHost {
         rationale: analysis.rationale,
       };
       const resultHash = crypto
-        .createHash('sha256')
+        .createHash("sha256")
         .update(JSON.stringify(result))
-        .digest('hex');
+        .digest("hex");
 
       await prisma.jobRun.update({
         where: { id: jobRunId },
@@ -184,7 +184,7 @@ export class UnderwritingProcessor extends WorkerHost {
           tenantId,
           entityType: TimelineEntityType.JOB,
           entityId: jobRunId,
-          eventType: 'UNDERWRITE_COMPLETED',
+          eventType: "UNDERWRITE_COMPLETED",
           payloadJson: { dealId, resultHash },
           actorId: actorId || null,
           actorType: TimelineActorType.system,
@@ -206,7 +206,7 @@ export class UnderwritingProcessor extends WorkerHost {
           tenantId,
           entityType: TimelineEntityType.JOB,
           entityId: jobRunId,
-          eventType: 'UNDERWRITE_FAILED',
+          eventType: "UNDERWRITE_FAILED",
           payloadJson: { error: (error as Error).message },
           actorId: actorId || null,
           actorType: TimelineActorType.system,
@@ -224,11 +224,11 @@ export class UnderwritingProcessor extends WorkerHost {
     const confidenceMatch = response.match(/Confidence[:\s]+(\d+)/i);
 
     return {
-      arv: arvMatch ? parseFloat(arvMatch[1].replace(/,/g, '')) : null,
+      arv: arvMatch ? parseFloat(arvMatch[1].replace(/,/g, "")) : null,
       repairEstimate: repairMatch
-        ? parseFloat(repairMatch[1].replace(/,/g, ''))
+        ? parseFloat(repairMatch[1].replace(/,/g, ""))
         : null,
-      mao: maoMatch ? parseFloat(maoMatch[1].replace(/,/g, '')) : null,
+      mao: maoMatch ? parseFloat(maoMatch[1].replace(/,/g, "")) : null,
       confidence: confidenceMatch ? parseFloat(confidenceMatch[1]) / 100 : 0.5,
       rationale: response,
       compsSummary: {},
@@ -238,7 +238,9 @@ export class UnderwritingProcessor extends WorkerHost {
   private estimateCost(tokensIn: number, tokensOut: number): number {
     const inputCostPer1k = 0.03;
     const outputCostPer1k = 0.06;
-    return (tokensIn / 1000) * inputCostPer1k + (tokensOut / 1000) * outputCostPer1k;
+    return (
+      (tokensIn / 1000) * inputCostPer1k + (tokensOut / 1000) * outputCostPer1k
+    );
   }
 
   private async getTodayCost(accountId?: string): Promise<number> {
@@ -264,6 +266,7 @@ export class UnderwritingProcessor extends WorkerHost {
         emailEnabled: true,
         docusignEnabled: true,
         externalDataEnabled: true,
+        aiEnabled: true,
       }
     );
   }
