@@ -123,7 +123,7 @@ export class MarketingService {
         actorType: 'user',
         now: new Date(),
         requestedAction: 'marketing.generate_buyer_blast_draft',
-        channel: 'buyer_blast',
+        channel: 'marketing_buyer_blast',
         dealId,
         dailySpendUsd: todayCost,
         dailyCapUsd: dailyCap,

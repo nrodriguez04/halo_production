@@ -74,7 +74,9 @@ export class MarketingProcessor extends WorkerHost {
             ? "marketing.generate_flyer_draft"
             : "marketing.generate_buyer_blast_draft",
         channel:
-          type === "GENERATE_FLYER_DRAFT" ? "marketing_flyer" : "buyer_blast",
+          type === "GENERATE_FLYER_DRAFT"
+            ? "marketing_flyer"
+            : "marketing_buyer_blast",
         dealId,
         dailySpendUsd: todayCost,
         dailyCapUsd: dailyCap,
