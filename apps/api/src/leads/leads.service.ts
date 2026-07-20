@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   TimelineActorType,
   TimelineEntityType,
@@ -328,29 +328,17 @@ export class LeadsService {
     accountId: string,
     userId: string,
   ) {
+    if (sourceId === targetId) {
+      throw new BadRequestException(
+        'Source and target leads must be different',
+      );
+    }
+
     const source = await this.findOne(sourceId, accountId);
     const target = await this.findOne(targetId, accountId);
 
-    // Merge source records
-    await this.prisma.sourceRecord.updateMany({
-      where: { leadId: sourceId },
-      data: { leadId: targetId },
-    });
-
-    // Merge properties
-    await this.prisma.property.updateMany({
-      where: { leadId: sourceId },
-      data: { leadId: targetId },
-    });
-
-    // Merge deals
-    await this.prisma.deal.updateMany({
-      where: { leadId: sourceId },
-      data: { leadId: targetId },
-    });
-
     // Update target with best data from source
-    const updates: any = {};
+    const updates: Record<string, string> = {};
     if (!target.canonicalAddress && source.canonicalAddress) {
       updates.canonicalAddress = source.canonicalAddress;
     }
@@ -373,31 +361,90 @@ export class LeadsService {
       updates.canonicalEmail = source.canonicalEmail;
     }
 
-    if (Object.keys(updates).length > 0) {
-      await this.prisma.lead.update({
-        where: { id: targetId },
-        data: updates,
+    await this.prisma.$transaction(async (tx) => {
+      // Reparent every lead-linked record before deleting the source lead so
+      // duplicate resolution does not silently strand compliance/history data.
+      await tx.sourceRecord.updateMany({
+        where: { leadId: sourceId },
+        data: { leadId: targetId },
       });
-    }
-
-    // Delete source lead
-    await this.prisma.lead.delete({
-      where: { id: sourceId },
-    });
-
-    // Log audit
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        accountId: target.accountId,
-        action: 'lead.merge',
-        resource: `lead:${targetId}`,
-        details: {
-          sourceId,
-          targetId,
-          mergedAt: new Date().toISOString(),
+      await tx.property.updateMany({
+        where: { leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.deal.updateMany({
+        where: { leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.consent.updateMany({
+        where: { accountId, leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.message.updateMany({
+        where: { accountId, leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.pIIEnvelope.updateMany({
+        where: { accountId, leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.leadEnrichmentJob.updateMany({
+        where: { accountId, leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.integrationCostEvent.updateMany({
+        where: { accountId, leadId: sourceId },
+        data: { leadId: targetId },
+      });
+      await tx.jobRun.updateMany({
+        where: {
+          tenantId: accountId,
+          entityType: 'LEAD',
+          entityId: sourceId,
         },
-      },
+        data: { entityId: targetId },
+      });
+      await tx.automationRun.updateMany({
+        where: {
+          tenantId: accountId,
+          entityType: { in: ['lead', 'LEAD'] },
+          entityId: sourceId,
+        },
+        data: { entityId: targetId },
+      });
+      await tx.timelineEvent.updateMany({
+        where: {
+          tenantId: accountId,
+          entityType: TimelineEntityType.LEAD,
+          entityId: sourceId,
+        },
+        data: { entityId: targetId },
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await tx.lead.update({
+          where: { id: targetId },
+          data: updates,
+        });
+      }
+
+      await tx.lead.delete({
+        where: { id: sourceId },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          accountId: target.accountId,
+          action: 'lead.merge',
+          resource: `lead:${targetId}`,
+          details: {
+            sourceId,
+            targetId,
+            mergedAt: new Date().toISOString(),
+          },
+        },
+      });
     });
 
     return { success: true, mergedInto: targetId };
