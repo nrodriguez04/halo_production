@@ -14,6 +14,17 @@ import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import * as complianceUtils from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
 
+type ComplianceSubject = Pick<
+  MessageCreate,
+  'accountId' | 'leadId' | 'dealId' | 'channel' | 'direction' | 'metadata'
+>;
+
+type ComplianceLead = {
+  id: string;
+  canonicalPhone: string | null;
+  canonicalEmail: string | null;
+};
+
 @Injectable()
 export class CommunicationsService {
   constructor(
@@ -24,8 +35,8 @@ export class CommunicationsService {
   async create(data: MessageCreate) {
     // Check control plane
     const controlPlane = await this.getControlPlane();
-    const channelEnabled = data.channel === 'sms' 
-      ? controlPlane.smsEnabled 
+    const channelEnabled = data.channel === 'sms'
+      ? controlPlane.smsEnabled
       : controlPlane.emailEnabled;
 
     if (!controlPlane.enabled || !channelEnabled) {
@@ -122,13 +133,13 @@ export class CommunicationsService {
 
   async approve(id: string, accountId: string, userId: string, queueService?: any) {
     const message = await this.findOne(id, accountId);
-    
+
     if (message.status !== 'pending_approval') {
       throw new BadRequestException('Message is not pending approval');
     }
 
     const controlPlane = await this.getControlPlane();
-    const compliance = await this.getComplianceFacts(message as any);
+    const compliance = await this.getComplianceFacts(message as ComplianceSubject);
     try {
       assertPolicy({
         tenantId: accountId,
@@ -228,7 +239,7 @@ export class CommunicationsService {
     };
   }
 
-  private async getComplianceFacts(data: MessageCreate | any) {
+  private async getComplianceFacts(data: ComplianceSubject) {
     const facts: {
       isDnc: boolean;
       hasConsent: boolean;
@@ -237,29 +248,27 @@ export class CommunicationsService {
       localHour?: number;
     } = {
       isDnc: false,
-      hasConsent: true,
+      hasConsent: data.direction === 'outbound' ? false : true,
     };
 
-    // Check DNC
-    if (data.metadata?.phone) {
-      const normalizedPhone = complianceUtils.normalizePhoneNumber(data.metadata.phone);
+    const lead = await this.resolveComplianceLead(data);
+    const recipient = this.resolveRecipient(data, lead);
+
+    if (data.direction === 'outbound' && recipient.phone) {
       const dnc = await this.prisma.dNCList.findFirst({
         where: {
-          phone: normalizedPhone,
+          accountId: data.accountId,
+          phone: recipient.phone,
         },
       });
 
       facts.isDnc = !!dnc;
     }
 
-    // Check consent
-    if (data.leadId) {
+    const consentWhere = this.buildConsentWhere(data, lead, recipient);
+    if (consentWhere) {
       const consent = await this.prisma.consent.findFirst({
-        where: {
-          leadId: data.leadId,
-          channel: data.channel,
-          revokedAt: null,
-        },
+        where: consentWhere,
         orderBy: { grantedAt: 'desc' },
       });
 
@@ -286,6 +295,145 @@ export class CommunicationsService {
     }
 
     return facts;
+  }
+
+  private async resolveComplianceLead(
+    data: ComplianceSubject,
+  ): Promise<ComplianceLead | null> {
+    let lead: ComplianceLead | null = null;
+
+    if (data.leadId) {
+      lead = await this.prisma.lead.findFirst({
+        where: { id: data.leadId, accountId: data.accountId },
+        select: {
+          id: true,
+          canonicalPhone: true,
+          canonicalEmail: true,
+        },
+      });
+      if (!lead) {
+        throw new NotFoundException(`Lead with ID ${data.leadId} not found`);
+      }
+    }
+
+    if (data.dealId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: data.dealId, accountId: data.accountId },
+        select: {
+          lead: {
+            select: {
+              id: true,
+              canonicalPhone: true,
+              canonicalEmail: true,
+            },
+          },
+        },
+      });
+      if (!deal) {
+        throw new NotFoundException(`Deal with ID ${data.dealId} not found`);
+      }
+      if (!lead && deal.lead) {
+        lead = deal.lead;
+      }
+    }
+
+    return lead;
+  }
+
+  private resolveRecipient(
+    data: ComplianceSubject,
+    lead: ComplianceLead | null,
+  ): { phone?: string; email?: string } {
+    const metadata = this.asMetadataRecord(data.metadata);
+
+    if (data.channel === 'sms') {
+      const rawPhone =
+        this.pickMetadataString(metadata, 'phone') ??
+        this.pickMetadataString(metadata, 'to') ??
+        lead?.canonicalPhone ??
+        undefined;
+      if (!rawPhone) {
+        return {};
+      }
+      return { phone: complianceUtils.normalizePhoneNumber(rawPhone) };
+    }
+
+    const rawEmail =
+      this.pickMetadataString(metadata, 'email') ??
+      this.pickMetadataString(metadata, 'to') ??
+      lead?.canonicalEmail ??
+      undefined;
+    if (!rawEmail) {
+      return {};
+    }
+    return { email: rawEmail.trim().toLowerCase() };
+  }
+
+  private buildConsentWhere(
+    data: ComplianceSubject,
+    lead: ComplianceLead | null,
+    recipient: { phone?: string; email?: string },
+  ) {
+    if (data.direction !== 'outbound') {
+      return null;
+    }
+
+    const orClauses: Array<Record<string, unknown>> = [];
+
+    if (data.channel === 'sms' && recipient.phone) {
+      orClauses.push({ phone: recipient.phone });
+      if (
+        lead?.id &&
+        lead.canonicalPhone &&
+        complianceUtils.normalizePhoneNumber(lead.canonicalPhone) ===
+          recipient.phone
+      ) {
+        orClauses.push({ leadId: lead.id });
+      }
+    }
+
+    if (data.channel === 'email' && recipient.email) {
+      orClauses.push({ email: recipient.email });
+      if (
+        lead?.id &&
+        lead.canonicalEmail &&
+        lead.canonicalEmail.trim().toLowerCase() === recipient.email
+      ) {
+        orClauses.push({ leadId: lead.id });
+      }
+    }
+
+    if (!orClauses.length) {
+      return null;
+    }
+
+    return {
+      accountId: data.accountId,
+      channel: data.channel,
+      revokedAt: null,
+      OR: orClauses,
+    };
+  }
+
+  private asMetadataRecord(
+    metadata: MessageCreate['metadata'],
+  ): Record<string, unknown> | undefined {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      return undefined;
+    }
+    return metadata as Record<string, unknown>;
+  }
+
+  private pickMetadataString(
+    metadata: Record<string, unknown> | undefined,
+    key: string,
+  ): string | undefined {
+    const value = metadata?.[key];
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   private getLocalHour(timezone: string): number | undefined {
