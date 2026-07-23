@@ -5,6 +5,7 @@ import { Twilio } from 'twilio';
 import * as nodemailer from 'nodemailer';
 import { assertPolicy } from '@halo/shared';
 import { prisma } from '../prisma-client';
+import { getCommunicationComplianceFacts } from './communications-policy';
 
 @Processor('communications')
 export class CommunicationsProcessor extends WorkerHost {
@@ -60,6 +61,8 @@ export class CommunicationsProcessor extends WorkerHost {
         throw new Error('Communications are disabled');
       }
 
+      const compliance = await getCommunicationComplianceFacts(prisma, message);
+
       assertPolicy({
         tenantId: message.accountId,
         actorId: null,
@@ -68,7 +71,14 @@ export class CommunicationsProcessor extends WorkerHost {
         requestedAction:
           message.channel === 'sms' ? 'comms.send_sms' : 'comms.send_email',
         channel: message.channel === 'sms' ? 'sms' : 'email',
+        leadId: message.leadId || undefined,
+        dealId: message.dealId || undefined,
         messageId,
+        hasConsent: compliance.hasConsent,
+        consentSource: compliance.consentSource,
+        isDnc: compliance.isDnc,
+        timezone: compliance.timezone,
+        localHour: compliance.localHour,
         sideEffectsEnabled: controlPlane.enabled,
         messagingEnabled:
           message.channel === 'sms'
