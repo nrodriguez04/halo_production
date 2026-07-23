@@ -27,10 +27,8 @@ type WorkerComplianceDb = {
   dNCList: { findFirst(args: any): Promise<any> };
   consent: { findFirst(args: any): Promise<any> };
   quietHours: { findFirst(args: any): Promise<any> };
-  lead: { findFirst(args: any): Promise<ComplianceLead | null> };
-  deal: {
-    findFirst(args: any): Promise<{ lead: ComplianceLead | null } | null>;
-  };
+  lead: { findFirst(args: any): Promise<any> };
+  deal: { findFirst(args: any): Promise<any> };
 };
 
 // Recompute mutable compliance facts at send time because queued messages can
