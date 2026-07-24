@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { QueuesModule } from '../queues/queues.module';
 import { TimelineModule } from '../timeline/timeline.module';
 import { LeadLifecycleController } from './lead-lifecycle.controller';
 import { LeadLifecycleService } from './lead-lifecycle.service';
@@ -10,7 +11,7 @@ import { LeadLifecycleService } from './lead-lifecycle.service';
 // `LeadLifecycleModule` in their own imports array.
 @Global()
 @Module({
-  imports: [TimelineModule],
+  imports: [TimelineModule, QueuesModule],
   controllers: [LeadLifecycleController],
   providers: [LeadLifecycleService, PrismaService],
   exports: [LeadLifecycleService],
