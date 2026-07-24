@@ -12,6 +12,7 @@ import {
   transitionLeadStatus,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
+import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
 
 // Single owner of all lead status transitions. Replaces the previous
@@ -44,6 +45,7 @@ export class LeadLifecycleService {
   constructor(
     private prisma: PrismaService,
     private timeline: TimelineService,
+    private queueService: QueueService,
   ) {}
 
   /**
@@ -90,6 +92,9 @@ export class LeadLifecycleService {
       );
     }
 
+    const shouldEnqueueEnrichment =
+      params.next === 'enriching' && lead.status !== 'enriching';
+
     const ops: Promise<unknown>[] = [];
 
     ops.push(
@@ -122,6 +127,10 @@ export class LeadLifecycleService {
     );
 
     await Promise.all(ops);
+
+    if (shouldEnqueueEnrichment) {
+      await this.queueService.enqueueLeadEnrichment(lead.id);
+    }
 
     return this.prisma.lead.findUnique({ where: { id: lead.id } });
   }
