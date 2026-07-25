@@ -10,7 +10,8 @@ export class UnderwriteDealSkill {
   getDefinition(): SkillDefinition {
     return {
       name: 'underwriting.analyze',
-      description: 'Run AI underwriting analysis on a deal',
+      description:
+        'Unavailable: underwriting queueing is not wired in this build',
       inputSchema: { dealId: 'string', tenantId: 'string' },
       execute: async (input) => {
         const ctx = buildPolicyContext({
@@ -25,17 +26,15 @@ export class UnderwriteDealSkill {
         });
         assertPolicy(ctx);
 
-        const jobRun = await this.prisma.jobRun.create({
-          data: {
-            tenantId: input.tenantId,
-            kind: 'UNDERWRITE_DEAL',
-            entityType: 'DEAL',
-            entityId: input.dealId,
-            status: 'QUEUED',
-          },
+        const deal = await this.prisma.deal.findFirst({
+          where: { id: input.dealId, accountId: input.tenantId },
         });
 
-        return { jobId: jobRun.id, status: 'QUEUED' };
+        if (!deal) return { error: 'Deal not found' };
+
+        throw new Error(
+          'Underwriting is unavailable: no underwriting job was enqueued.',
+        );
       },
     };
   }
