@@ -10,7 +10,8 @@ export class GenerateFlyerSkill {
   getDefinition(): SkillDefinition {
     return {
       name: 'marketing.generate_flyer',
-      description: 'Generate a marketing flyer for a deal',
+      description:
+        'Unavailable: flyer queueing is not wired in this build',
       inputSchema: { dealId: 'string', tenantId: 'string' },
       execute: async (input) => {
         const ctx = buildPolicyContext({
@@ -25,17 +26,15 @@ export class GenerateFlyerSkill {
         });
         assertPolicy(ctx);
 
-        const jobRun = await this.prisma.jobRun.create({
-          data: {
-            tenantId: input.tenantId,
-            kind: 'GENERATE_FLYER_DRAFT',
-            entityType: 'DEAL',
-            entityId: input.dealId,
-            status: 'QUEUED',
-          },
+        const deal = await this.prisma.deal.findFirst({
+          where: { id: input.dealId, accountId: input.tenantId },
         });
 
-        return { jobId: jobRun.id, status: 'QUEUED' };
+        if (!deal) return { error: 'Deal not found' };
+
+        throw new Error(
+          'Flyer generation is unavailable: no marketing job was enqueued.',
+        );
       },
     };
   }
