@@ -240,9 +240,22 @@ export class CommunicationsService {
       hasConsent: true,
     };
 
+    let leadId = data.leadId as string | undefined;
+    if (!leadId && data.dealId && data.accountId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: {
+          id: data.dealId,
+          accountId: data.accountId,
+        },
+        select: { leadId: true },
+      });
+      leadId = deal?.leadId ?? undefined;
+    }
+
     // Check DNC
-    if (data.metadata?.phone) {
-      const normalizedPhone = complianceUtils.normalizePhoneNumber(data.metadata.phone);
+    const recipientPhone = data.metadata?.phone ?? data.metadata?.to;
+    if (recipientPhone && data.channel === 'sms') {
+      const normalizedPhone = complianceUtils.normalizePhoneNumber(recipientPhone);
       const dnc = await this.prisma.dNCList.findFirst({
         where: {
           phone: normalizedPhone,
@@ -253,10 +266,10 @@ export class CommunicationsService {
     }
 
     // Check consent
-    if (data.leadId) {
+    if (leadId) {
       const consent = await this.prisma.consent.findFirst({
         where: {
-          leadId: data.leadId,
+          leadId,
           channel: data.channel,
           revokedAt: null,
         },
