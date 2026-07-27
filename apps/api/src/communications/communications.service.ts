@@ -127,6 +127,10 @@ export class CommunicationsService {
       throw new BadRequestException('Message is not pending approval');
     }
 
+    if ((message.metadata as any)?.twilioMessageSid) {
+      throw new BadRequestException('Message has already been handed to the provider');
+    }
+
     const controlPlane = await this.getControlPlane();
     const compliance = await this.getComplianceFacts(message as any);
     try {
