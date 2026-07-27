@@ -117,12 +117,13 @@ export class TwilioService {
     });
 
     if (messages.length > 0) {
+      const current = messages[0];
       await this.prisma.message.update({
-        where: { id: messages[0].id },
+        where: { id: current.id },
         data: {
-          status: this.mapTwilioStatus(status),
+          status: this.resolveMessageStatus(current.status, status),
           metadata: {
-            ...(messages[0].metadata as any || {}),
+            ...(current.metadata as any || {}),
             deliveryStatus: status,
             deliveryStatusUpdatedAt: new Date().toISOString(),
           },
@@ -180,15 +181,36 @@ export class TwilioService {
     return 'unknown';
   }
 
-  private mapTwilioStatus(status: string): string {
-    const statusMap: Record<string, string> = {
-      queued: 'pending_approval',
-      sent: 'sent',
-      delivered: 'delivered',
-      failed: 'failed',
-      undelivered: 'failed',
-    };
+  private resolveMessageStatus(currentStatus: string, twilioStatus: string): string {
+    const mapped = this.mapTwilioStatus(twilioStatus);
 
-    return statusMap[status] || 'sent';
+    if (mapped === 'delivered') {
+      return 'delivered';
+    }
+
+    if (mapped === 'failed') {
+      return currentStatus === 'delivered' ? currentStatus : 'failed';
+    }
+
+    // Twilio transport callbacks must never reopen the app-level approval flow.
+    if (currentStatus === 'delivered' || currentStatus === 'failed') {
+      return currentStatus;
+    }
+
+    return 'sent';
+  }
+
+  private mapTwilioStatus(status: string): string {
+    const normalized = typeof status === 'string' ? status.toLowerCase() : '';
+    if (['delivered', 'read', 'received'].includes(normalized)) {
+      return 'delivered';
+    }
+    if (['failed', 'undelivered', 'canceled'].includes(normalized)) {
+      return 'failed';
+    }
+
+    // Twilio only emits these callbacks after it has already accepted the send,
+    // so they map to the transport lifecycle rather than app approval states.
+    return 'sent';
   }
 }
