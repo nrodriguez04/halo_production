@@ -26,6 +26,19 @@ interface ContactResult {
   email: string | null;
 }
 
+interface EnrichmentStepResult {
+  sourceRecordId: string | null;
+  cost: number;
+}
+
+type SkipTraceResult = ContactResult & { costUsd: number };
+
+interface LeadEnrichmentProgress {
+  geocode?: EnrichmentStepResult;
+  attom?: EnrichmentStepResult;
+  skipTrace?: SkipTraceResult;
+}
+
 @Processor('lead-enrichment')
 export class LeadEnrichmentProcessor extends WorkerHost {
   async process(job: Job<{ leadId: string }>) {
@@ -53,27 +66,62 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       // `@halo/shared` and writes through Prisma.
       await this.markStatus(leadId, accountId, lead.status, 'enriching');
 
-      const enrichmentJob = await prisma.leadEnrichmentJob.create({
-        data: { accountId, leadId, stage: 'normalizing' },
-      });
+      const enrichmentJob = await this.getOrCreateEnrichmentJob(accountId, leadId);
+      const progress = this.readProgress(enrichmentJob.metadata);
+      const address = lead.canonicalAddress || '';
+      const city = lead.canonicalCity || undefined;
+      const state = lead.canonicalState || undefined;
+      const zip = lead.canonicalZip || undefined;
 
-      const geocodeResult = await this.geocodeAddress(
-        accountId,
-        lead.canonicalAddress || '',
-        lead.canonicalCity || undefined,
-        lead.canonicalState || undefined,
-        lead.canonicalZip || undefined,
-        leadId,
-      );
+      let geocodeResult =
+        progress.geocode ??
+        (await this.recoverCompletedSourceStep({
+          accountId,
+          leadId,
+          providerKey: 'google_geocoding',
+          action: 'geocode',
+          requestHash: this.hashAddressQuery(address, city, state, zip),
+          startedAt: enrichmentJob.startedAt,
+        }));
+      if (!geocodeResult) {
+        geocodeResult = await this.geocodeAddress(
+          accountId,
+          address,
+          city,
+          state,
+          zip,
+          leadId,
+        );
+      }
+      if (!progress.geocode) {
+        progress.geocode = geocodeResult;
+        await this.persistProgress(enrichmentJob.id, 'attom', progress);
+      }
 
-      const attomResult = await this.lookupAttom(
-        accountId,
-        lead.canonicalAddress || '',
-        lead.canonicalCity || undefined,
-        lead.canonicalState || undefined,
-        lead.canonicalZip || undefined,
-        leadId,
-      );
+      let attomResult =
+        progress.attom ??
+        (await this.recoverCompletedSourceStep({
+          accountId,
+          leadId,
+          providerKey: 'attom',
+          action: 'property_expanded_profile',
+          requestHash: this.hashAddressQuery(address, city, state, zip),
+          startedAt: enrichmentJob.startedAt,
+        }));
+      if (!attomResult) {
+        attomResult = await this.lookupAttom(
+          accountId,
+          address,
+          city,
+          state,
+          zip,
+          leadId,
+        );
+      }
+      if (!progress.attom) {
+        progress.attom = attomResult;
+        await this.persistProgress(enrichmentJob.id, 'skip_trace', progress);
+      }
 
       if (geocodeResult.sourceRecordId) {
         await prisma.sourceRecord.update({
@@ -89,14 +137,21 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       }
 
       // Skip trace via api so cost-control's decision tree runs.
-      const contacts = await this.skipTraceViaApi(
-        accountId,
-        leadId,
-        lead.canonicalAddress || '',
-        lead.canonicalCity || undefined,
-        lead.canonicalState || undefined,
-        lead.canonicalZip || undefined,
-      );
+      let contacts = progress.skipTrace;
+      if (!contacts) {
+        contacts = await this.skipTraceViaApi(
+          accountId,
+          leadId,
+          address,
+          city,
+          state,
+          zip,
+        );
+        if (this.shouldPersistSkipTrace(contacts)) {
+          progress.skipTrace = contacts;
+          await this.persistProgress(enrichmentJob.id, 'skip_trace', progress);
+        }
+      }
       const additional: Record<string, unknown> = {};
       if (contacts.phone && !lead.canonicalPhone) additional.canonicalPhone = contacts.phone;
       if (contacts.email && !lead.canonicalEmail) additional.canonicalEmail = contacts.email;
@@ -115,6 +170,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
           completedAt: new Date(),
           totalCostUsd:
             (geocodeResult.cost ?? 0) + (attomResult.cost ?? 0) + (contacts.costUsd ?? 0),
+          metadata: progress as object,
         },
       });
 
@@ -169,6 +225,144 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     ]);
   }
 
+  private async getOrCreateEnrichmentJob(accountId: string, leadId: string) {
+    const existing = await prisma.leadEnrichmentJob.findFirst({
+      where: { accountId, leadId, completedAt: null },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, metadata: true, startedAt: true },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    return prisma.leadEnrichmentJob.create({
+      data: { accountId, leadId, stage: 'normalizing' },
+      select: { id: true, metadata: true, startedAt: true },
+    });
+  }
+
+  private readProgress(metadata: unknown): LeadEnrichmentProgress {
+    if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') {
+      return {};
+    }
+
+    const raw = metadata as Record<string, unknown>;
+    const progress: LeadEnrichmentProgress = {};
+    const geocode = this.readStoredSourceStep(raw.geocode);
+    const attom = this.readStoredSourceStep(raw.attom);
+    const skipTrace = this.readStoredSkipTrace(raw.skipTrace);
+    if (geocode) progress.geocode = geocode;
+    if (attom) progress.attom = attom;
+    if (skipTrace) progress.skipTrace = skipTrace;
+    return progress;
+  }
+
+  private readStoredSourceStep(value: unknown): EnrichmentStepResult | null {
+    if (!value || Array.isArray(value) || typeof value !== 'object') {
+      return null;
+    }
+
+    const raw = value as Record<string, unknown>;
+    return {
+      sourceRecordId:
+        typeof raw.sourceRecordId === 'string' ? raw.sourceRecordId : null,
+      cost: typeof raw.cost === 'number' ? raw.cost : 0,
+    };
+  }
+
+  private readStoredSkipTrace(value: unknown): SkipTraceResult | null {
+    if (!value || Array.isArray(value) || typeof value !== 'object') {
+      return null;
+    }
+
+    const raw = value as Record<string, unknown>;
+    return {
+      phone: typeof raw.phone === 'string' ? raw.phone : null,
+      email: typeof raw.email === 'string' ? raw.email : null,
+      costUsd: typeof raw.costUsd === 'number' ? raw.costUsd : 0,
+    };
+  }
+
+  private async recoverCompletedSourceStep(params: {
+    accountId: string;
+    leadId: string;
+    providerKey: string;
+    action: string;
+    requestHash: string;
+    startedAt: Date;
+  }): Promise<EnrichmentStepResult | null> {
+    const sourceRecord = await prisma.sourceRecord.findFirst({
+      where: {
+        leadId: params.leadId,
+        provider: params.providerKey,
+        requestHash: params.requestHash,
+        createdAt: { gte: params.startedAt },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!sourceRecord) {
+      return null;
+    }
+
+    const costEvent = await prisma.integrationCostEvent.findFirst({
+      where: {
+        accountId: params.accountId,
+        providerKey: params.providerKey,
+        action: params.action,
+        leadId: params.leadId,
+        actor: 'worker',
+        createdAt: { gte: params.startedAt },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { actualCostUsd: true, estimatedCostUsd: true },
+    });
+
+    return {
+      sourceRecordId: sourceRecord.id,
+      cost: costEvent?.actualCostUsd ?? costEvent?.estimatedCostUsd ?? 0,
+    };
+  }
+
+  private async persistProgress(
+    enrichmentJobId: string,
+    stage: string,
+    progress: LeadEnrichmentProgress,
+  ): Promise<void> {
+    await prisma.leadEnrichmentJob.update({
+      where: { id: enrichmentJobId },
+      data: {
+        stage,
+        metadata: progress as object,
+      },
+    });
+  }
+
+  private shouldPersistSkipTrace(result: SkipTraceResult): boolean {
+    return Boolean(result.phone || result.email || result.costUsd > 0);
+  }
+
+  private buildAddressQuery(
+    address: string,
+    city: string | undefined,
+    state: string | undefined,
+    zip: string | undefined,
+  ): string {
+    return [address, city, state, zip].filter(Boolean).join(', ');
+  }
+
+  private hashAddressQuery(
+    address: string,
+    city: string | undefined,
+    state: string | undefined,
+    zip: string | undefined,
+  ): string {
+    return crypto
+      .createHash('sha256')
+      .update(this.buildAddressQuery(address, city, state, zip))
+      .digest('hex');
+  }
+
   // -- enrichment steps -------------------------------------------------
 
   private async geocodeAddress(
@@ -183,7 +377,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       console.warn(`Geocoding skipped: budget exceeded for ${accountId}`);
       return { sourceRecordId: null, cost: 0 };
     }
-    const query = [address, city, state, zip].filter(Boolean).join(', ');
+    const query = this.buildAddressQuery(address, city, state, zip);
     const url = 'https://maps.googleapis.com/maps/api/geocode/json';
     const params = new URLSearchParams({
       address: query,
@@ -194,7 +388,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     const data = await response.json();
     const durationMs = Date.now() - startedAt;
 
-    const requestHash = crypto.createHash('sha256').update(query).digest('hex');
+    const requestHash = this.hashAddressQuery(address, city, state, zip);
     const sourceRecord = await prisma.sourceRecord.create({
       data: {
         provider: 'google_geocoding',
@@ -232,7 +426,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       console.warn(`ATTOM skipped: budget exceeded for ${accountId}`);
       return { sourceRecordId: null, cost: 0 };
     }
-    const query = [address, city, state, zip].filter(Boolean).join(', ');
+    const query = this.buildAddressQuery(address, city, state, zip);
     const url = `${process.env.ATTOM_BASE_URL || 'https://api.gateway.attomdata.com'}/propertyapi/v1.0.0/property/expandedprofile`;
 
     const startedAt = Date.now();
@@ -245,7 +439,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     const data = await response.json();
     const durationMs = Date.now() - startedAt;
 
-    const requestHash = crypto.createHash('sha256').update(query).digest('hex');
+    const requestHash = this.hashAddressQuery(address, city, state, zip);
     const sourceRecord = await prisma.sourceRecord.create({
       data: {
         provider: 'attom',
@@ -287,7 +481,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     city: string | undefined,
     state: string | undefined,
     zip: string | undefined,
-  ): Promise<ContactResult & { costUsd: number }> {
+  ): Promise<SkipTraceResult> {
     const apiBase = process.env.INTERNAL_API_BASE_URL;
     const token = process.env.INTERNAL_API_TOKEN;
     if (!apiBase || !token) {
