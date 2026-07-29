@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { CurrentAccountId } from '../auth/decorators';
 import { Permissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { ChaosService } from './chaos.service';
@@ -43,13 +44,20 @@ export class DLQController {
   constructor(private readonly chaosService: ChaosService) {}
 
   @Get()
-  async listFailedJobs(@Query('queue') queue?: string) {
-    return this.chaosService.listFailedJobs(queue);
+  async listFailedJobs(
+    @CurrentAccountId() accountId: string,
+    @Query('queue') queue?: string,
+  ) {
+    return this.chaosService.listFailedJobs(accountId, queue);
   }
 
   @Post(':jobId/replay')
   @Permissions('control_plane:write')
-  async replayJob(@Param('jobId') jobId: string, @Query('queue') queue: string) {
-    return this.chaosService.replayJob(queue, jobId);
+  async replayJob(
+    @CurrentAccountId() accountId: string,
+    @Param('jobId') jobId: string,
+    @Query('queue') queue: string,
+  ) {
+    return this.chaosService.replayJob(queue, jobId, accountId);
   }
 }
