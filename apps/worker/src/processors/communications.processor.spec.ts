@@ -32,7 +32,7 @@ jest.mock('nodemailer', () => ({
 
 jest.mock('@halo/shared', () => ({
   assertPolicy: jest.fn(),
-}));
+}), { virtual: true });
 
 import { CommunicationsProcessor } from './communications.processor';
 
