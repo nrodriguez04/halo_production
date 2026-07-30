@@ -50,6 +50,14 @@ export class CommunicationsProcessor extends WorkerHost {
         throw new Error(`Message ${messageId} not found`);
       }
 
+      if (message.status === 'sent' || message.status === 'delivered') {
+        return { success: true, messageId, alreadySent: true };
+      }
+
+      if (await this.recoverPersistedDelivery(message)) {
+        return { success: true, messageId, recovered: true };
+      }
+
       if (message.status !== 'approved') {
         throw new Error(`Message ${messageId} is not approved`);
       }
@@ -88,31 +96,23 @@ export class CommunicationsProcessor extends WorkerHost {
         await this.sendEmail(message);
       }
 
-      // Update message status
-      await prisma.message.update({
-        where: { id: messageId },
-        data: {
-          status: 'sent',
-          sentAt: new Date(),
-        },
-      });
-
-      await prisma.timelineEvent.create({
-        data: {
-          tenantId: message.accountId,
-          entityType: TimelineEntityType.MESSAGE,
-          entityId: messageId,
-          eventType: 'MESSAGE_SENT',
-          payloadJson: { channel: message.channel },
-          actorId: null,
-          actorType: TimelineActorType.system,
-        },
-      });
+      await this.markMessageSent(message);
 
       return { success: true, messageId };
     } catch (error) {
       console.error(`Communication send failed for ${messageId}:`, error);
-      
+
+      try {
+        if (await this.recoverFromPersistedDelivery(messageId)) {
+          return { success: true, messageId, recovered: true };
+        }
+      } catch (recoveryError) {
+        console.error(
+          `Communication recovery failed for ${messageId}:`,
+          recoveryError,
+        );
+      }
+
       // Update message status to failed
       await prisma.message.update({
         where: { id: messageId },
@@ -179,13 +179,86 @@ export class CommunicationsProcessor extends WorkerHost {
     const to = metadata?.email || metadata?.to;
     const subject = metadata?.subject || 'Message from Hālo';
 
-    await this.emailTransporter.sendMail({
+    const info = await this.emailTransporter.sendMail({
       from: process.env.SENDGRID_FROM_EMAIL || 'noreply@halo.com',
       to,
       subject,
       text: message.content,
       html: message.content.replace(/\n/g, '<br>'),
     });
+
+    await prisma.message.update({
+      where: { id: message.id },
+      data: {
+        metadata: {
+          ...metadata,
+          smtpMessageId: info.messageId,
+        },
+      },
+    });
+  }
+
+  private async markMessageSent(message: any) {
+    await prisma.message.update({
+      where: { id: message.id },
+      data: {
+        status: 'sent',
+        sentAt: message.sentAt || new Date(),
+      },
+    });
+
+    await prisma.timelineEvent.create({
+      data: {
+        tenantId: message.accountId,
+        entityType: TimelineEntityType.MESSAGE,
+        entityId: message.id,
+        eventType: 'MESSAGE_SENT',
+        payloadJson: { channel: message.channel },
+        actorId: null,
+        actorType: TimelineActorType.system,
+      },
+    });
+  }
+
+  private getDeliveryMarker(message: any): string | null {
+    const metadata = (message.metadata as any) || {};
+
+    if (message.channel === 'sms' && typeof metadata.twilioMessageSid === 'string') {
+      return metadata.twilioMessageSid;
+    }
+
+    if (message.channel === 'email' && typeof metadata.smtpMessageId === 'string') {
+      return metadata.smtpMessageId;
+    }
+
+    return null;
+  }
+
+  // If the provider receipt is already in the row, only finish local
+  // bookkeeping; never call Twilio/SMTP a second time.
+  private async recoverPersistedDelivery(message: any): Promise<boolean> {
+    if (!this.getDeliveryMarker(message)) {
+      return false;
+    }
+
+    await this.markMessageSent(message);
+    return true;
+  }
+
+  private async recoverFromPersistedDelivery(messageId: string): Promise<boolean> {
+    const latest = await prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!latest) {
+      return false;
+    }
+
+    if (latest.status === 'sent' || latest.status === 'delivered') {
+      return true;
+    }
+
+    return this.recoverPersistedDelivery(latest);
   }
 }
 
