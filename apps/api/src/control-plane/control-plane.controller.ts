@@ -4,6 +4,7 @@ import { ControlPlaneService } from './control-plane.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { AuditService } from '../audit/audit.service';
+import { GlobalAdminGuard } from '../auth/global-admin.guard';
 import { Permissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
 
@@ -21,7 +22,7 @@ const UpdateControlPlaneSchema = z
   .strict();
 
 @Controller('control-plane')
-@UseGuards(AuthGuard, PermissionsGuard)
+@UseGuards(AuthGuard, PermissionsGuard, GlobalAdminGuard)
 export class ControlPlaneController {
   constructor(
     private readonly controlPlaneService: ControlPlaneService,
