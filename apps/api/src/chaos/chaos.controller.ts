@@ -1,11 +1,12 @@
 import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { GlobalAdminGuard } from '../auth/global-admin.guard';
 import { Permissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { ChaosService } from './chaos.service';
 
 @Controller('admin/chaos')
-@UseGuards(AuthGuard, PermissionsGuard)
+@UseGuards(AuthGuard, PermissionsGuard, GlobalAdminGuard)
 @Permissions('control_plane:write')
 export class ChaosController {
   constructor(private readonly chaosService: ChaosService) {}
