@@ -13,6 +13,7 @@ import { IntegrationSecretsService } from './integration-secrets.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { AuditService } from '../audit/audit.service';
+import { GlobalAdminGuard } from '../auth/global-admin.guard';
 import { Permissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
 
@@ -23,7 +24,7 @@ const SetSecretSchema = z
   .strict();
 
 @Controller('integration-secrets')
-@UseGuards(AuthGuard, PermissionsGuard)
+@UseGuards(AuthGuard, PermissionsGuard, GlobalAdminGuard)
 export class IntegrationSecretsController {
   constructor(
     private readonly service: IntegrationSecretsService,
