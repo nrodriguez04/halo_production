@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import * as crypto from 'crypto';
-import { LeadStatus, transitionLeadStatus } from '@halo/shared';
+import { transitionLeadStatus } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { isOverHardCap, recordWorkerCost } from '../cost-ledger';
 
@@ -47,15 +47,10 @@ export class LeadEnrichmentProcessor extends WorkerHost {
 
       const accountId = lead.accountId;
 
-      // Mark the lead as `enriching` via the shared state machine. The
-      // worker can't talk to LeadLifecycleService directly without an
-      // HTTP roundtrip, so it imports the same validator from
-      // `@halo/shared` and writes through Prisma.
-      await this.markStatus(leadId, accountId, lead.status, 'enriching');
-
-      const enrichmentJob = await prisma.leadEnrichmentJob.create({
-        data: { accountId, leadId, stage: 'normalizing' },
-      });
+      const enrichmentJobId = await this.startEnrichment(leadId, accountId);
+      if (!enrichmentJobId) {
+        return { success: false, leadId, reason: 'lead_no_longer_enrichable' };
+      }
 
       const geocodeResult = await this.geocodeAddress(
         accountId,
@@ -97,26 +92,18 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         lead.canonicalState || undefined,
         lead.canonicalZip || undefined,
       );
-      const additional: Record<string, unknown> = {};
-      if (contacts.phone && !lead.canonicalPhone) additional.canonicalPhone = contacts.phone;
-      if (contacts.email && !lead.canonicalEmail) additional.canonicalEmail = contacts.email;
 
-      await this.markStatus(
+      const finalized = await this.completeEnrichment({
         leadId,
         accountId,
-        'enriching',
-        'enriched',
-        additional,
-      );
-      await prisma.leadEnrichmentJob.update({
-        where: { id: enrichmentJob.id },
-        data: {
-          stage: 'completed',
-          completedAt: new Date(),
-          totalCostUsd:
-            (geocodeResult.cost ?? 0) + (attomResult.cost ?? 0) + (contacts.costUsd ?? 0),
-        },
+        enrichmentJobId,
+        contacts,
+        totalCostUsd:
+          (geocodeResult.cost ?? 0) + (attomResult.cost ?? 0) + (contacts.costUsd ?? 0),
       });
+      if (!finalized) {
+        return { success: false, leadId, reason: 'lead_status_changed_during_enrichment' };
+      }
 
       return { success: true, leadId };
     } catch (error) {
@@ -126,47 +113,146 @@ export class LeadEnrichmentProcessor extends WorkerHost {
   }
 
   /**
-   * Apply a status transition via the shared `@halo/shared` validator
-   * and write a `lead.status.<next>` row to the timeline so the audit
-   * trail matches what `LeadLifecycleService` produces on the api side.
-   * Skips the update silently if the transition is illegal so a hung
-   * job re-running can't corrupt the state.
+   * Start enrichment only if the lead is still in a state that can
+   * legally move into `enriching`. The conditional update keeps a user
+   * race from flipping the row underneath a long-running worker.
    */
-  private async markStatus(
+  private async startEnrichment(
     leadId: string,
     accountId: string,
-    current: string,
-    next: LeadStatus,
-    additionalUpdate: Record<string, unknown> = {},
-  ): Promise<void> {
-    const result = transitionLeadStatus(current, next, {
-      accountId,
-      actorId: null,
-      actorType: 'worker',
-    });
-    if (!result.allowed) {
-      console.warn(
-        `[lead-enrichment] illegal transition ${current} -> ${next} for lead ${leadId}: ${result.reason}`,
-      );
-      return;
-    }
-    await prisma.$transaction([
-      prisma.lead.update({
-        where: { id: leadId },
-        data: { status: next, ...additionalUpdate },
-      }),
-      prisma.timelineEvent.create({
+  ): Promise<string | null> {
+    return prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: { id: leadId, accountId },
+        select: { status: true },
+      });
+      if (!lead) throw new Error(`Lead ${leadId} not found`);
+
+      const current = lead.status;
+      const result = transitionLeadStatus(current, 'enriching', {
+        accountId,
+        actorId: null,
+        actorType: 'worker',
+      });
+      if (!result.allowed) {
+        console.warn(
+          `[lead-enrichment] illegal transition ${current} -> enriching for lead ${leadId}: ${result.reason}`,
+        );
+        return null;
+      }
+
+      const updated = await tx.lead.updateMany({
+        where: { id: leadId, accountId, status: current },
+        data: { status: 'enriching' },
+      });
+      if (updated.count !== 1) {
+        console.warn(
+          `[lead-enrichment] skipped transition ${current} -> enriching for lead ${leadId}; status changed concurrently`,
+        );
+        return null;
+      }
+
+      const enrichmentJob = await tx.leadEnrichmentJob.create({
+        data: { accountId, leadId, stage: 'normalizing' },
+      });
+
+      await tx.timelineEvent.create({
         data: {
           tenantId: accountId,
           entityType: 'LEAD',
           entityId: leadId,
-          eventType: `lead.status.${next}`,
+          eventType: 'lead.status.enriching',
           actorType: 'system',
           actorId: null,
-          payloadJson: { from: current, to: next },
+          payloadJson: { from: current, to: 'enriching' },
         },
-      }),
-    ]);
+      });
+
+      return enrichmentJob.id;
+    });
+  }
+
+  /**
+   * Finish enrichment against the live lead row so user actions taken
+   * while the job was running are not overwritten on completion.
+   */
+  private async completeEnrichment(params: {
+    leadId: string;
+    accountId: string;
+    enrichmentJobId: string;
+    contacts: ContactResult & { costUsd: number };
+    totalCostUsd: number;
+  }): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: { id: params.leadId, accountId: params.accountId },
+        select: {
+          status: true,
+          canonicalPhone: true,
+          canonicalEmail: true,
+        },
+      });
+      if (!lead) throw new Error(`Lead ${params.leadId} not found`);
+
+      const current = lead.status;
+      const result = transitionLeadStatus(current, 'enriched', {
+        accountId: params.accountId,
+        actorId: null,
+        actorType: 'worker',
+      });
+      if (!result.allowed) {
+        console.warn(
+          `[lead-enrichment] illegal transition ${current} -> enriched for lead ${params.leadId}: ${result.reason}`,
+        );
+        return false;
+      }
+
+      const additionalUpdate: Record<string, unknown> = {};
+      if (params.contacts.phone && !lead.canonicalPhone) {
+        additionalUpdate.canonicalPhone = params.contacts.phone;
+      }
+      if (params.contacts.email && !lead.canonicalEmail) {
+        additionalUpdate.canonicalEmail = params.contacts.email;
+      }
+
+      const updated = await tx.lead.updateMany({
+        where: {
+          id: params.leadId,
+          accountId: params.accountId,
+          status: current,
+        },
+        data: { status: 'enriched', ...additionalUpdate },
+      });
+      if (updated.count !== 1) {
+        console.warn(
+          `[lead-enrichment] skipped transition ${current} -> enriched for lead ${params.leadId}; status changed concurrently`,
+        );
+        return false;
+      }
+
+      await tx.leadEnrichmentJob.updateMany({
+        where: { id: params.enrichmentJobId, completedAt: null },
+        data: {
+          stage: 'completed',
+          completedAt: new Date(),
+          totalCostUsd: params.totalCostUsd,
+        },
+      });
+
+      await tx.timelineEvent.create({
+        data: {
+          tenantId: params.accountId,
+          entityType: 'LEAD',
+          entityId: params.leadId,
+          eventType: 'lead.status.enriched',
+          actorType: 'system',
+          actorId: null,
+          payloadJson: { from: current, to: 'enriched' },
+        },
+      });
+
+      return true;
+    });
   }
 
   // -- enrichment steps -------------------------------------------------
