@@ -13,6 +13,8 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { DealCreateSchema, DealStage, DealUpdateSchema } from '@halo/shared';
 
+const DealCreateInputSchema = DealCreateSchema.omit({ stage: true });
+
 @Controller('deals')
 @UseGuards(AuthGuard)
 export class DealsController {
@@ -24,8 +26,17 @@ export class DealsController {
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
   ) {
-    const validated = DealCreateSchema.parse({ ...(data as any), accountId });
-    return this.dealsService.create(validated, userId);
+    // Deal stage changes must go through the state-machine entrypoint so
+    // timelines and downstream automation see a legal transition trail.
+    const validated = DealCreateInputSchema.parse({ ...(data as any), accountId });
+    return this.dealsService.create(
+      {
+        ...validated,
+        accountId,
+        stage: 'new',
+      },
+      userId,
+    );
   }
 
   @Get()

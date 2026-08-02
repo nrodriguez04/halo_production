@@ -14,6 +14,8 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { LeadCreateSchema, LeadUpdateSchema, CSVImportRowSchema } from '@halo/shared';
 
+const LeadCreateInputSchema = LeadCreateSchema.omit({ status: true });
+
 @Controller('leads')
 @UseGuards(AuthGuard)
 export class LeadsController {
@@ -25,8 +27,18 @@ export class LeadsController {
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
   ) {
-    const validated = LeadCreateSchema.parse({ ...(data as any), accountId });
-    return this.leadsService.create(validated, userId ?? null);
+    // Lead lifecycle starts at `new`; later states must flow through
+    // LeadLifecycleService so enrichment jobs and timeline events exist.
+    const validated = LeadCreateInputSchema.parse({ ...(data as any), accountId });
+    return this.leadsService.create(
+      {
+        ...validated,
+        accountId,
+        status: 'new',
+        tags: validated.tags ?? [],
+      },
+      userId ?? null,
+    );
   }
 
   @Get()
