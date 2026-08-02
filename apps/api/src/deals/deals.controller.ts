@@ -29,7 +29,14 @@ export class DealsController {
     // Deal stage changes must go through the state-machine entrypoint so
     // timelines and downstream automation see a legal transition trail.
     const validated = DealCreateInputSchema.parse({ ...(data as any), accountId });
-    return this.dealsService.create({ ...validated, stage: 'new' }, userId);
+    return this.dealsService.create(
+      {
+        ...validated,
+        accountId,
+        stage: 'new',
+      },
+      userId,
+    );
   }
 
   @Get()
