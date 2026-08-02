@@ -30,7 +30,15 @@ export class LeadsController {
     // Lead lifecycle starts at `new`; later states must flow through
     // LeadLifecycleService so enrichment jobs and timeline events exist.
     const validated = LeadCreateInputSchema.parse({ ...(data as any), accountId });
-    return this.leadsService.create({ ...validated, status: 'new' }, userId ?? null);
+    return this.leadsService.create(
+      {
+        ...validated,
+        accountId,
+        status: 'new',
+        tags: validated.tags ?? [],
+      },
+      userId ?? null,
+    );
   }
 
   @Get()
