@@ -7,7 +7,13 @@ import {
 } from '@prisma/client';
 import * as crypto from 'crypto';
 import OpenAI from 'openai';
-import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
+import {
+  assertPolicy,
+  markUnderwritingResultUnapplied,
+  prompts,
+  renderPrompt,
+  shouldApplyUnderwritingResult,
+} from '@halo/shared';
 import { prisma } from '../prisma-client';
 
 @Processor('underwriting')
@@ -36,9 +42,10 @@ export class UnderwritingProcessor extends WorkerHost {
   ) {
     const { jobRunId, tenantId, dealId, actorId } = job.data;
 
-    await prisma.jobRun.update({
+    const run = await prisma.jobRun.update({
       where: { id: jobRunId },
       data: { status: JobRunStatus.RUNNING, attempts: { increment: 1 } },
+      select: { createdAt: true },
     });
 
     try {
@@ -116,47 +123,6 @@ export class UnderwritingProcessor extends WorkerHost {
         },
       });
 
-      await prisma.underwritingResult.upsert({
-        where: { dealId },
-        create: {
-          dealId,
-          propertyId: deal.propertyId || undefined,
-          arv: analysis.arv,
-          repairEstimate: analysis.repairEstimate,
-          mao: analysis.mao,
-          confidence: analysis.confidence,
-          rationale: analysis.rationale,
-          compsSummary: analysis.compsSummary,
-          evaluationMetadata: {
-            model: 'gpt-4',
-            tokensUsed: completion.usage?.total_tokens,
-            cost,
-          },
-        },
-        update: {
-          arv: analysis.arv,
-          repairEstimate: analysis.repairEstimate,
-          mao: analysis.mao,
-          confidence: analysis.confidence,
-          rationale: analysis.rationale,
-          compsSummary: analysis.compsSummary,
-          evaluationMetadata: {
-            model: 'gpt-4',
-            tokensUsed: completion.usage?.total_tokens,
-            cost,
-          },
-        },
-      });
-
-      await prisma.deal.update({
-        where: { id: dealId },
-        data: {
-          arv: analysis.arv,
-          repairEstimate: analysis.repairEstimate,
-          mao: analysis.mao,
-        },
-      });
-
       const result = {
         arv: analysis.arv,
         repairEstimate: analysis.repairEstimate,
@@ -169,29 +135,135 @@ export class UnderwritingProcessor extends WorkerHost {
         .update(JSON.stringify(result))
         .digest('hex');
 
-      await prisma.jobRun.update({
-        where: { id: jobRunId },
-        data: {
-          status: JobRunStatus.SUCCEEDED,
-          resultJson: result as any,
-          resultHash,
-          error: null,
-        },
+      // Only publish underwriting as canonical if the deal stayed unchanged
+      // after enqueue. Otherwise we preserve the computed payload on the
+      // job-run record but skip overwriting newer manual economics edits.
+      const persisted = await prisma.$transaction(async (tx) => {
+        const liveDeal = await tx.deal.findFirst({
+          where: { id: dealId, accountId: tenantId },
+          select: { updatedAt: true },
+        });
+        if (!liveDeal) {
+          throw new Error(`Deal ${dealId} not found in tenant ${tenantId}`);
+        }
+
+        const writeSkippedResult = async () => {
+          const skippedResult = markUnderwritingResultUnapplied(
+            result,
+            'deal_modified_after_enqueue',
+          );
+
+          await tx.jobRun.update({
+            where: { id: jobRunId },
+            data: {
+              status: JobRunStatus.SUCCEEDED,
+              resultJson: skippedResult as any,
+              resultHash,
+              error: null,
+            },
+          });
+
+          await tx.timelineEvent.create({
+            data: {
+              tenantId,
+              entityType: TimelineEntityType.JOB,
+              entityId: jobRunId,
+              eventType: 'UNDERWRITE_SKIPPED_STALE',
+              payloadJson: {
+                dealId,
+                resultHash,
+                reason: 'deal_modified_after_enqueue',
+              },
+              actorId: actorId || null,
+              actorType: TimelineActorType.system,
+            },
+          });
+
+          return { applied: false as const };
+        };
+
+        const freshness = shouldApplyUnderwritingResult({
+          runCreatedAt: run.createdAt,
+          dealUpdatedAt: liveDeal.updatedAt,
+        });
+        if (!freshness.applied) {
+          return writeSkippedResult();
+        }
+
+        const updatedDeal = await tx.deal.updateMany({
+          where: {
+            id: dealId,
+            accountId: tenantId,
+            updatedAt: liveDeal.updatedAt,
+          },
+          data: {
+            arv: analysis.arv,
+            repairEstimate: analysis.repairEstimate,
+            mao: analysis.mao,
+          },
+        });
+        if (updatedDeal.count !== 1) {
+          return writeSkippedResult();
+        }
+
+        await tx.underwritingResult.upsert({
+          where: { dealId },
+          create: {
+            dealId,
+            propertyId: deal.propertyId || undefined,
+            arv: analysis.arv,
+            repairEstimate: analysis.repairEstimate,
+            mao: analysis.mao,
+            confidence: analysis.confidence,
+            rationale: analysis.rationale,
+            compsSummary: analysis.compsSummary,
+            evaluationMetadata: {
+              model: 'gpt-4',
+              tokensUsed: completion.usage?.total_tokens,
+              cost,
+            },
+          },
+          update: {
+            arv: analysis.arv,
+            repairEstimate: analysis.repairEstimate,
+            mao: analysis.mao,
+            confidence: analysis.confidence,
+            rationale: analysis.rationale,
+            compsSummary: analysis.compsSummary,
+            evaluationMetadata: {
+              model: 'gpt-4',
+              tokensUsed: completion.usage?.total_tokens,
+              cost,
+            },
+          },
+        });
+
+        await tx.jobRun.update({
+          where: { id: jobRunId },
+          data: {
+            status: JobRunStatus.SUCCEEDED,
+            resultJson: result as any,
+            resultHash,
+            error: null,
+          },
+        });
+
+        await tx.timelineEvent.create({
+          data: {
+            tenantId,
+            entityType: TimelineEntityType.JOB,
+            entityId: jobRunId,
+            eventType: 'UNDERWRITE_COMPLETED',
+            payloadJson: { dealId, resultHash },
+            actorId: actorId || null,
+            actorType: TimelineActorType.system,
+          },
+        });
+
+        return { applied: true as const };
       });
 
-      await prisma.timelineEvent.create({
-        data: {
-          tenantId,
-          entityType: TimelineEntityType.JOB,
-          entityId: jobRunId,
-          eventType: 'UNDERWRITE_COMPLETED',
-          payloadJson: { dealId, resultHash },
-          actorId: actorId || null,
-          actorType: TimelineActorType.system,
-        },
-      });
-
-      return { success: true, jobRunId, result };
+      return { success: true, jobRunId, result, applied: persisted.applied };
     } catch (error) {
       await prisma.jobRun.update({
         where: { id: jobRunId },

@@ -9,6 +9,7 @@ import {
   PolicyViolationError,
   assertPolicy,
   evaluatePolicy,
+  isAppliedUnderwritingResult,
 } from '@halo/shared';
 import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
@@ -104,7 +105,7 @@ export class UnderwritingService {
   }
 
   async getResult(accountId: string, dealId: string) {
-    const lastRun = await this.prisma.jobRun.findFirst({
+    const recentRuns = await this.prisma.jobRun.findMany({
       where: {
         tenantId: accountId,
         kind: JobRunKind.UNDERWRITE_DEAL,
@@ -112,7 +113,11 @@ export class UnderwritingService {
         status: 'SUCCEEDED',
       },
       orderBy: { updatedAt: 'desc' },
+      take: 25,
     });
+    const lastRun = recentRuns.find(
+      (run) => run.resultJson && isAppliedUnderwritingResult(run.resultJson),
+    );
 
     if (lastRun?.resultJson) {
       return {

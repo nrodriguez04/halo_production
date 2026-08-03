@@ -13,6 +13,7 @@ export * from './utils/compliance';
 export * from './policy';
 export * from './state-machine/deal-stage';
 export * from './state-machine/lead-status';
+export * from './underwriting/stale-result';
 
 // Crypto
 export * from './crypto/pii-envelope';
