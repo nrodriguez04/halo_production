@@ -1,15 +1,21 @@
-version: '3.8'
+# Production stack. Everything reachable from outside the host goes through
+# Caddy (TLS); datastores bind to 127.0.0.1 so they are never exposed.
+#
+# Required in .env: POSTGRES_PASSWORD, REDIS_PASSWORD, MINIO_ROOT_PASSWORD,
+# DESCOPE_PROJECT_ID, SECRETS_ENCRYPTION_KEY, INTERNAL_API_TOKEN.
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: halo-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-halo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-halo_prod}
     ports:
-      - "5432:5432"
+      # Localhost only: psql and backups reach it over SSH, the internet cannot.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -21,13 +27,18 @@ services:
   redis:
     image: redis:7-alpine
     container_name: halo-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Must authenticate: a password-protected redis answers NOAUTH to a bare
+      # ping, so the previous check could report healthy for the wrong reason.
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD --no-auth-warning ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,13 +46,14 @@ services:
   minio:
     image: minio/minio:latest
     container_name: halo-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -50,31 +62,94 @@ services:
       timeout: 20s
       retries: 3
 
+  # One-shot: applies pending migrations then exits. api and worker wait for it
+  # to complete successfully, so a deploy can never serve traffic against an
+  # unmigrated schema. Runs from /app, hence the explicit --schema.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: halo-migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # An explicit DATABASE_URL in .env wins, so the connection_limit /
+      # pool_timeout tuning from the runbook is preserved.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public}
+    command: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: halo-api
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public"
-      REDIS_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379"
-      DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public}
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://app.haloacquisitions.com}
+      # Caddy is the only hop in front of the api, so trust exactly one proxy.
+      # Without this req.protocol is http and Twilio signature checks fail.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+
+      DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID:?Set DESCOPE_PROJECT_ID}
       DESCOPE_MANAGEMENT_KEY: ${DESCOPE_MANAGEMENT_KEY:-}
-      OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-2.0}
+      DESCOPE_BASE_URL: ${DESCOPE_BASE_URL:-}
+
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?Set SECRETS_ENCRYPTION_KEY}
+      # Shared secret for worker to api /internal calls.
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-5}
+
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      DOCUSIGN_CONNECT_SECRET: ${DOCUSIGN_CONNECT_SECRET:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      USE_SENDGRID: ${USE_SENDGRID:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+
       ATTOM_API_KEY: ${ATTOM_API_KEY:-}
+      ATTOM_BASE_URL: ${ATTOM_BASE_URL:-https://api.gateway.attomdata.com}
+      GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
+      RENTCAST_API_KEY: ${RENTCAST_API_KEY:-}
       PROPERTYRADAR_API_KEY: ${PROPERTYRADAR_API_KEY:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      PROPERTYRADAR_BASE_URL: ${PROPERTYRADAR_BASE_URL:-}
+      BATCH_SKIPTRACE_API_KEY: ${BATCH_SKIPTRACE_API_KEY:-}
+      SKIP_TRACE_PROVIDER: ${SKIP_TRACE_PROVIDER:-batch}
+
+      DOCUSIGN_BASE_URL: ${DOCUSIGN_BASE_URL:-}
+      DOCUSIGN_CLIENT_ID: ${DOCUSIGN_CLIENT_ID:-}
+      DOCUSIGN_CLIENT_SECRET: ${DOCUSIGN_CLIENT_SECRET:-}
+      DOCUSIGN_ACCOUNT_ID: ${DOCUSIGN_ACCOUNT_ID:-}
+      DOCUSIGN_CONNECT_SECRET: ${DOCUSIGN_CONNECT_SECRET:-}
+
+      # Inside the compose network, not localhost.
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-halo-documents}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "3001:3001"
+      # Caddy reaches this over the compose network; this mapping exists for
+      # local debugging over SSH only.
+      - "127.0.0.1:3001:3001"
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3001/api/health/live || exit 1"]
       interval: 15s
@@ -86,16 +161,19 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     container_name: halo-web
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.haloacquisitions.com/api}
       NEXT_PUBLIC_DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID}
       NEXT_PUBLIC_DESCOPE_FLOW_ID: ${NEXT_PUBLIC_DESCOPE_FLOW_ID:-sign-in}
+      # Required when the Descope project uses a custom domain.
+      NEXT_PUBLIC_DESCOPE_BASE_URL: ${DESCOPE_BASE_URL:-}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1"]
       interval: 15s
@@ -107,24 +185,69 @@ services:
       context: .
       dockerfile: apps/worker/Dockerfile
     container_name: halo-worker
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      # Paid calls are proxied to the /internal routes, so the worker cannot do
+      # useful work until the api is serving.
+      api:
+        condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public"
-      REDIS_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-halo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-halo_prod}?schema=public}
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+      WORKER_HEALTH_PORT: 3003
+
+      # Over the compose network, never the public hostname: /api/internal is
+      # blocked at the edge by design (see Caddyfile).
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:3001/api}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+
+      # Model choice only. The api holds the OpenAI key and does the spending,
+      # so every token is preflighted and lands on the cost ledger.
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-5}
+
+      # Used to address outbound SMS; the send itself goes through the api.
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+
+      # Enrichment still calls these directly from worker context.
       ATTOM_API_KEY: ${ATTOM_API_KEY:-}
+      ATTOM_BASE_URL: ${ATTOM_BASE_URL:-https://api.gateway.attomdata.com}
       GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
       PROPERTYRADAR_API_KEY: ${PROPERTYRADAR_API_KEY:-}
+
       FEATURE_OPENCLAW: ${FEATURE_OPENCLAW:-false}
-      OPENCLAW_WS_URL: ${OPENCLAW_WS_URL:-}
-      OPENCLAW_AGENT_ID: ${OPENCLAW_AGENT_ID:-}
-      OPENCLAW_SECRET: ${OPENCLAW_SECRET:-}
+      # Names must match apps/worker/src/openclaw/openclaw.config.ts.
+      OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
+      OPENCLAW_AUTH_TOKEN: ${OPENCLAW_AUTH_TOKEN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3003/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2
+    container_name: halo-caddy
+    restart: unless-stopped
+    depends_on: [api, web]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
+  caddy-data:
+  caddy-config:
