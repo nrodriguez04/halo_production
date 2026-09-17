@@ -10,14 +10,39 @@ import * as compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { validateEnv } from './env';
+import { isDevAuthBypassEnabled, devBypassAccountId } from './auth/dev-bypass';
 
 async function bootstrap() {
   validateEnv();
+
+  if (isDevAuthBypassEnabled()) {
+    const bar = '  ' + '*'.repeat(66);
+    // eslint-disable-next-line no-console
+    console.warn(
+      [
+        '',
+        bar,
+        '  *  AUTH BYPASS ENABLED - every request is treated as signed in. *',
+        `  *  Acting as tenant: ${devBypassAccountId()}`,
+        '  *  Never set HALO_DEV_AUTH_BYPASS outside local development.    *',
+        bar,
+        '',
+      ].join(String.fromCharCode(10)),
+    );
+  }
+
   const app = await NestFactory.create(AppModule);
   app.useLogger(app.get(Logger));
 
   const httpAdapter = app.getHttpAdapter().getInstance() as express.Application;
   httpAdapter.disable('x-powered-by');
+
+  // Behind a TLS-terminating proxy (Caddy in the deployment runbook), Express
+  // reports req.protocol as 'http' and the internal host. Twilio signs the
+  // PUBLIC https URL, so without this every inbound webhook fails signature
+  // verification. TRUST_PROXY accepts express' syntax ('1', 'loopback', a
+  // CIDR); default 'loopback' is safe for a same-host proxy.
+  httpAdapter.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
 
   try {
     app.use(helmet({ contentSecurityPolicy: false }));
@@ -53,8 +78,21 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  app.use(express.json({ limit: '512kb' }));
-  app.use(express.urlencoded({ extended: true, limit: '512kb' }));
+  // DocuSign Connect HMACs the RAW request bytes. Re-serialising the parsed
+  // body (JSON.stringify) will not reproduce them, so keep the original
+  // buffer on the request for the webhook controller to verify against.
+  const keepRawBody = (req: any, _res: unknown, buf: Buffer) => {
+    if (buf?.length) req.rawBody = Buffer.from(buf);
+  };
+
+  app.use(express.json({ limit: '512kb', verify: keepRawBody }));
+  app.use(
+    express.urlencoded({
+      extended: true,
+      limit: '512kb',
+      verify: keepRawBody,
+    }),
+  );
 
   app.use((req: any, _res: any, next: any) => {
     if (req.body && typeof req.body === 'object') {

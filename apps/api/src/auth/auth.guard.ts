@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { descope } from './descope.client';
+import { devBypassUser, isDevAuthBypassEnabled } from './dev-bypass';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -15,6 +16,17 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
+
+    // Dev-only escape hatch (see dev-bypass.ts). Cannot engage when
+    // NODE_ENV === 'production'.
+    if (isDevAuthBypassEnabled()) {
+      const user = devBypassUser();
+      (request as any).user = user;
+      (request as any).userId = user.userId;
+      (request as any).accountId = user.accountId;
+      return true;
+    }
+
     const authHeader = request.headers.authorization;
     const token = authHeader?.startsWith('Bearer ')
       ? authHeader.slice(7)

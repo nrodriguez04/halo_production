@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import * as crypto from 'crypto';
 
@@ -174,11 +175,14 @@ export class PropertyRadarService {
     ctx: CostContext,
     exec: () => Promise<T>,
   ): Promise<T | null> {
-    if (!(await this.controlPlane.isExternalDataEnabled())) {
-      throw new Error('External data access is disabled');
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('propertyradar');
     }
     if (!this.apiKey) {
-      throw new Error('PROPERTYRADAR_API_KEY is not configured');
+      throw IntegrationUnavailableException.notConfigured(
+        'propertyradar',
+        'PROPERTYRADAR_API_KEY',
+      );
     }
     const out = await this.costControl.checkAndCall<Record<string, unknown>, T>({
       provider: 'propertyradar',

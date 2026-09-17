@@ -6,7 +6,9 @@ import {
   HttpCode,
   ForbiddenException,
   Logger,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import { DocuSignService } from './docusign.service';
@@ -22,9 +24,10 @@ export class DocuSignController {
   @HttpCode(200)
   async handleWebhook(
     @Body() body: any,
+    @Req() req: Request,
     @Headers('x-docusign-signature-1') signature?: string,
   ) {
-    this.verifyDocuSignHmac(body, signature);
+    this.verifyDocuSignHmac(req, body, signature);
     return this.docuSignService.handleWebhook(body);
   }
 
@@ -33,6 +36,7 @@ export class DocuSignController {
    * with the Connect secret from the integration settings.
    */
   private verifyDocuSignHmac(
+    req: Request,
     body: any,
     signature: string | undefined,
   ) {
@@ -49,10 +53,13 @@ export class DocuSignController {
       );
     }
 
-    const payload = JSON.stringify(body);
+    // Prefer the raw bytes captured in main.ts; JSON.stringify(body) does not
+    // round-trip to the exact payload DocuSign signed.
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+    const payload = rawBody ?? Buffer.from(JSON.stringify(body), 'utf8');
     const expected = crypto
       .createHmac('sha256', secret)
-      .update(payload, 'utf8')
+      .update(payload)
       .digest('base64');
 
     const sigBuf = Buffer.from(signature, 'base64');

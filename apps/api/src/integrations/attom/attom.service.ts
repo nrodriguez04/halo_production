@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import * as crypto from 'crypto';
 
@@ -52,8 +53,13 @@ export class AttomService {
     zip: string | undefined,
     ctx: CostContext,
   ): Promise<AttomLookupResult | null> {
-    if (!(await this.controlPlane.isExternalDataEnabled())) {
-      throw new Error('External data access is disabled');
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('attom');
+    }
+    if (!this.apiKey) {
+      // Checked before checkAndCall so a missing key does not reserve budget
+      // or burn a round-trip just to be rejected with a 401.
+      throw IntegrationUnavailableException.notConfigured('attom', 'ATTOM_API_KEY');
     }
     const query = [address, city, state, zip].filter(Boolean).join(', ');
 
@@ -74,8 +80,13 @@ export class AttomService {
   }
 
   async lookupByAPN(apn: string, ctx: CostContext): Promise<AttomLookupResult | null> {
-    if (!(await this.controlPlane.isExternalDataEnabled())) {
-      throw new Error('External data access is disabled');
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('attom');
+    }
+    if (!this.apiKey) {
+      // Checked before checkAndCall so a missing key does not reserve budget
+      // or burn a round-trip just to be rejected with a 401.
+      throw IntegrationUnavailableException.notConfigured('attom', 'ATTOM_API_KEY');
     }
 
     const out = await this.costControl.checkAndCall<{ apn: string }, AttomLookupResult>({
@@ -109,6 +120,16 @@ export class AttomService {
         });
 
         if (!response.ok) {
+          // A rejected key is a configuration problem, not a transient fault:
+          // surface it as 503 REJECTED_CREDENTIALS rather than retrying or
+          // reporting a generic 500.
+          if (response.status === 401 || response.status === 403) {
+            throw new IntegrationUnavailableException(
+              'attom',
+              'REJECTED_CREDENTIALS',
+              `HTTP ${response.status}`,
+            );
+          }
           if ((response.status === 429 || response.status >= 500) && attempt < retries - 1) {
             const delay = Math.pow(2, attempt) * 1000;
             this.logger.warn(`ATTOM ${response.status}, retrying after ${delay}ms`);

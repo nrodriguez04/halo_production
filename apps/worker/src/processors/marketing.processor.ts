@@ -6,9 +6,14 @@ import {
   TimelineEntityType,
 } from '@prisma/client';
 import * as crypto from 'crypto';
-import OpenAI from 'openai';
 import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
 import { prisma } from '../prisma-client';
+import { getControlPlane } from '../control-plane';
+import { AI_MODEL, estimateAiCostUsd } from '../ai-model';
+import {
+  CostBlockedError,
+  chatCompletion as chatCompletionViaApi,
+} from '../internal-api.client';
 
 type MarketingPayload = {
   jobRunId: string;
@@ -21,19 +26,8 @@ type MarketingPayload = {
 
 @Processor('marketing')
 export class MarketingProcessor extends WorkerHost {
-  private _openai: OpenAI | null = null;
-
-  private get openai(): OpenAI {
-    if (!this._openai) {
-      if (!process.env.OPENAI_API_KEY) {
-        throw new Error('OPENAI_API_KEY environment variable is required');
-      }
-      this._openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
-    }
-    return this._openai;
-  }
+  // Paid calls go through the api's /internal routes so the cost-control
+  // preflight and ledger apply; no SDK client here by design.
 
   async process(job: Job<MarketingPayload>) {
     const { jobRunId, tenantId, dealId, type, buyerIds = [], actorId } = job.data;
@@ -52,7 +46,7 @@ export class MarketingProcessor extends WorkerHost {
         throw new Error(`Deal ${dealId} not found in tenant ${tenantId}`);
       }
 
-      const controlPlane = await this.getControlPlane();
+      const controlPlane = await this.getControlPlane(tenantId);
       const todayCost = await this.getTodayCost(tenantId);
       const globalTodayCost = await this.getTodayCost();
       const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
@@ -115,6 +109,31 @@ export class MarketingProcessor extends WorkerHost {
 
       return { success: true, jobRunId, result };
     } catch (error) {
+      // A spend cap is not a job failure. Retrying only burns queue
+      // attempts against a budget that is still exhausted, so record the
+      // block and finish; the job can be re-queued next budget period.
+      if (error instanceof CostBlockedError) {
+        await prisma.jobRun.update({
+          where: { id: jobRunId },
+          data: {
+            status: JobRunStatus.FAILED,
+            error: `Blocked by cost control: ${error.reason} (${error.provider})`,
+          },
+        });
+        await prisma.timelineEvent.create({
+          data: {
+            tenantId,
+            entityType: TimelineEntityType.JOB,
+            entityId: jobRunId,
+            eventType: 'MARKETING_JOB_BLOCKED',
+            payloadJson: { reason: error.reason, provider: error.provider },
+            actorId: actorId || null,
+            actorType: TimelineActorType.system,
+          },
+        });
+        return { success: false, blocked: true, reason: error.reason };
+      }
+
       await prisma.jobRun.update({
         where: { id: jobRunId },
         data: {
@@ -153,8 +172,8 @@ export class MarketingProcessor extends WorkerHost {
       dealData: JSON.stringify(dealData, null, 2),
     });
 
-    const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4',
+    const completion = await chatCompletionViaApi(deal.accountId, {
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -163,19 +182,21 @@ export class MarketingProcessor extends WorkerHost {
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
+      dealId: deal.id,
     });
 
-    const content = completion.choices[0].message.content || '';
-    const cost = this.estimateCost(
-      completion.usage?.prompt_tokens || 0,
-      completion.usage?.completion_tokens || 0,
+    const content = completion.content;
+    const cost = estimateAiCostUsd(
+      completion.model,
+      completion.tokensIn,
+      completion.tokensOut,
     );
     await prisma.aICostLog.create({
       data: {
         provider: 'openai',
-        model: 'gpt-4',
-        tokensIn: completion.usage?.prompt_tokens,
-        tokensOut: completion.usage?.completion_tokens,
+        model: completion.model,
+        tokensIn: completion.tokensIn,
+        tokensOut: completion.tokensOut,
         cost,
         accountId: deal.accountId,
       },
@@ -187,8 +208,8 @@ export class MarketingProcessor extends WorkerHost {
         type: 'flyer',
         content,
         metadata: {
-          model: 'gpt-4',
-          tokensUsed: completion.usage?.total_tokens,
+          model: completion.model,
+          tokensUsed: completion.tokensIn + completion.tokensOut,
           cost,
         },
       },
@@ -231,8 +252,8 @@ export class MarketingProcessor extends WorkerHost {
       ),
     });
 
-    const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4',
+    const completion = await chatCompletionViaApi(deal.accountId, {
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -241,19 +262,21 @@ export class MarketingProcessor extends WorkerHost {
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
+      dealId: deal.id,
     });
 
-    const content = completion.choices[0].message.content || '';
-    const cost = this.estimateCost(
-      completion.usage?.prompt_tokens || 0,
-      completion.usage?.completion_tokens || 0,
+    const content = completion.content;
+    const cost = estimateAiCostUsd(
+      completion.model,
+      completion.tokensIn,
+      completion.tokensOut,
     );
     await prisma.aICostLog.create({
       data: {
         provider: 'openai',
-        model: 'gpt-4',
-        tokensIn: completion.usage?.prompt_tokens,
-        tokensOut: completion.usage?.completion_tokens,
+        model: completion.model,
+        tokensIn: completion.tokensIn,
+        tokensOut: completion.tokensOut,
         cost,
         accountId: deal.accountId,
       },
@@ -270,8 +293,8 @@ export class MarketingProcessor extends WorkerHost {
         metadata: {
           type: 'buyer_blast',
           buyerIds,
-          model: 'gpt-4',
-          tokensUsed: completion.usage?.total_tokens,
+          model: completion.model,
+          tokensUsed: completion.tokensIn + completion.tokensOut,
           cost,
         } as any,
       },
@@ -296,11 +319,6 @@ export class MarketingProcessor extends WorkerHost {
     };
   }
 
-  private estimateCost(tokensIn: number, tokensOut: number): number {
-    const inputCostPer1k = 0.03;
-    const outputCostPer1k = 0.06;
-    return (tokensIn / 1000) * inputCostPer1k + (tokensOut / 1000) * outputCostPer1k;
-  }
 
   private async getTodayCost(accountId?: string): Promise<number> {
     const today = new Date();
@@ -316,16 +334,7 @@ export class MarketingProcessor extends WorkerHost {
     return logs.reduce((sum, log) => sum + log.cost, 0);
   }
 
-  private async getControlPlane() {
-    const cp = await prisma.controlPlane.findFirst();
-    return (
-      cp || {
-        enabled: true,
-        smsEnabled: true,
-        emailEnabled: true,
-        docusignEnabled: true,
-        externalDataEnabled: true,
-      }
-    );
+  private async getControlPlane(tenantId: string) {
+    return getControlPlane(tenantId);
   }
 }

@@ -22,6 +22,8 @@ export function buildPolicyContext(
     isDnc: partial.isDnc,
     timezone: partial.timezone,
     localHour: partial.localHour,
+    quietHoursStart: partial.quietHoursStart,
+    quietHoursEnd: partial.quietHoursEnd,
     dailySpendUsd: partial.dailySpendUsd,
     dailyCapUsd: partial.dailyCapUsd,
     perTenantCapUsd: partial.perTenantCapUsd,

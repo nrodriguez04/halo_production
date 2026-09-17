@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { ApiCostService } from '../api-cost/api-cost.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { CurrentAccountId } from '../auth/decorators';
 import { REDIS } from '../redis/redis.module';
 import Redis from 'ioredis';
 
@@ -46,7 +47,7 @@ export class HealthController {
   @SkipThrottle()
   @Get('ready')
   @UseGuards(AuthGuard)
-  async getReady() {
+  async getReady(@CurrentAccountId() accountId: string) {
     const checks = await this.getLive();
 
     try {
@@ -56,7 +57,7 @@ export class HealthController {
     }
 
     try {
-      const cp = await this.controlPlane.getStatus();
+      const cp = await this.controlPlane.getStatus(accountId);
       checks.controlPlane = {
         enabled: cp.enabled,
         smsEnabled: cp.smsEnabled,
@@ -78,7 +79,7 @@ export class HealthController {
         where: { createdAt: { gte: today } },
       });
       const totalCost = costLogs.reduce((sum, log) => sum + log.cost, 0);
-      const dailyCap = await this.controlPlane.getAiDailyCostCap();
+      const dailyCap = await this.controlPlane.getAiDailyCostCap(accountId);
       checks.aiCost = {
         today: totalCost.toFixed(4),
         cap: dailyCap,
@@ -91,7 +92,7 @@ export class HealthController {
 
     try {
       const apiSpendToday = await this.apiCostService.getTodayTotal();
-      const apiCap = await this.controlPlane.getApiDailyCostCap();
+      const apiCap = await this.controlPlane.getApiDailyCostCap(accountId);
       checks.apiSpend = {
         today: apiSpendToday.toFixed(4),
         cap: apiCap,

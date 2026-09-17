@@ -364,6 +364,12 @@ model Buyer {
 // Control plane
 model ControlPlane {
   id        String   @id @default(cuid())
+  /// Owning tenant. The reserved value "GLOBAL" is a platform-wide master
+  /// switch: a flag is only on if BOTH the tenant row and the GLOBAL row
+  /// (when present) allow it, and the effective cap is the lower of the two.
+  /// Before this column existed there was a single unscoped row, so one
+  /// tenant flipping a switch changed behaviour for every tenant.
+  accountId String
   enabled   Boolean  @default(true)
   smsEnabled Boolean @default(true)
   emailEnabled Boolean @default(true)
@@ -375,6 +381,7 @@ model ControlPlane {
   updatedAt DateTime @updatedAt
   updatedBy String?
 
+  @@unique([accountId])
   @@map("control_plane")
 }
 

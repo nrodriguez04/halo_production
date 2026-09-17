@@ -30,8 +30,8 @@ export class ControlPlaneController {
 
   @Get()
   @Permissions('control_plane:read')
-  async getStatus() {
-    return this.controlPlaneService.getStatus();
+  async getStatus(@CurrentAccountId() accountId: string) {
+    return this.controlPlaneService.getStatus(accountId);
   }
 
   @Put()
@@ -42,7 +42,11 @@ export class ControlPlaneController {
     @CurrentAccountId() accountId: string,
   ) {
     const data = UpdateControlPlaneSchema.parse(body);
-    const result = await this.controlPlaneService.updateStatus(data, userId);
+    const result = await this.controlPlaneService.updateStatus(
+      accountId,
+      data,
+      userId,
+    );
     await this.auditService.log({
       accountId,
       userId,

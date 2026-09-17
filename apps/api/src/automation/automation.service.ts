@@ -32,7 +32,7 @@ export class AutomationService {
     promptVersion?: string;
     parentRunId?: string;
   }) {
-    const isEnabled = await this.controlPlane.isEnabled();
+    const isEnabled = await this.controlPlane.isEnabled(input.tenantId);
     if (!isEnabled) {
       throw new Error('System is disabled — automation runs cannot be created');
     }
@@ -77,6 +77,7 @@ export class AutomationService {
   }
 
   async startRun(runId: string, tenantId: string) {
+    await this.assertRunInTenant(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -99,6 +100,7 @@ export class AutomationService {
       toolCostUsd?: number;
     },
   ) {
+    await this.assertRunInTenant(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -133,6 +135,7 @@ export class AutomationService {
   }
 
   async failRun(runId: string, tenantId: string, errorJson?: any) {
+    await this.assertRunInTenant(runId, tenantId);
     const run = await this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -161,6 +164,7 @@ export class AutomationService {
   }
 
   async cancelRun(runId: string, tenantId: string) {
+    await this.assertRunInTenant(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -171,6 +175,7 @@ export class AutomationService {
   }
 
   async approveRun(runId: string, tenantId: string, userId: string) {
+    await this.assertRunInTenant(runId, tenantId);
     return this.prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -178,6 +183,21 @@ export class AutomationService {
         approvedAt: new Date(),
       },
     });
+  }
+
+  /**
+   * `automationRun.update` requires a unique `where`, which can only be the
+   * id — so a run id alone is enough to write another tenant's row. Every
+   * mutating method confirms ownership through this guard first.
+   */
+  private async assertRunInTenant(runId: string, tenantId: string) {
+    const owned = await this.prisma.automationRun.findFirst({
+      where: { id: runId, tenantId },
+      select: { id: true },
+    });
+    if (!owned) {
+      throw new NotFoundException(`Automation run ${runId} not found`);
+    }
   }
 
   async getRun(runId: string, tenantId: string) {
@@ -217,7 +237,9 @@ export class AutomationService {
       orderBy: { createdAt: 'desc' },
       skip: filters?.skip,
       take: filters?.take || 50,
-      include: { messages: { select: { id: true, status: true, channel: true } } },
+      include: {
+        messages: { select: { id: true, status: true, channel: true } },
+      },
     });
   }
 
@@ -237,9 +259,7 @@ export class AutomationService {
     if (!message || message.direction !== 'inbound') return null;
 
     const windowMs = (opts?.windowDays || 7) * 24 * 60 * 60 * 1000;
-    const windowStart = new Date(
-      message.createdAt.getTime() - windowMs,
-    );
+    const windowStart = new Date(message.createdAt.getTime() - windowMs);
 
     const priorOutbound = await this.prisma.message.findFirst({
       where: {

@@ -1,3 +1,10 @@
+// Mirrors apps/api/src/main.ts: load the app-local env file before anything
+// reads process.env. Without this the worker only ever saw variables exported
+// into the shell, so `validateEnv()` failed on DATABASE_URL in local runs.
+import { config } from 'dotenv';
+import { resolve } from 'path';
+config({ path: resolve(__dirname, '..', '.env.local') });
+
 import * as http from 'http';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';

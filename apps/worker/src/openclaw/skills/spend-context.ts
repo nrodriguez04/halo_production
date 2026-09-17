@@ -5,6 +5,7 @@
 // undefined.
 
 import { prisma } from '../../prisma-client';
+import { getControlPlane } from '../../control-plane';
 
 export interface SpendContext {
   dailySpendUsd: number;
@@ -47,9 +48,9 @@ export async function loadSpendContext(tenantId: string): Promise<SpendContext> 
   let globalCap = globalBucket?.hardCapUsd ?? FALLBACK_GLOBAL_CAP;
   if (!tenantBucket || !globalBucket) {
     try {
-      const cp = await prisma.controlPlane.findFirst();
-      if (cp?.aiDailyCostCap) tenantCap = cp.aiDailyCostCap;
-      if (cp?.apiDailyCostCap) globalCap = cp.apiDailyCostCap;
+      const cp = await getControlPlane(tenantId);
+      if (cp.aiDailyCostCap) tenantCap = cp.aiDailyCostCap;
+      if (cp.apiDailyCostCap) globalCap = cp.apiDailyCostCap;
     } catch {
       // best-effort fallback
     }
