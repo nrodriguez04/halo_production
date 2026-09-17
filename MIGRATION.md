@@ -52,10 +52,17 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 You will need:
 
 - `SECRETS_ENCRYPTION_KEY` (64 hex chars, prod-only)
+- `INTERNAL_API_TOKEN` (64 hex chars; shared secret for worker-to-api calls,
+  minimum 32 characters or the internal routes refuse to serve)
 - `POSTGRES_PASSWORD`
 - `REDIS_PASSWORD`
 - `MINIO_ROOT_PASSWORD`
 - The new prod `DESCOPE_PROJECT_ID`
+
+`docker compose` refuses to start if `POSTGRES_PASSWORD`, `REDIS_PASSWORD`,
+`MINIO_ROOT_PASSWORD`, `DESCOPE_PROJECT_ID`, `SECRETS_ENCRYPTION_KEY` or
+`INTERNAL_API_TOKEN` is missing, so a half-configured deploy fails fast
+rather than booting in a degraded state.
 
 ### 0.3 Decide an SSH key
 
@@ -212,18 +219,37 @@ CORS_ORIGINS=https://app.haloacquisitions.com
 # ── Encryption ─────────────────────────────────────────
 SECRETS_ENCRYPTION_KEY=<64_hex_chars>
 
-# ── AI cost cap ────────────────────────────────────────
+# ── Worker -> api (service-to-service) ─────────────────
+# The worker proxies every paid call to the api so it goes through the
+# cost-control preflight and lands on the ledger. Minimum 32 chars.
+INTERNAL_API_TOKEN=<64_hex_chars>
+
+# ── AI ─────────────────────────────────────────────────
+# Only the api needs the key; the worker just names the model.
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o
 OPENAI_DAILY_COST_CAP=5
 
 # ── Integrations (fill as you wire each one) ───────────
+TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+SENDGRID_API_KEY=
+SENDGRID_FROM_EMAIL=
+DOCUSIGN_CLIENT_ID=
+DOCUSIGN_CLIENT_SECRET=
+DOCUSIGN_ACCOUNT_ID=
 DOCUSIGN_CONNECT_SECRET=
 ATTOM_API_KEY=
 PROPERTYRADAR_API_KEY=
 GOOGLE_GEOCODING_API_KEY=
+RENTCAST_API_KEY=
 
 # ── OpenClaw (off until ready) ─────────────────────────
+# Names must match apps/worker/src/openclaw/openclaw.config.ts.
 FEATURE_OPENCLAW=false
+OPENCLAW_GATEWAY_URL=
+OPENCLAW_AUTH_TOKEN=
 ```
 
 Lock it down:
@@ -236,75 +262,56 @@ chmod 600 /opt/halo/.env
 
 ## Phase 5 — Reverse proxy with TLS (Caddy)
 
-### 5.1 Bind internal services to localhost only
+### 5.1 Internal services are already bound to localhost
 
-The current `docker-compose.prod.yml` exposes Postgres / Redis / MinIO on the public
-internet. Change those `ports:` blocks to bind to `127.0.0.1`:
+`docker-compose.prod.yml` publishes Postgres, Redis and MinIO on
+`127.0.0.1` only, so no hand-editing is needed. Verify after deploy:
 
-```yaml
-postgres:
-  ports:
-    - "127.0.0.1:5432:5432"
-redis:
-  ports:
-    - "127.0.0.1:6379:6379"
-minio:
-  ports:
-    - "127.0.0.1:9000:9000"
-    - "127.0.0.1:9001:9001"
+```bash
+ss -tlnp | grep -E '5432|6379|9000'   # every line should show 127.0.0.1
 ```
 
-API and web can keep `3000:3000` / `3001:3001` (Caddy is on the same host).
+The api and web containers publish on `127.0.0.1` too; Caddy reaches them
+over the compose network by service name.
 
-### 5.2 Add the Caddyfile
+### 5.2 The Caddyfile
 
-Create `/opt/halo/Caddyfile`:
+`Caddyfile` is committed at the repo root and mounted read-only by the
+`caddy` service. Copy it to the VPS with the rest of the checkout and edit
+the three hostnames plus the ACME `email` to match your domain.
+
+The one rule worth understanding before changing anything:
 
 ```caddyfile
-app.haloacquisitions.com {
-    reverse_proxy web:3000
-    encode zstd gzip
-}
-
-api.haloacquisitions.com {
-    reverse_proxy api:3001
-    encode zstd gzip
-}
-
-haloacquisitions.com {
-    redir https://app.haloacquisitions.com{uri} permanent
+@internal path /api/internal /api/internal/*
+handle @internal {
+	respond 404
 }
 ```
 
-### 5.3 Add Caddy to `docker-compose.prod.yml`
+`/api/internal/*` is the worker-to-api surface. It is authenticated by a
+shared bearer token **and it lets the caller name its own tenant** via the
+`x-halo-account-id` header. That is safe between containers on the compose
+network and catastrophic if exposed — anyone holding the token could spend
+against, and read data for, any tenant. The worker reaches it directly at
+`http://api:3001`, so nothing legitimate needs it at the edge. It answers
+404 rather than 403 so the routes are not advertised.
 
-Append a service:
+Validate any edit before deploying:
 
-```yaml
-caddy:
-  image: caddy:2
-  container_name: halo-caddy
-  restart: unless-stopped
-  depends_on: [api, web]
-  ports:
-    - "80:80"
-    - "443:443"
-  volumes:
-    - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    - caddy-data:/data
-    - caddy-config:/config
+```bash
+docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro"   caddy:2 caddy validate --config /etc/caddy/Caddyfile
 ```
 
-And extend the volumes block:
+### 5.3 Caddy is already in the compose file
 
-```yaml
-volumes:
-  postgres-data:
-  redis-data:
-  minio-data:
-  caddy-data:
-  caddy-config:
-```
+The `caddy` service, its volumes and the `Caddyfile` mount are part of
+`docker-compose.prod.yml`. Nothing to append.
+
+Note `TRUST_PROXY=1` on the api service: Caddy is the only hop in front of
+it, and without that setting Express reports `req.protocol` as `http`, which
+breaks Twilio webhook signature verification (Twilio signs the public
+`https` URL).
 
 ---
 
@@ -347,16 +354,19 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
 ```
 
-Run migrations:
+Migrations run automatically: the one-shot `migrate` service applies them
+before `api` and `worker` start, so there is no manual step. Confirm it
+succeeded:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml logs migrate
 ```
 
-Optional demo seed:
+Optional demo seed (note the path -- the working directory is `/app`, so a
+bare `prisma/seed.ts` will not resolve):
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api npx tsx prisma/seed.ts
+docker compose -f docker-compose.prod.yml exec api npx tsx apps/api/prisma/seed.ts
 ```
 
 Tail logs while smoke-testing:

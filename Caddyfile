@@ -1,0 +1,56 @@
+# Halo edge config. Caddy terminates TLS and is the only hop in front of the
+# api, which is why the api sets `trust proxy = 1` (TRUST_PROXY in compose).
+# That is what makes X-Forwarded-Proto/Host trustworthy, and in turn what
+# makes Twilio webhook signature verification work: Twilio signs the public
+# https URL, so the api must reconstruct it rather than seeing http + an
+# internal hostname.
+{
+	# Replace with a real address: expiry notices and ACME recovery go here.
+	email ops@haloacquisitions.com
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "no-referrer"
+		# Do not advertise the server software.
+		-Server
+	}
+}
+
+app.haloacquisitions.com {
+	import security_headers
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+api.haloacquisitions.com {
+	import security_headers
+	encode zstd gzip
+
+	# --- Service-to-service surface: never reachable from the internet -----
+	# /api/internal/* is authenticated only by a shared bearer token AND it
+	# lets the caller name its own tenant via x-halo-account-id. That is safe
+	# between containers on the compose network and catastrophic if exposed:
+	# anyone holding the token could spend against, and read data for, any
+	# tenant. The worker reaches it directly at http://api:3001, so nothing
+	# legitimate needs it here.
+	#
+	# 404 rather than 403 so the routes are not advertised at all.
+	@internal path /api/internal /api/internal/*
+	handle @internal {
+		respond 404
+	}
+
+	# --- Everything else --------------------------------------------------
+	handle {
+		reverse_proxy api:3001
+	}
+}
+
+haloacquisitions.com {
+	import security_headers
+	redir https://app.haloacquisitions.com{uri} permanent
+}
