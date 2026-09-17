@@ -28,9 +28,14 @@ services:
     image: redis:7-alpine
     container_name: halo-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    # The password is read from the environment at start-up rather than
+    # interpolated into `command`. Compose substitutes ${...} at parse time,
+    # so the literal password would otherwise end up in the container Cmd and
+    # be visible in `docker inspect`. $$ escapes the $ so the shell, not
+    # compose, expands it.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
