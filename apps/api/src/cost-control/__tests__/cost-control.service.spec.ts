@@ -9,6 +9,7 @@ import { CostIntent } from '../dto/cost-intent.dto';
 import { PricingService } from '../pricing/pricing.service';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { CostBlockedException } from '../cost-blocked.exception';
+import * as fallbackChain from '../policy/fallback-chain';
 
 // Tests every branch of preflight + checkAndCall: ALLOW, ALLOW_WITH_WARNING,
 // USE_CACHE, DOWNGRADE_PROVIDER, BLOCK_FEATURE_DISABLED, BLOCK_OVER_BUDGET,
@@ -206,6 +207,22 @@ describe('IntegrationCostControlService', () => {
   });
 
   it('blocks after exhausting every provider in a circular fallback chain', async () => {
+    // The shipped chains are no longer circular (unsupported cross-provider
+    // fallbacks were removed), so simulate one to keep this regression
+    // meaningful: preflight must honour the accumulated tried-set rather than
+    // restarting from a fresh one on every downgrade.
+    const chains: Record<string, string[]> = {
+      batch_skiptrace: ['datazapp', 'propertyradar'],
+      datazapp: ['batch_skiptrace', 'propertyradar'],
+      propertyradar: ['batch_skiptrace', 'datazapp'],
+    };
+    const hasSpy = jest
+      .spyOn(fallbackChain, 'hasFallback')
+      .mockImplementation((key) => (chains[key]?.length ?? 0) > 0);
+    const nextSpy = jest
+      .spyOn(fallbackChain, 'nextFallback')
+      .mockImplementation((key, tried) => chains[key]?.find((c) => !tried.has(c)) ?? null);
+
     budgets.findApplicable.mockImplementation(async (intent: CostIntent<unknown, unknown>) => [
       {
         id: `b_${intent.provider}`,
@@ -221,22 +238,29 @@ describe('IntegrationCostControlService', () => {
     budgets.findOverHardCap.mockImplementation((buckets: any[]) => buckets[0]);
 
     const exec = jest.fn(async () => ({ ok: true }));
-    const out = await service.checkAndCall(
-      baseIntent({
-        provider: 'batch_skiptrace',
-        action: 'append_contacts',
-        execute: exec,
-      }),
-    );
+    await expect(
+      service.checkAndCall(
+        baseIntent({
+          provider: 'batch_skiptrace',
+          action: 'append_contacts',
+          execute: exec,
+        }),
+      ),
+    ).rejects.toThrow(CostBlockedException);
 
-    expect(out.decision.kind).toBe('BLOCK_OVER_BUDGET');
     expect(exec).not.toHaveBeenCalled();
-    expect(prisma.integrationCostEvent.create).not.toHaveBeenCalled();
+    // The final block is recorded as an auditable ledger row; nothing was
+    // executed, so there must be no non-blocked event.
+    expect(prisma.integrationCostEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.integrationCostEvent.create.mock.calls[0][0].data.status).toBe('blocked');
     expect(budgets.findApplicable.mock.calls.map(([intent]: [CostIntent<unknown, unknown>]) => intent.provider)).toEqual([
       'batch_skiptrace',
       'datazapp',
       'propertyradar',
     ]);
+
+    hasSpy.mockRestore();
+    nextSpy.mockRestore();
   });
 
   it('blocks when lead score is below the configured threshold', async () => {
