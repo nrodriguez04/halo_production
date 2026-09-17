@@ -24,6 +24,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { RentCastModule } from './integrations/rentcast/rentcast.module';
 import { PropertyRadarModule } from './integrations/propertyradar/propertyradar.module';
 import { PIIModule } from './pii/pii.module';
+import { InternalModule } from './internal/internal.module';
+import { ComplianceModule } from './compliance/compliance.module';
 import { ChaosModule } from './chaos/chaos.module';
 import { StorageModule } from './storage/storage.module';
 import { AgentModule } from './agent/agent.module';
@@ -79,6 +81,8 @@ import { AuditModule } from './audit/audit.module';
     RentCastModule,
     PropertyRadarModule,
     PIIModule,
+    InternalModule,
+    ComplianceModule,
     ChaosModule,
     StorageModule,
     AgentModule,

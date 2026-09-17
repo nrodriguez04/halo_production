@@ -9,6 +9,7 @@ import {
   CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
+import { IntegrationUnavailableException } from '../integrations/integration-unavailable.exception';
 
 export interface UploadResult {
   key: string;
@@ -71,6 +72,49 @@ export class StorageService implements OnModuleInit {
     return `${tenantId}/${category}/${filename}`;
   }
 
+  /**
+   * Classifies S3/MinIO failures.
+   *
+   * An unreachable bucket or a bad access key is an operational state, not a
+   * bug in the request, but the raw SDK error surfaced as 500 Internal server
+   * error - identical to a genuine crash. Connection and credential failures
+   * become 503 with the cause named; everything else propagates unchanged.
+   */
+  private async s3<T>(op: () => Promise<T>): Promise<T> {
+    try {
+      return await op();
+    } catch (err: any) {
+      const code = err?.Code || err?.name || err?.code || '';
+
+      if (
+        ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH'].includes(
+          err?.code,
+        ) ||
+        code === 'TimeoutError'
+      ) {
+        throw new IntegrationUnavailableException(
+          's3',
+          'UPSTREAM_ERROR',
+          `${this.endpoint} unreachable (${err?.code || code})`,
+        );
+      }
+
+      if (
+        ['InvalidAccessKeyId', 'SignatureDoesNotMatch', 'AccessDenied'].includes(
+          code,
+        )
+      ) {
+        throw new IntegrationUnavailableException(
+          's3',
+          'REJECTED_CREDENTIALS',
+          code,
+        );
+      }
+
+      throw err;
+    }
+  }
+
   async upload(
     tenantId: string,
     category: string,
@@ -80,17 +124,19 @@ export class StorageService implements OnModuleInit {
   ): Promise<UploadResult> {
     const key = this.buildKey(tenantId, category, filename);
 
-    const result = await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: body,
-        ContentType: contentType,
-        Metadata: {
-          'x-tenant-id': tenantId,
-          'x-category': category,
-        },
-      }),
+    const result = await this.s3(() =>
+      this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+          Metadata: {
+            'x-tenant-id': tenantId,
+            'x-category': category,
+          },
+        }),
+      ),
     );
 
     return {
@@ -102,8 +148,10 @@ export class StorageService implements OnModuleInit {
   }
 
   async download(key: string): Promise<{ body: Readable; contentType?: string }> {
-    const result = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    const result = await this.s3(() =>
+      this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      ),
     );
 
     return {
@@ -113,16 +161,20 @@ export class StorageService implements OnModuleInit {
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    await this.s3(() =>
+      this.client.send(
+        new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+      ),
     );
   }
 
   async list(tenantId: string, category?: string): Promise<StorageObject[]> {
     const prefix = category ? `${tenantId}/${category}/` : `${tenantId}/`;
 
-    const result = await this.client.send(
-      new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix }),
+    const result = await this.s3(() =>
+      this.client.send(
+        new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix }),
+      ),
     );
 
     return (result.Contents || []).map((obj) => ({

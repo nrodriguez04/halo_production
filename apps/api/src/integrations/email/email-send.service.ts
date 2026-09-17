@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 
 // Cost-aware email adapter. Tries Resend first (when RESEND_API_KEY is
@@ -63,7 +64,10 @@ export class EmailSendService {
   private async sendViaResend(input: SendEmailInput): Promise<SendEmailResult> {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
-      throw new Error('RESEND_API_KEY is required for resend provider');
+      throw IntegrationUnavailableException.notConfigured(
+        'resend',
+        'RESEND_API_KEY',
+      );
     }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

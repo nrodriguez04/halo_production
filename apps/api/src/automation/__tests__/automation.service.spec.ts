@@ -16,7 +16,10 @@ describe('AutomationService', () => {
       automationRun: {
         create: jest.fn(),
         update: jest.fn(),
-        findFirst: jest.fn(),
+        // Mutating methods first confirm the run belongs to the caller's
+        // tenant via findFirst; default to "owned" so the existing cases
+        // exercise the happy path. Tests override it to assert scoping.
+        findFirst: jest.fn().mockResolvedValue({ id: 'run-1' }),
         findMany: jest.fn(),
       },
       message: {
@@ -121,6 +124,44 @@ describe('AutomationService', () => {
     });
   });
 
+  describe('tenant scoping of mutating methods', () => {
+    // `automationRun.update` can only key on the run id, so without an
+    // ownership check a run id from another tenant is writable.
+    const cases: Array<[string, () => Promise<unknown>]> = [
+      ['startRun', () => service.startRun('run-1', 'other-tenant')],
+      ['completeRun', () => service.completeRun('run-1', 'other-tenant', {})],
+      ['failRun', () => service.failRun('run-1', 'other-tenant', {})],
+      ['cancelRun', () => service.cancelRun('run-1', 'other-tenant')],
+      [
+        'approveRun',
+        () => service.approveRun('run-1', 'other-tenant', 'user-1'),
+      ],
+    ];
+
+    it.each(cases)(
+      '%s rejects a run belonging to another tenant',
+      async (_name, call) => {
+        // No run matches (id, tenantId) for the calling tenant.
+        prisma.automationRun.findFirst.mockResolvedValue(null);
+
+        await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.automationRun.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('scopes the ownership lookup by both id and tenantId', async () => {
+      prisma.automationRun.update.mockResolvedValue({ id: 'run-1' });
+
+      await service.startRun('run-1', 'tenant-1');
+
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1', tenantId: 'tenant-1' },
+        }),
+      );
+    });
+  });
+
   describe('getRun', () => {
     it('should return run with messages', async () => {
       prisma.automationRun.findFirst.mockResolvedValue({
@@ -137,9 +178,9 @@ describe('AutomationService', () => {
     it('should throw NotFoundException for missing run', async () => {
       prisma.automationRun.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.getRun('missing', 'tenant-1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getRun('missing', 'tenant-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

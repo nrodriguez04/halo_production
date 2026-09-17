@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 
 // Cost-aware OpenAI adapter. Both api routes and worker processors call into
@@ -41,7 +42,12 @@ export class OpenAIService {
   private get client(): OpenAI {
     if (!this._client) {
       const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error('OPENAI_API_KEY is required');
+      if (!apiKey) {
+        throw IntegrationUnavailableException.notConfigured(
+          'openai',
+          'OPENAI_API_KEY',
+        );
+      }
       this._client = new OpenAI({ apiKey });
     }
     return this._client;
@@ -98,6 +104,11 @@ const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-4o': { input: 0.0025, output: 0.01 },
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
+  // Legacy gpt-4 is ~20x gpt-4o. It was missing here while the worker
+  // hardcoded it, so every such call silently fell through to the
+  // gpt-4o-mini default below and under-billed by roughly 200x.
+  'gpt-4': { input: 0.03, output: 0.06 },
+  'gpt-4-32k': { input: 0.06, output: 0.12 },
 };
 
 function priceFromTokens(model: string, tokensIn: number, tokensOut: number): number {

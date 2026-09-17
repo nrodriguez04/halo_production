@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { getControlPlane } from '../../control-plane';
 import { assertPolicy, buildPolicyContext } from '@halo/shared';
 import type { SkillDefinition } from './skill.interface';
 import { loadSpendContext } from './spend-context';
@@ -14,9 +15,9 @@ export class SendSmsSkill {
       description: 'Send an SMS message through the approval queue',
       inputSchema: { to: 'string', body: 'string', dealId: 'string', tenantId: 'string' },
       execute: async (input) => {
-        const cp = await this.prisma.controlPlane.findFirst();
-        const sideEffects = cp?.enabled ?? false;
-        const messaging = sideEffects && (cp?.smsEnabled ?? false);
+        const cp = await getControlPlane(input.tenantId);
+        const sideEffects = cp.enabled;
+        const messaging = sideEffects && cp.smsEnabled;
         const spend = await loadSpendContext(input.tenantId);
 
         const ctx = buildPolicyContext({

@@ -3,10 +3,10 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
-import * as crypto from 'crypto';
 import {
   PolicyViolationError,
   assertPolicy,
@@ -41,7 +41,7 @@ export class DocuSignService {
 
   async createEnvelope(dealId: string, accountId: string, templateId?: string) {
     // Check control plane
-    if (!(await this.controlPlane.isDocuSignEnabled())) {
+    if (!(await this.controlPlane.isDocuSignEnabled(accountId))) {
       throw new BadRequestException('DocuSign is disabled');
     }
 
@@ -58,7 +58,7 @@ export class DocuSignService {
     }
 
     try {
-      const controlPlane = await this.controlPlane.getStatus();
+      const controlPlane = await this.controlPlane.getStatus(accountId);
       assertPolicy({
         tenantId: deal.accountId,
         actorId: null,
@@ -127,7 +127,23 @@ export class DocuSignService {
     }
   }
 
-  async getEnvelopeStatus(envelopeId: string) {
+  /**
+   * Envelope ids are opaque but guessable across tenants, and DocuSign itself
+   * has no notion of our tenants — so ownership must be proven locally via
+   * the contract -> deal -> accountId chain before we fetch anything.
+   */
+  private async assertEnvelopeInTenant(envelopeId: string, accountId: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { docusignEnvelopeId: envelopeId, deal: { accountId } },
+      select: { id: true },
+    });
+    if (!contract) {
+      throw new NotFoundException(`Envelope ${envelopeId} not found`);
+    }
+  }
+
+  async getEnvelopeStatus(envelopeId: string, accountId: string) {
+    await this.assertEnvelopeInTenant(envelopeId, accountId);
     try {
       const token = await this.getAccessToken();
       const response = await fetch(
@@ -151,7 +167,8 @@ export class DocuSignService {
     }
   }
 
-  async downloadPDF(envelopeId: string) {
+  async downloadPDF(envelopeId: string, accountId: string) {
+    await this.assertEnvelopeInTenant(envelopeId, accountId);
     try {
       const token = await this.getAccessToken();
       const response = await fetch(

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 
 export interface RentCastListing {
@@ -59,13 +60,14 @@ export class RentCastService {
   ) {}
 
   async getListings(city: string, state: string, ctx: CostContext): Promise<RentCastListing[]> {
-    if (!(await this.controlPlane.isExternalDataEnabled())) {
-      this.logger.warn('External data disabled by control plane');
-      return [];
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('rentcast');
     }
     if (!this.apiKey) {
-      this.logger.warn('RENTCAST_API_KEY not configured');
-      return [];
+      throw IntegrationUnavailableException.notConfigured(
+        'rentcast',
+        'RENTCAST_API_KEY',
+      );
     }
 
     const out = await this.costControl.checkAndCall<{ city: string; state: string }, RentCastListing[]>({
@@ -89,7 +91,15 @@ export class RentCastService {
   }
 
   async getPropertyRecord(address: string, ctx: CostContext): Promise<RentCastPropertyRecord | null> {
-    if (!(await this.controlPlane.isExternalDataEnabled()) || !this.apiKey) return null;
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('rentcast');
+    }
+    if (!this.apiKey) {
+      throw IntegrationUnavailableException.notConfigured(
+        'rentcast',
+        'RENTCAST_API_KEY',
+      );
+    }
 
     const out = await this.costControl.checkAndCall<{ address: string }, RentCastPropertyRecord | null>({
       provider: 'rentcast',
@@ -114,7 +124,15 @@ export class RentCastService {
     ctx: CostContext,
   ): Promise<RentCastValueEstimate | null> {
     // Previously skipped the external-data gate; now enforced uniformly.
-    if (!(await this.controlPlane.isExternalDataEnabled()) || !this.apiKey) return null;
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('rentcast');
+    }
+    if (!this.apiKey) {
+      throw IntegrationUnavailableException.notConfigured(
+        'rentcast',
+        'RENTCAST_API_KEY',
+      );
+    }
 
     const out = await this.costControl.checkAndCall<{ address: string }, RentCastValueEstimate | null>({
       provider: 'rentcast',

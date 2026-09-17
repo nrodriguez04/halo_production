@@ -3,6 +3,7 @@ import { Job } from 'bullmq';
 import * as crypto from 'crypto';
 import { LeadStatus, transitionLeadStatus } from '@halo/shared';
 import { prisma } from '../prisma-client';
+import { getControlPlane } from '../control-plane';
 import { isOverHardCap, recordWorkerCost } from '../cost-ledger';
 
 // Lead enrichment processor. Performs the staged enrichment funnel:
@@ -35,8 +36,8 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       const lead = await prisma.lead.findUnique({ where: { id: leadId } });
       if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-      const controlPlane = await prisma.controlPlane.findFirst();
-      if (controlPlane && !controlPlane.enabled) {
+      const controlPlane = await getControlPlane(lead.accountId);
+      if (!controlPlane.enabled) {
         console.warn(`Kill switch active — skipping enrichment for lead ${leadId}`);
         return { success: false, leadId, reason: 'kill_switch_active' };
       }

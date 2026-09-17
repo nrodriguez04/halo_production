@@ -1,42 +1,22 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
-import { Twilio } from 'twilio';
-import * as nodemailer from 'nodemailer';
 import { assertPolicy } from '@halo/shared';
 import { prisma } from '../prisma-client';
+import { getControlPlane } from '../control-plane';
+import {
+  ComplianceBlockedError,
+  CostBlockedError,
+  sendEmail as sendEmailViaApi,
+  sendSms as sendSmsViaApi,
+} from '../internal-api.client';
 
 @Processor('communications')
 export class CommunicationsProcessor extends WorkerHost {
-  private twilioClient: Twilio | null = null;
-  private emailTransporter: nodemailer.Transporter | null = null;
-
-  constructor() {
-    super();
-    
-    // Initialize Twilio
-    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-      this.twilioClient = new Twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN,
-      );
-    }
-
-    // Initialize email transporter
-    const useSendGrid = process.env.NODE_ENV === 'production' || process.env.USE_SENDGRID === 'true';
-    
-    if (useSendGrid && process.env.SENDGRID_API_KEY) {
-      // SendGrid setup would go here
-      // For now, use MailHog in dev
-    } else {
-      // MailHog for dev
-      this.emailTransporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'localhost',
-        port: parseInt(process.env.SMTP_PORT || '1025'),
-        secure: false,
-      });
-    }
-  }
+  // No SDK clients here on purpose: outbound sends go through the api's
+  // /internal routes so the cost-control preflight, budget buckets and
+  // ledger apply. Re-adding `new Twilio(...)` here would silently restore
+  // uncapped spend.
 
   async process(job: Job<any>) {
     const { messageId } = job.data;
@@ -55,8 +35,8 @@ export class CommunicationsProcessor extends WorkerHost {
       }
 
       // Check control plane
-      const controlPlane = await prisma.controlPlane.findFirst();
-      if (!controlPlane?.enabled) {
+      const controlPlane = await getControlPlane(message.accountId);
+      if (!controlPlane.enabled) {
         throw new Error('Communications are disabled');
       }
 
@@ -111,6 +91,61 @@ export class CommunicationsProcessor extends WorkerHost {
 
       return { success: true, messageId };
     } catch (error) {
+      // A budget block is not a delivery failure. Retrying it would just
+      // hammer an exhausted cap, so park the message in `blocked` and let
+      // the job succeed; it can be re-queued once budget frees up.
+      if (error instanceof ComplianceBlockedError) {
+        console.warn(
+          `Communication ${messageId} blocked by compliance (${error.reason})`,
+        );
+        const blocked = await prisma.message.update({
+          where: { id: messageId },
+          data: { status: 'blocked' },
+        });
+        await prisma.timelineEvent.create({
+          data: {
+            tenantId: blocked.accountId,
+            entityType: TimelineEntityType.MESSAGE,
+            entityId: messageId,
+            eventType: 'MESSAGE_SEND_BLOCKED',
+            payloadJson: {
+              reason: error.reason,
+              message: error.message,
+              blockedBy: 'compliance',
+            },
+            actorId: null,
+            actorType: TimelineActorType.system,
+          },
+        });
+        return { success: false, messageId, blocked: true, reason: error.reason };
+      }
+
+      if (error instanceof CostBlockedError) {
+        console.warn(
+          `Communication ${messageId} blocked by cost control (${error.reason}, provider=${error.provider})`,
+        );
+        const blockedMessage = await prisma.message.update({
+          where: { id: messageId },
+          data: { status: 'blocked' },
+        });
+        await prisma.timelineEvent.create({
+          data: {
+            tenantId: blockedMessage.accountId,
+            entityType: TimelineEntityType.MESSAGE,
+            entityId: messageId,
+            eventType: 'MESSAGE_SEND_BLOCKED',
+            payloadJson: {
+              reason: error.reason,
+              provider: error.provider,
+              message: error.message,
+            },
+            actorId: null,
+            actorType: TimelineActorType.system,
+          },
+        });
+        return { success: false, messageId, blocked: true, reason: error.reason };
+      }
+
       console.error(`Communication send failed for ${messageId}:`, error);
       
       // Update message status to failed
@@ -141,51 +176,48 @@ export class CommunicationsProcessor extends WorkerHost {
   }
 
   private async sendSMS(message: any) {
-    if (!this.twilioClient) {
-      throw new Error('Twilio client not initialized');
-    }
+    const metadata = (message.metadata as any) || {};
+    const to = metadata.phone || metadata.to;
+    if (!to) throw new Error('No recipient phone number');
 
-    const metadata = message.metadata as any;
-    const to = metadata?.phone || metadata?.to;
-    
-    if (!to) {
-      throw new Error('No recipient phone number');
-    }
+    const from = process.env.TWILIO_PHONE_NUMBER;
+    if (!from) throw new Error('TWILIO_PHONE_NUMBER is required');
 
-    const result = await this.twilioClient.messages.create({
-      body: message.content,
+    const result = await sendSmsViaApi(message.accountId, {
       to,
-      from: process.env.TWILIO_PHONE_NUMBER || '',
+      from,
+      body: message.content,
+      // Idempotency key on the api side, so a BullMQ retry cannot double-send.
+      messageId: message.id,
+      dealId: message.dealId ?? undefined,
+      leadId: message.leadId ?? undefined,
     });
 
-    // Store Twilio message SID
     await prisma.message.update({
       where: { id: message.id },
       data: {
         metadata: {
           ...metadata,
-          twilioMessageSid: result.sid,
+          twilioMessageSid: result?.sid,
+          numSegments: result?.numSegments,
         },
       },
     });
   }
 
   private async sendEmail(message: any) {
-    if (!this.emailTransporter) {
-      throw new Error('Email transporter not initialized');
-    }
+    const metadata = (message.metadata as any) || {};
+    const to = metadata.email || metadata.to;
+    if (!to) throw new Error('No recipient email address');
 
-    const metadata = message.metadata as any;
-    const to = metadata?.email || metadata?.to;
-    const subject = metadata?.subject || 'Message from Hālo';
-
-    await this.emailTransporter.sendMail({
-      from: process.env.SENDGRID_FROM_EMAIL || 'noreply@halo.com',
+    await sendEmailViaApi(message.accountId, {
       to,
-      subject,
+      subject: metadata.subject || 'Message from Hālo',
       text: message.content,
       html: message.content.replace(/\n/g, '<br>'),
+      messageId: message.id,
+      dealId: message.dealId ?? undefined,
+      leadId: message.leadId ?? undefined,
     });
   }
 }
-

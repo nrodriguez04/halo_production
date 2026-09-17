@@ -35,11 +35,25 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
+    // A token with no permission claims used to be granted EVERY permission,
+    // which left control-plane and chaos/DLQ routes effectively open. Deny by
+    // default instead. Set HALO_ALLOW_EMPTY_PERMISSION_CLAIMS=true to restore
+    // the old behaviour while identity-provider claims are still being wired
+    // up — it is refused outright in production.
     if (userPermissions.length === 0) {
-      this.logger.debug(
-        `No permission claims on token — allowing ${requiredPermissions.join(', ')} by default`,
-      );
-      return true;
+      const allowEmpty =
+        process.env.NODE_ENV !== 'production' &&
+        process.env.HALO_ALLOW_EMPTY_PERMISSION_CLAIMS === 'true';
+
+      if (allowEmpty) {
+        this.logger.warn(
+          `Token carries no permission claims; allowing ${requiredPermissions.join(', ')} ` +
+            'because HALO_ALLOW_EMPTY_PERMISSION_CLAIMS is set (development only).',
+        );
+        return true;
+      }
+
+      throw new ForbiddenException('Insufficient permissions');
     }
 
     const hasAll = requiredPermissions.every((perm) =>

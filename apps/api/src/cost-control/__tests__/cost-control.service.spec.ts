@@ -8,6 +8,7 @@ import { IntegrationCostControlService } from '../cost-control.service';
 import { CostIntent } from '../dto/cost-intent.dto';
 import { PricingService } from '../pricing/pricing.service';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { CostBlockedException } from '../cost-blocked.exception';
 
 // Tests every branch of preflight + checkAndCall: ALLOW, ALLOW_WITH_WARNING,
 // USE_CACHE, DOWNGRADE_PROVIDER, BLOCK_FEATURE_DISABLED, BLOCK_OVER_BUDGET,
@@ -258,5 +259,62 @@ describe('IntegrationCostControlService', () => {
     expect(exec).not.toHaveBeenCalled();
     expect(out.fromCache).toBe(true);
     expect((out.result as any).cachedOk).toBe(true);
+  });
+  // A suppressed call used to return null, which serialised as HTTP 200 with
+  // an empty body — callers could not tell a spend cap from "no data found".
+  describe('checkAndCall on a blocked decision', () => {
+    const overBudget = () => {
+      const bucket = {
+        id: 'b_1',
+        scope: 'provider',
+        scopeRef: 'rentcast',
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      };
+      budgets.findApplicable.mockResolvedValueOnce([bucket]);
+      budgets.findOverHardCap.mockReturnValueOnce(bucket);
+      return baseIntent({ provider: 'rentcast', action: 'value_estimate' });
+    };
+
+    it('throws CostBlockedException instead of resolving null', async () => {
+      const exec = jest.fn(async () => ({ ok: true }));
+      const intent = { ...overBudget(), execute: exec as any };
+
+      await expect(service.checkAndCall(intent)).rejects.toBeInstanceOf(
+        CostBlockedException,
+      );
+      expect(exec).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the reason and provider to the caller', async () => {
+      const intent = overBudget();
+      const err = await service.checkAndCall(intent).catch((e) => e);
+
+      expect(err).toBeInstanceOf(CostBlockedException);
+      expect(err.getStatus()).toBe(429);
+      const body = err.getResponse();
+      expect(body.code).toBe('COST_BLOCKED');
+      expect(body.reason).toBe('BLOCK_OVER_BUDGET');
+      expect(body.provider).toBe('rentcast');
+    });
+
+    it('records an auditable blocked event so spend dashboards show it', async () => {
+      const intent = overBudget();
+      await service.checkAndCall(intent).catch(() => undefined);
+
+      expect(prisma.integrationCostEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'blocked',
+            decision: 'BLOCK_OVER_BUDGET',
+            providerKey: 'rentcast',
+            actualCostUsd: 0,
+          }),
+        }),
+      );
+    });
   });
 });

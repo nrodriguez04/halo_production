@@ -81,11 +81,14 @@ export class TwilioController {
       .update(Buffer.from(data, 'utf-8'))
       .digest('base64');
 
+    // timingSafeEqual throws RangeError when lengths differ, which would
+    // surface as a 500 instead of a clean rejection.
+    const sigBuf = Buffer.from(signature, 'utf-8');
+    const expBuf = Buffer.from(expected, 'utf-8');
+
     if (
-      !crypto.timingSafeEqual(
-        Buffer.from(signature, 'utf-8'),
-        Buffer.from(expected, 'utf-8'),
-      )
+      sigBuf.length !== expBuf.length ||
+      !crypto.timingSafeEqual(sigBuf, expBuf)
     ) {
       throw new ForbiddenException('Invalid Twilio signature');
     }

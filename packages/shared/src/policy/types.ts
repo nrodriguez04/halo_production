@@ -27,6 +27,13 @@ export interface PolicyContext {
   isDnc?: boolean;
   timezone?: string;
   localHour?: number;
+  /**
+   * Tenant's configured quiet-hours window (local hours, [start, end) wrapping
+   * midnight). Defaults to 20:00-09:00 when not supplied. Previously the rule
+   * hardcoded 20/9 and ignored the per-tenant QuietHours row entirely.
+   */
+  quietHoursStart?: number;
+  quietHoursEnd?: number;
   dailySpendUsd?: number;
   dailyCapUsd?: number;
   perTenantCapUsd?: number;

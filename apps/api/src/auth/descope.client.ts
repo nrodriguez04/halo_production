@@ -9,14 +9,21 @@ export function getDescopeClient(): any {
   }
 
   try {
+    // Deliberately a runtime require inside try/catch so a missing or
+    // broken SDK degrades to "auth unavailable" instead of failing boot.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const descopeSdk = require('@descope/node-sdk') as (args: {
       projectId: string;
       managementKey?: string;
+      baseUrl?: string;
     }) => any;
 
     _client = descopeSdk({
       projectId,
       managementKey: process.env.DESCOPE_MANAGEMENT_KEY || undefined,
+      // Must match the project's custom domain when one is configured, so
+      // session validation resolves the same keys the tokens were signed with.
+      baseUrl: process.env.DESCOPE_BASE_URL || undefined,
     });
   } catch (err: any) {
     console.warn(`Descope SDK init failed: ${err.message}`);

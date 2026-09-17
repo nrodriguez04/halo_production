@@ -146,6 +146,41 @@ describe('PolicyRules', () => {
       expect(d.code).toBe('QUIET_HOURS_BLOCKED');
     });
 
+    it('honours a tenant quiet-hours window that differs from the default', () => {
+      // 22:00-07:00 configured: 21:00 is allowed even though it falls inside
+      // the old hardcoded 20:00-09:00 window.
+      const allowed = consentDncQuietHoursRule(
+        baseCtx({ localHour: 21, quietHoursStart: 22, quietHoursEnd: 7 }),
+      );
+      expect(allowed.allow).toBe(true);
+
+      const denied = consentDncQuietHoursRule(
+        baseCtx({ localHour: 23, quietHoursStart: 22, quietHoursEnd: 7 }),
+      );
+      expect(denied.allow).toBe(false);
+      expect(denied.code).toBe('QUIET_HOURS_BLOCKED');
+    });
+
+    it('handles a same-day window without inverting it', () => {
+      // 01:00-06:00 does not wrap midnight.
+      const inside = consentDncQuietHoursRule(
+        baseCtx({ localHour: 3, quietHoursStart: 1, quietHoursEnd: 6 }),
+      );
+      expect(inside.allow).toBe(false);
+
+      const outside = consentDncQuietHoursRule(
+        baseCtx({ localHour: 12, quietHoursStart: 1, quietHoursEnd: 6 }),
+      );
+      expect(outside.allow).toBe(true);
+    });
+
+    it('treats a zero-width window as no quiet hours', () => {
+      const d = consentDncQuietHoursRule(
+        baseCtx({ localHour: 3, quietHoursStart: 9, quietHoursEnd: 9 }),
+      );
+      expect(d.allow).toBe(true);
+    });
+
     it('allows during business hours with consent', () => {
       const d = consentDncQuietHoursRule(baseCtx({ localHour: 14 }));
       expect(d.allow).toBe(true);

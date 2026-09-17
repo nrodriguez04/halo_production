@@ -3,10 +3,9 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
 import { AggregatorService } from './aggregator.service';
 import { AlertsService } from './alerts.service';
-import { BudgetService, ApplicableBucket } from './budget.service';
+import { BudgetService } from './budget.service';
 import { ResponseCacheService } from './cache/response-cache.service';
 import {
-  CheckAndCallBlocked,
   CheckAndCallResult,
   CheckAndCallSuccess,
   CostDecision,
@@ -18,6 +17,7 @@ import { defaultCacheTtlSec } from './policy/cache-ttl';
 import { thresholdFor } from './policy/lead-score-thresholds';
 import { PricingService } from './pricing/pricing.service';
 import { RateLimitService } from './rate-limit/rate-limit.service';
+import { CostBlockedException } from './cost-blocked.exception';
 
 // Configurable defaults — env-overridable so a single VPS deploy can
 // tune the thresholds without code changes.
@@ -109,7 +109,11 @@ export class IntegrationCostControlService {
       case 'BLOCK_LOW_LEAD_SCORE':
       case 'QUEUE_UNTIL_NEXT_BUDGET_PERIOD':
       case 'REQUIRE_MANUAL_APPROVAL':
-        return blocked(decision);
+        // Record before throwing: a suppressed call previously left no trace,
+        // so the spend dashboards showed a clean ledger while the pipeline
+        // was being throttled.
+        await this.recordBlockedDecision(intent, decision);
+        throw new CostBlockedException(decision, intent.provider, intent.action);
 
       case 'USE_CACHE': {
         // Cache hit: skip the network call but still record an event so
@@ -409,6 +413,52 @@ export class IntegrationCostControlService {
     };
   }
 
+  /**
+   * Persist a cost event for a call the preflight suppressed, so
+   * /admin/cost-governance can show throttling as it happens. Best-effort:
+   * a logging failure must not mask the block itself.
+   */
+  private async recordBlockedDecision<P, R>(
+    intent: CostIntent<P, R>,
+    decision: CostDecision,
+  ): Promise<void> {
+    try {
+      const provider = await this.findProvider(intent.provider);
+      if (!provider) return;
+
+      const estimated = await this.pricing
+        .estimate(intent.provider, intent.action, intent.payload)
+        .catch(() => 0);
+
+      await this.prisma.integrationCostEvent.create({
+        data: {
+          accountId: intent.context.accountId,
+          providerId: provider.id,
+          providerKey: intent.provider,
+          action: intent.action,
+          reservationId: randomUUID(),
+          estimatedCostUsd: estimated,
+          actualCostUsd: 0,
+          status: 'blocked',
+          decision: decision.kind,
+          leadId: intent.context.leadId,
+          propertyId: intent.context.propertyId,
+          dealId: intent.context.dealId,
+          campaignId: intent.context.campaignId,
+          automationRunId: intent.context.automationRunId,
+          actor: intent.context.actor,
+          userId: intent.context.userId,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to record blocked cost event for ${intent.provider}.${intent.action}: ${
+          (err as Error).message
+        }`,
+      );
+    }
+  }
+
   private async recordCacheHit<P, R>(
     intent: CostIntent<P, R>,
     decision: Extract<CostDecision, { kind: 'USE_CACHE' }>,
@@ -603,15 +653,6 @@ export class IntegrationCostControlService {
     this.hasOverridesCache.set(accountId, hasAny, hasAny ? 5_000 : 60_000);
     return hasAny;
   }
-}
-
-function blocked(decision: CostDecision): CheckAndCallBlocked {
-  return {
-    decision: decision as CheckAndCallBlocked['decision'],
-    result: null,
-    actualCostUsd: 0,
-    fromCache: false,
-  };
 }
 
 function mergeJson(

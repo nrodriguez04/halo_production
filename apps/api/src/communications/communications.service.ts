@@ -5,13 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { ControlPlaneService } from '../control-plane/control-plane.service';
+import { ComplianceService } from '../compliance/compliance.service';
 import {
   PolicyViolationError,
   assertPolicy,
   MessageCreate,
 } from '@halo/shared';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
-import * as complianceUtils from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
 
 @Injectable()
@@ -19,11 +20,13 @@ export class CommunicationsService {
   constructor(
     private prisma: PrismaService,
     private timelineService: TimelineService,
+    private compliance: ComplianceService,
+    private controlPlaneService: ControlPlaneService,
   ) {}
 
   async create(data: MessageCreate) {
     // Check control plane
-    const controlPlane = await this.getControlPlane();
+    const controlPlane = await this.getControlPlane(data.accountId);
     const channelEnabled = data.channel === 'sms' 
       ? controlPlane.smsEnabled 
       : controlPlane.emailEnabled;
@@ -127,7 +130,7 @@ export class CommunicationsService {
       throw new BadRequestException('Message is not pending approval');
     }
 
-    const controlPlane = await this.getControlPlane();
+    const controlPlane = await this.getControlPlane(accountId);
     const compliance = await this.getComplianceFacts(message as any);
     try {
       assertPolicy({
@@ -217,88 +220,31 @@ export class CommunicationsService {
     return rejected;
   }
 
-  private async getControlPlane() {
-    const cp = await this.prisma.controlPlane.findFirst();
-    return cp || {
-      enabled: true,
-      smsEnabled: true,
-      emailEnabled: true,
-      docusignEnabled: true,
-      externalDataEnabled: true,
-    };
+  /**
+   * Delegates to ControlPlaneService: switches are per-tenant and a missing
+   * row is provisioned at documented defaults. The previous inline
+   * `cp || { enabled: true, ... }` fallback meant an unscoped lookup that
+   * returned nothing was silently treated as "everything enabled".
+   */
+  private async getControlPlane(accountId: string) {
+    return this.controlPlaneService.getStatus(accountId);
   }
 
+  /**
+   * Delegates to ComplianceService so the facts evaluated here match exactly
+   * those re-evaluated at send time. The previous inline version also looked
+   * DNC up by phone alone, ignoring accountId, so one tenant suppressing a
+   * number suppressed it for everyone.
+   */
   private async getComplianceFacts(data: MessageCreate | any) {
-    const facts: {
-      isDnc: boolean;
-      hasConsent: boolean;
-      consentSource?: string;
-      timezone?: string;
-      localHour?: number;
-    } = {
-      isDnc: false,
-      hasConsent: true,
-    };
-
-    // Check DNC
-    if (data.metadata?.phone) {
-      const normalizedPhone = complianceUtils.normalizePhoneNumber(data.metadata.phone);
-      const dnc = await this.prisma.dNCList.findFirst({
-        where: {
-          phone: normalizedPhone,
-        },
-      });
-
-      facts.isDnc = !!dnc;
-    }
-
-    // Check consent
-    if (data.leadId) {
-      const consent = await this.prisma.consent.findFirst({
-        where: {
-          leadId: data.leadId,
-          channel: data.channel,
-          revokedAt: null,
-        },
-        orderBy: { grantedAt: 'desc' },
-      });
-
-      facts.hasConsent = !!consent;
-      facts.consentSource = consent?.source;
-    }
-
-    // Check quiet hours
-    const quietHours = await this.prisma.quietHours.findFirst({
-      where: { accountId: data.accountId },
+    return this.compliance.getFacts({
+      accountId: data.accountId,
+      channel: data.channel,
+      phone: data.metadata?.phone ?? data.metadata?.to,
+      email: data.metadata?.email,
+      leadId: data.leadId,
     });
-
-    if (quietHours?.enabled) {
-      const config = {
-        startHour: quietHours.startHour,
-        endHour: quietHours.endHour,
-        timezone: quietHours.timezone,
-        enabled: true,
-      };
-      facts.timezone = quietHours.timezone;
-      facts.localHour = this.getLocalHour(quietHours.timezone);
-      // keep existing util invocation as guard for timezone/config validity
-      complianceUtils.isWithinQuietHours(config);
-    }
-
-    return facts;
   }
 
-  private getLocalHour(timezone: string): number | undefined {
-    try {
-      const formatted = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        hour: 'numeric',
-        hour12: false,
-      }).format(new Date());
-      return parseInt(formatted, 10);
-    } catch {
-      return undefined;
-    }
-  }
 }
 

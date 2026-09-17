@@ -11,7 +11,13 @@ const envSchema = z.object({
 
   SECRETS_ENCRYPTION_KEY: z.string().min(32).optional(),
 
+  TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_PHONE_NUMBER: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  SENDGRID_API_KEY: z.string().optional(),
+  SENDGRID_FROM_EMAIL: z.string().optional(),
+  USE_SENDGRID: z.enum(['true', 'false']).optional(),
   DOCUSIGN_CONNECT_SECRET: z.string().optional(),
 
   ATTOM_API_KEY: z.string().optional(),
@@ -35,6 +41,12 @@ const envSchema = z.object({
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
   INTERNAL_API_TOKEN: z.string().optional(),
+
+  // Dev-only auth bypass. Ignored entirely when NODE_ENV === 'production'.
+  HALO_DEV_AUTH_BYPASS: z.enum(['true', 'false']).optional(),
+  HALO_DEV_BYPASS_ACCOUNT_ID: z.string().optional(),
+
+  DESCOPE_BASE_URL: z.string().optional(),
 
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().optional(),

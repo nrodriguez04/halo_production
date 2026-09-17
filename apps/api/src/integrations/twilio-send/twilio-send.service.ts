@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Twilio } from 'twilio';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 
 // Cost-aware Twilio outbound SMS adapter. Replaces the inline twilio.messages
@@ -36,7 +37,10 @@ export class TwilioSendService {
       const sid = process.env.TWILIO_ACCOUNT_SID;
       const token = process.env.TWILIO_AUTH_TOKEN;
       if (!sid || !token) {
-        throw new Error('TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are required');
+        throw IntegrationUnavailableException.notConfigured(
+          'twilio',
+          'TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN',
+        );
       }
       this._client = new Twilio(sid, token);
     }

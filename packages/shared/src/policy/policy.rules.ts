@@ -29,11 +29,31 @@ function isMessagingChannel(channel: PolicyContext['channel']) {
   return channel === 'sms' || channel === 'email';
 }
 
+const DEFAULT_QUIET_START = 20;
+const DEFAULT_QUIET_END = 9;
+
 function isQuietHour(ctx: PolicyContext): boolean {
   if (typeof ctx.localHour !== 'number') return false;
-  const startHour = 20;
-  const endHour = 9;
-  return ctx.localHour >= startHour || ctx.localHour < endHour;
+
+  const startHour =
+    typeof ctx.quietHoursStart === 'number'
+      ? ctx.quietHoursStart
+      : DEFAULT_QUIET_START;
+  const endHour =
+    typeof ctx.quietHoursEnd === 'number'
+      ? ctx.quietHoursEnd
+      : DEFAULT_QUIET_END;
+
+  // A window that starts and ends on the same hour is treated as "no quiet
+  // hours" rather than "quiet all day", which is the safer reading of a
+  // misconfigured row.
+  if (startHour === endHour) return false;
+
+  // Windows normally wrap midnight (20:00 -> 09:00); same-day windows
+  // (e.g. 01:00 -> 06:00) must not be inverted.
+  return startHour > endHour
+    ? ctx.localHour >= startHour || ctx.localHour < endHour
+    : ctx.localHour >= startHour && ctx.localHour < endHour;
 }
 
 export const sideEffectsRule: PolicyCheck = (ctx) => {

@@ -11,6 +11,7 @@ import {
   TimelineEntityType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { ControlPlaneService } from '../control-plane/control-plane.service';
 import {
   PolicyViolationError,
   assertPolicy,
@@ -24,6 +25,7 @@ export class MarketingService {
     private prisma: PrismaService,
     private queueService: QueueService,
     private timelineService: TimelineService,
+    private controlPlaneService: ControlPlaneService,
   ) {}
 
   async generateFlyer(accountId: string, actorId: string | null, dealId: string) {
@@ -32,7 +34,7 @@ export class MarketingService {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
 
-    const controlPlane = await this.getControlPlane();
+    const controlPlane = await this.getControlPlane(accountId);
     const todayCost = await this.getTodayCost(accountId);
     const globalTodayCost = await this.getTodayCost();
     const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
@@ -108,7 +110,7 @@ export class MarketingService {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
 
-    const controlPlane = await this.getControlPlane();
+    const controlPlane = await this.getControlPlane(accountId);
     const todayCost = await this.getTodayCost(accountId);
     const globalTodayCost = await this.getTodayCost();
     const dailyCap = parseFloat(process.env.OPENAI_DAILY_COST_CAP || '2.0');
@@ -232,17 +234,14 @@ export class MarketingService {
     return logs.reduce((sum, log) => sum + log.cost, 0);
   }
 
-  private async getControlPlane() {
-    const cp = await this.prisma.controlPlane.findFirst();
-    return (
-      cp || {
-        enabled: true,
-        smsEnabled: true,
-        emailEnabled: true,
-        docusignEnabled: true,
-        externalDataEnabled: true,
-      }
-    );
+  /**
+   * Delegates to ControlPlaneService: switches are per-tenant and a missing
+   * row is provisioned at documented defaults. The previous inline
+   * `cp || { enabled: true, ... }` fallback meant an unscoped lookup that
+   * returned nothing was silently treated as "everything enabled".
+   */
+  private async getControlPlane(accountId: string) {
+    return this.controlPlaneService.getStatus(accountId);
   }
 }
 

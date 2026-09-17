@@ -138,7 +138,7 @@ export class AgentService {
       take: 20,
     });
 
-    const controlPlane = await this.controlPlaneService.getStatus();
+    const controlPlane = await this.controlPlaneService.getStatus(accountId);
 
     const quietHours = await this.prisma.quietHours.findFirst({
       where: { accountId },
@@ -168,7 +168,9 @@ export class AgentService {
   async suggestNextActions(
     dealId: string,
     accountId: string,
-    input?: { agentName?: string; context?: Record<string, any> },
+    // Accepted for API compatibility; the suggestion rules are currently
+    // derived entirely from the deal summary.
+    _input?: { agentName?: string; context?: Record<string, any> },
   ) {
     const summary = await this.getDealSummary(dealId, accountId);
     const actions: Array<{
@@ -178,7 +180,7 @@ export class AgentService {
       endpoint?: string;
     }> = [];
 
-    const { deal, recentCommunications, lead } = summary;
+    const { deal, recentCommunications } = summary;
 
     const hasRecentOutbound = recentCommunications.some(
       (m) =>
@@ -374,7 +376,7 @@ export class AgentService {
       );
     }
 
-    const controlPlane = await this.controlPlaneService.getStatus();
+    const controlPlane = await this.controlPlaneService.getStatus(accountId);
 
     if (!controlPlane.enabled) {
       throw new ForbiddenException('Control plane is disabled');
