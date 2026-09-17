@@ -70,9 +70,6 @@ describe('GlobalAdminGuard', () => {
   });
 
   it('protects singleton admin controllers with the global-admin guard', () => {
-    expect(Reflect.getMetadata(GUARDS_METADATA, ControlPlaneController)).toEqual(
-      expect.arrayContaining([AuthGuard, PermissionsGuard, GlobalAdminGuard]),
-    );
     expect(
       Reflect.getMetadata(GUARDS_METADATA, IntegrationSecretsController),
     ).toEqual(
@@ -81,5 +78,13 @@ describe('GlobalAdminGuard', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, ChaosController)).toEqual(
       expect.arrayContaining([AuthGuard, PermissionsGuard, GlobalAdminGuard]),
     );
+  });
+
+  it('leaves the per-tenant control plane open to tenant admins', () => {
+    // ControlPlane rows are scoped by accountId and the controller only
+    // touches the caller's own row, so tenant admins must keep access.
+    const guards = Reflect.getMetadata(GUARDS_METADATA, ControlPlaneController);
+    expect(guards).toEqual(expect.arrayContaining([AuthGuard, PermissionsGuard]));
+    expect(guards).not.toContain(GlobalAdminGuard);
   });
 });

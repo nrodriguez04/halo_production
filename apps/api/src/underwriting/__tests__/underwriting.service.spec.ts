@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../prisma.service';
 import { QueueService } from '../../queues/queue.service';
 import { TimelineService } from '../../timeline/timeline.service';
+import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { UnderwritingService } from '../underwriting.service';
 
 describe('UnderwritingService', () => {
@@ -39,6 +40,16 @@ describe('UnderwritingService', () => {
         {
           provide: TimelineService,
           useValue: { appendEvent: jest.fn() },
+        },
+        {
+          provide: ControlPlaneService,
+          useValue: {
+            getStatus: jest.fn().mockResolvedValue({
+              enabled: true,
+              externalDataEnabled: true,
+              aiEnabled: true,
+            }),
+          },
         },
       ],
     }).compile();
