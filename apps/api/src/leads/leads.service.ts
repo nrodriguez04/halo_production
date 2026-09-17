@@ -115,7 +115,7 @@ export class LeadsService {
     });
   }
 
-  async importCSV(rows: CSVImportRow[], accountId: string, userId: string) {
+  async importCSV(rows: CSVImportRow[], accountId: string, _userId: string) {
     const results = {
       created: 0,
       duplicates: 0,

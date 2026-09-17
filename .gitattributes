@@ -1,0 +1,13 @@
+# Normalize line endings so prettier/eslint behave identically on every OS.
+# Without this, a Windows checkout (core.autocrlf=true) turns every line into
+# a `Delete ␍` prettier error while Linux CI sees none.
+* text=auto eol=lf
+
+# Binary / generated
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+package-lock.json -diff

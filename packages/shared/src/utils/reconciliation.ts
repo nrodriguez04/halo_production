@@ -20,7 +20,10 @@ export interface ReconciliationResult {
  */
 export function reconcileField(
   fields: SourceField[],
-  fieldName: string
+  // Reconciliation is currently field-agnostic (trust weight + freshness
+  // only). The parameter is kept for call-site clarity and future
+  // per-field rules.
+  _fieldName: string
 ): { value: any; confidence: number; source: string } {
   if (fields.length === 0) {
     return { value: null, confidence: 0, source: '' };

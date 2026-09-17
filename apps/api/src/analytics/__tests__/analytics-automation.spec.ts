@@ -6,18 +6,47 @@ describe('AnalyticsService — Automation', () => {
   let service: AnalyticsService;
   let prisma: any;
 
+  // `automationRun.aggregate` is called with two different `_sum` shapes:
+  // getAutomationCosts() asks for the cost columns, getAutomationOutcomes()
+  // asks for the value columns. They run concurrently inside
+  // getAutomationROI(), so the mock dispatches on the requested fields
+  // rather than on call order. Tests override these fixtures.
+  let costAggregate: any;
+  let valueAggregate: any;
+
   beforeEach(async () => {
+    costAggregate = {
+      _sum: {
+        aiCostUsd: 0,
+        messageCostUsd: 0,
+        toolCostUsd: 0,
+        otherCostUsd: 0,
+      },
+      _count: { id: 0 },
+    };
+    valueAggregate = {
+      _sum: { estimatedValueUsd: 0, realizedValueUsd: 0 },
+    };
+
     prisma = {
       automationRun: {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
         groupBy: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn(async (args: any) =>
+          args?._sum?.estimatedValueUsd ? valueAggregate : costAggregate,
+        ),
       },
       message: {
         count: jest.fn().mockResolvedValue(0),
       },
       dealEconomics: {
-        findMany: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn().mockResolvedValue({
+          _sum: { grossRevenue: 0, netProfit: 0 },
+          _avg: { roiPercent: null },
+          _count: { id: 0 },
+        }),
       },
       lead: { count: jest.fn().mockResolvedValue(0) },
       deal: {
@@ -44,16 +73,16 @@ describe('AnalyticsService — Automation', () => {
   describe('getAutomationOverview', () => {
     it('should return aggregated run counts', async () => {
       prisma.automationRun.count
-        .mockResolvedValueOnce(10)  // total
-        .mockResolvedValueOnce(6)   // completed
-        .mockResolvedValueOnce(2)   // failed
-        .mockResolvedValueOnce(1)   // cancelled
-        .mockResolvedValueOnce(1)   // awaiting approval
-        .mockResolvedValueOnce(0);  // running
+        .mockResolvedValueOnce(10) // total
+        .mockResolvedValueOnce(6) // completed
+        .mockResolvedValueOnce(2) // failed
+        .mockResolvedValueOnce(1) // cancelled
+        .mockResolvedValueOnce(1) // awaiting approval
+        .mockResolvedValueOnce(0); // running
 
       prisma.message.count
-        .mockResolvedValueOnce(8)   // drafts
-        .mockResolvedValueOnce(5);  // approved
+        .mockResolvedValueOnce(8) // drafts
+        .mockResolvedValueOnce(5); // approved
 
       const result = await service.getAutomationOverview('tenant-1');
 
@@ -66,10 +95,16 @@ describe('AnalyticsService — Automation', () => {
 
   describe('getAutomationCosts', () => {
     it('should aggregate costs across runs', async () => {
-      prisma.automationRun.findMany.mockResolvedValue([
-        { aiCostUsd: 0.10, messageCostUsd: 0.05, toolCostUsd: 0.02, otherCostUsd: 0 },
-        { aiCostUsd: 0.05, messageCostUsd: 0.03, toolCostUsd: 0.01, otherCostUsd: 0.01 },
-      ]);
+      // Sums of the two runs this test previously listed row-by-row.
+      costAggregate = {
+        _sum: {
+          aiCostUsd: 0.15,
+          messageCostUsd: 0.08,
+          toolCostUsd: 0.03,
+          otherCostUsd: 0.01,
+        },
+        _count: { id: 2 },
+      };
 
       const result = await service.getAutomationCosts('tenant-1');
 
@@ -82,24 +117,28 @@ describe('AnalyticsService — Automation', () => {
 
   describe('getAutomationROI', () => {
     it('should combine costs, outcomes, and economics', async () => {
-      prisma.automationRun.findMany.mockResolvedValue([
-        {
-          aiCostUsd: 0.50,
-          messageCostUsd: 1.00,
+      costAggregate = {
+        _sum: {
+          aiCostUsd: 0.5,
+          messageCostUsd: 1.0,
           toolCostUsd: 0,
           otherCostUsd: 0,
-          estimatedValueUsd: 500,
-          realizedValueUsd: 200,
         },
-      ]);
+        _count: { id: 1 },
+      };
+      valueAggregate = {
+        _sum: { estimatedValueUsd: 500, realizedValueUsd: 200 },
+      };
 
       prisma.message.count
-        .mockResolvedValueOnce(5)   // drafts sent
-        .mockResolvedValueOnce(3);  // inbound replies
+        .mockResolvedValueOnce(5) // drafts sent
+        .mockResolvedValueOnce(3); // inbound replies
 
-      prisma.dealEconomics.findMany.mockResolvedValue([
-        { grossRevenue: 25000, netProfit: 22000, roiPercent: 600 },
-      ]);
+      prisma.dealEconomics.aggregate.mockResolvedValue({
+        _sum: { grossRevenue: 25000, netProfit: 22000 },
+        _avg: { roiPercent: 600 },
+        _count: { id: 1 },
+      });
 
       const result = await service.getAutomationROI('tenant-1');
 
@@ -115,7 +154,13 @@ describe('AnalyticsService — Automation', () => {
         {
           workflowName: 'draft-seller-sms',
           _count: { id: 5 },
-          _sum: { aiCostUsd: 0.10, messageCostUsd: 0.20, toolCostUsd: 0, estimatedValueUsd: 1000, realizedValueUsd: 500 },
+          _sum: {
+            aiCostUsd: 0.1,
+            messageCostUsd: 0.2,
+            toolCostUsd: 0,
+            estimatedValueUsd: 1000,
+            realizedValueUsd: 500,
+          },
         },
       ]);
 
