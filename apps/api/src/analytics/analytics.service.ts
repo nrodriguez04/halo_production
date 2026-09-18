@@ -47,9 +47,14 @@ export class AnalyticsService {
       this.prisma.message.count({
         where: { accountId, status: 'approved', createdAt: inRange },
       }),
-      this.prisma.aICostLog.aggregate({
-        where: { accountId, createdAt: inRange },
-        _sum: { cost: true },
+      this.prisma.integrationCostEvent.aggregate({
+        where: {
+          accountId,
+          providerKey: 'openai',
+          status: 'completed',
+          createdAt: inRange,
+        },
+        _sum: { actualCostUsd: true },
         _count: { id: true },
       }),
       this.prisma.deal.groupBy({
@@ -59,7 +64,7 @@ export class AnalyticsService {
       }),
     ]);
 
-    const totalAICost = aiCostAgg._sum.cost || 0;
+    const totalAICost = aiCostAgg._sum.actualCostUsd || 0;
     const aiRequests = aiCostAgg._count.id;
 
     const leadToDealRate = totalLeads > 0 ? (totalDeals / totalLeads) * 100 : 0;
@@ -126,9 +131,12 @@ export class AnalyticsService {
         GROUP BY 1
       `,
       this.prisma.$queryRaw<{ day: Date; cost: number }[]>`
-        SELECT date_trunc('day', "createdAt") AS day, COALESCE(SUM("cost"), 0)::float AS cost
-        FROM ai_cost_logs
-        WHERE "accountId" = ${accountId} AND "createdAt" >= ${start}
+        SELECT date_trunc('day', "createdAt") AS day, COALESCE(SUM("actualCostUsd"), 0)::float AS cost
+        FROM integration_cost_events
+        WHERE "accountId" = ${accountId}
+          AND "providerKey" = 'openai'
+          AND "status" = 'completed'
+          AND "createdAt" >= ${start}
         GROUP BY 1
       `,
     ]);

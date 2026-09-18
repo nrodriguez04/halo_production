@@ -8,6 +8,7 @@ import {
 import * as crypto from 'crypto';
 import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
 import { prisma } from '../prisma-client';
+import { aiSpendSince } from '../ai-spend';
 import { getControlPlane } from '../control-plane';
 import { AI_MODEL, estimateAiCostUsd } from '../ai-model';
 import {
@@ -191,17 +192,6 @@ export class MarketingProcessor extends WorkerHost {
       completion.tokensIn,
       completion.tokensOut,
     );
-    await prisma.aICostLog.create({
-      data: {
-        provider: 'openai',
-        model: completion.model,
-        tokensIn: completion.tokensIn,
-        tokensOut: completion.tokensOut,
-        cost,
-        accountId: deal.accountId,
-      },
-    });
-
     const material = await prisma.marketingMaterial.create({
       data: {
         dealId,
@@ -271,17 +261,6 @@ export class MarketingProcessor extends WorkerHost {
       completion.tokensIn,
       completion.tokensOut,
     );
-    await prisma.aICostLog.create({
-      data: {
-        provider: 'openai',
-        model: completion.model,
-        tokensIn: completion.tokensIn,
-        tokensOut: completion.tokensOut,
-        cost,
-        accountId: deal.accountId,
-      },
-    });
-
     const message = await prisma.message.create({
       data: {
         accountId: deal.accountId,
@@ -324,14 +303,7 @@ export class MarketingProcessor extends WorkerHost {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const logs = await prisma.aICostLog.findMany({
-      where: {
-        createdAt: { gte: today },
-        ...(accountId ? { accountId } : {}),
-      },
-    });
-
-    return logs.reduce((sum, log) => sum + log.cost, 0);
+    return aiSpendSince(today, accountId);
   }
 
   private async getControlPlane(tenantId: string) {

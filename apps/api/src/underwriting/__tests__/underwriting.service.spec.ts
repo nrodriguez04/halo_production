@@ -21,8 +21,8 @@ describe('UnderwritingService', () => {
       underwritingResult: {
         findUnique: jest.fn(),
       },
-      aICostLog: {
-        findMany: jest.fn().mockResolvedValue([]),
+      integrationCostEvent: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { actualCostUsd: 0 } }),
       },
       controlPlane: {
         findFirst: jest.fn().mockResolvedValue(null),

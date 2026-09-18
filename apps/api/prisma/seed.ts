@@ -355,13 +355,23 @@ async function main() {
     console.log('  Created deal economics with incomplete data');
   }
 
-  // Seed API cost logs for the spend dashboard
+  // Seed 30 days of demo ledger rows for the spend dashboard. Reference
+  // data (providers, pricing) has to exist first so the rows can point at a
+  // provider id.
+  await seedCostGovernance(prisma, ACCOUNT_ID);
   const providers = [
-    { provider: 'attom', costPerCall: 0.10, endpoints: ['/propertyapi/v1.0.0/property/expandedprofile', '/propertyapi/v1.0.0/assessment'] },
-    { provider: 'google_geocoding', costPerCall: 0.005, endpoints: ['https://maps.googleapis.com/maps/api/geocode/json'] },
-    { provider: 'propertyradar', costPerCall: 0.02, endpoints: ['/v1/properties', '/v1/properties/contacts', '/v1/import'] },
-    { provider: 'rentcast', costPerCall: 0.05, endpoints: ['/v1/listings/sale', '/v1/properties', '/v1/avm/value'] },
+    { provider: 'attom', costPerCall: 0.10, endpoints: ['property_expanded_profile', 'assessment'] },
+    { provider: 'google_geocoding', costPerCall: 0.005, endpoints: ['geocode'] },
+    { provider: 'propertyradar', costPerCall: 0.02, endpoints: ['properties', 'contacts', 'import'] },
+    { provider: 'rentcast', costPerCall: 0.05, endpoints: ['listings_sale', 'properties', 'avm_value'] },
   ];
+  const providerIds = new Map<string, string>();
+  for (const row of await prisma.integrationProvider.findMany({
+    where: { key: { in: providers.map((p) => p.provider) } },
+    select: { id: true, key: true },
+  })) {
+    providerIds.set(row.key, row.id);
+  }
 
   const now = new Date();
   for (let daysAgo = 0; daysAgo < 30; daysAgo++) {
@@ -370,24 +380,36 @@ async function main() {
     day.setHours(0, 0, 0, 0);
 
     for (const p of providers) {
+      const providerId = providerIds.get(p.provider);
+      if (!providerId) continue;
       const callCount = Math.floor(Math.random() * 20) + 3;
       for (let i = 0; i < callCount; i++) {
         const callTime = new Date(day.getTime() + Math.random() * 86400000);
-        await prisma.apiCostLog.create({
+        const cost = p.costPerCall * (0.8 + Math.random() * 0.4);
+        const ok = Math.random() > 0.05;
+        await prisma.integrationCostEvent.create({
           data: {
             accountId: ACCOUNT_ID,
-            provider: p.provider,
-            endpoint: p.endpoints[Math.floor(Math.random() * p.endpoints.length)],
-            costUsd: p.costPerCall * (0.8 + Math.random() * 0.4),
-            responseCode: Math.random() > 0.05 ? 200 : 500,
+            providerId,
+            providerKey: p.provider,
+            action: p.endpoints[Math.floor(Math.random() * p.endpoints.length)],
+            reservationId: `seed-${p.provider}-${daysAgo}-${i}`,
+            estimatedCostUsd: cost,
+            actualCostUsd: ok ? cost : 0,
+            status: ok ? 'completed' : 'errored',
+            decision: 'ALLOW',
+            responseCode: ok ? 200 : 500,
             durationMs: Math.floor(Math.random() * 2000) + 100,
+            actor: 'system',
+            metadata: { seed: true },
             createdAt: callTime,
+            completedAt: callTime,
           },
         });
       }
     }
   }
-  console.log('  Seeded API cost logs (30 days)');
+  console.log('  Seeded 30 days of demo cost ledger rows');
 
   await prisma.auditLog.createMany({
     data: [
@@ -432,8 +454,6 @@ async function main() {
   }
   console.log('  Seeded 50 automation runs');
 
-  await seedCostGovernance(prisma, ACCOUNT_ID);
-
   console.log('\n--- Seed complete! ---');
   console.log(`\nSummary:`);
   console.log(`  Account:        1 (${ACCOUNT_ID})`);
@@ -446,7 +466,7 @@ async function main() {
   console.log(`  Consents:       ${leads.length}`);
   console.log(`  Timeline:       ${eventCount}`);
   console.log(`  AutomationRuns: 53 (3 demo + 50 agent cards)`);
-  console.log(`  ApiCostLogs:    30 days sample`);
+  console.log(`  Cost ledger:    30 days sample`);
   console.log(`  AuditLogs:      4`);
   console.log(`  DealEconomics:  2`);
   console.log(`\nRun "npm run db:studio" to explore data in Prisma Studio.`);

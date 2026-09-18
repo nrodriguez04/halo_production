@@ -15,6 +15,7 @@ import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { aiSpendSince, startOfToday } from '../cost-control/ai-spend';
 
 @Injectable()
 export class MarketingService {
@@ -224,17 +225,7 @@ export class MarketingService {
   }
 
   private async getTodayCost(accountId?: string): Promise<number> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const logs = await this.prisma.aICostLog.findMany({
-      where: {
-        createdAt: { gte: today },
-        ...(accountId ? { accountId } : {}),
-      },
-    });
-
-    return logs.reduce((sum, log) => sum + log.cost, 0);
+    return aiSpendSince(this.prisma, startOfToday(), accountId);
   }
 
   /**

@@ -54,9 +54,11 @@ describe('AnalyticsService — Automation', () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { offerAmount: 0 } }),
         groupBy: jest.fn().mockResolvedValue([]),
       },
-      aICostLog: {
-        findMany: jest.fn().mockResolvedValue([]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { cost: 0 } }),
+      integrationCostEvent: {
+        aggregate: jest.fn().mockResolvedValue({
+          _sum: { actualCostUsd: 0 },
+          _count: { id: 0 },
+        }),
       },
     };
 
