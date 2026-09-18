@@ -209,7 +209,7 @@ describe('TwilioService', () => {
     });
   });
 
-  it('looks leads up by the phone blind index as well as plaintext during dual-write', async () => {
+  it('looks leads up by the phone blind index only', async () => {
     prisma.message.findMany.mockResolvedValueOnce([]);
     prisma.lead.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
 
@@ -221,13 +221,10 @@ describe('TwilioService', () => {
     });
 
     const where = prisma.lead.findMany.mock.calls[0][0].where;
-    expect(where.OR[0]).toEqual({
+    expect(where).toEqual({
       canonicalPhoneHash: {
         in: expect.arrayContaining([hashPhone('+15551234567')]),
       },
     });
-    expect(where.OR).toEqual(
-      expect.arrayContaining([{ canonicalPhone: '+15551234567' }]),
-    );
   });
 });

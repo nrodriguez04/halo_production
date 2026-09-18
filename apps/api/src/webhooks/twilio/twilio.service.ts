@@ -187,16 +187,9 @@ export class TwilioService {
       }),
       this.prisma.lead.findMany({
         where: {
-          // Blind-index arm first; the plaintext arm covers rows the
-          // backfill has not reached yet and goes at cutover.
-          OR: [
-            {
-              canonicalPhoneHash: {
-                in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
-              },
-            },
-            ...phoneCandidates.map((phone) => ({ canonicalPhone: phone })),
-          ],
+          canonicalPhoneHash: {
+            in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
+          },
         },
         select: { accountId: true },
         distinct: ['accountId'],

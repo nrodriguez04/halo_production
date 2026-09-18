@@ -14,6 +14,7 @@ describe('DealsController', () => {
       },
       'tenant-1',
       'user-1',
+      { roles: [], permissions: [] },
     );
 
     expect(dealsService.create).toHaveBeenCalledTimes(1);
@@ -24,6 +25,7 @@ describe('DealsController', () => {
         stage: 'new',
       }),
       'user-1',
+      { revealPii: false },
     );
   });
 });

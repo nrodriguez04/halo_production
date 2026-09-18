@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from './permissions.decorator';
 
-const ADMIN_ROLES = ['Tenant Admin', 'Admin', 'admin', 'Owner', 'owner'];
+export const ADMIN_ROLES = ['Tenant Admin', 'Admin', 'admin', 'Owner', 'owner'];
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {

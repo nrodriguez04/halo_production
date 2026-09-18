@@ -18,14 +18,18 @@ export class LeadsService {
     private pii: LeadPiiService,
   ) {}
 
-  async create(data: LeadCreate, actorId: string | null = null) {
+  async create(
+    data: LeadCreate,
+    actorId: string | null = null,
+    opts: { revealPii?: boolean } = {},
+  ) {
+    // canonicalPhone / canonicalEmail are the write-side field names on the
+    // DTO; the row stores only the protected columns.
+    const { canonicalPhone, canonicalEmail, ...rest } = data;
     const lead = await this.prisma.lead.create({
       data: {
-        ...data,
-        ...this.pii.protect({
-          phone: data.canonicalPhone,
-          email: data.canonicalEmail,
-        }),
+        ...rest,
+        ...this.pii.protect({ phone: canonicalPhone, email: canonicalEmail }),
       },
       include: {
         sourceRecords: true,
@@ -43,7 +47,7 @@ export class LeadsService {
       actorType: actorId ? TimelineActorType.user : TimelineActorType.system,
     });
 
-    return lead;
+    return this.pii.present(lead, opts.revealPii ?? false);
   }
 
   async findAll(
@@ -95,7 +99,11 @@ export class LeadsService {
     });
   }
 
-  async findOne(id: string, accountId: string) {
+  async findOne(
+    id: string,
+    accountId: string,
+    opts: { revealPii?: boolean } = {},
+  ) {
     const lead = await this.prisma.lead.findFirst({
       where: { id, accountId },
       include: {
@@ -111,10 +119,15 @@ export class LeadsService {
       throw new NotFoundException(`Lead with ID ${id} not found`);
     }
 
-    return lead;
+    return this.pii.present(lead, opts.revealPii ?? false);
   }
 
-  async update(id: string, accountId: string, data: LeadUpdate) {
+  async update(
+    id: string,
+    accountId: string,
+    data: LeadUpdate,
+    opts: { revealPii?: boolean } = {},
+  ) {
     // LeadUpdateSchema is LeadCreateSchema.partial(), so it admits the two
     // fields the generic path must never write: accountId would move the row
     // into another tenant, and status bypasses LeadLifecycleService (no
@@ -130,14 +143,22 @@ export class LeadsService {
       );
     }
 
-    const lead = await this.findOne(id, accountId);
-    const contact: { phone?: string | null; email?: string | null } = {};
-    if ('canonicalPhone' in data) contact.phone = data.canonicalPhone ?? null;
-    if ('canonicalEmail' in data) contact.email = data.canonicalEmail ?? null;
-    return this.prisma.lead.update({
-      where: { id: lead.id },
-      data: { ...data, ...this.pii.protect(contact) },
+    const lead = await this.prisma.lead.findFirst({
+      where: { id, accountId },
+      select: { id: true },
     });
+    if (!lead) {
+      throw new NotFoundException(`Lead with ID ${id} not found`);
+    }
+    const { canonicalPhone, canonicalEmail, ...rest } = data;
+    const contact: { phone?: string | null; email?: string | null } = {};
+    if ('canonicalPhone' in data) contact.phone = canonicalPhone ?? null;
+    if ('canonicalEmail' in data) contact.email = canonicalEmail ?? null;
+    const updated = await this.prisma.lead.update({
+      where: { id: lead.id },
+      data: { ...rest, ...this.pii.protect(contact) },
+    });
+    return this.pii.present(updated, opts.revealPii ?? false);
   }
 
   async remove(id: string, accountId: string) {
@@ -228,8 +249,6 @@ export class LeadsService {
       canonicalState?: string;
       canonicalZip?: string;
       canonicalOwner?: string;
-      canonicalPhone?: string | null;
-      canonicalEmail?: string | null;
       canonicalPhoneEnc?: string | null;
       canonicalEmailEnc?: string | null;
       canonicalPhoneHash?: string | null;
@@ -300,7 +319,11 @@ export class LeadsService {
     return results;
   }
 
-  async findPotentialDuplicates(accountId: string, threshold = 0.8) {
+  async findPotentialDuplicates(
+    accountId: string,
+    threshold = 0.8,
+    revealPii = false,
+  ) {
     // Pull only the fields the comparison needs and bucket by (state, zip) so we run an
     // O(n²) similarity check inside small groups instead of across the whole account.
     const leads = await this.prisma.lead.findMany({
@@ -313,8 +336,10 @@ export class LeadsService {
         canonicalState: true,
         canonicalZip: true,
         canonicalOwner: true,
-        canonicalPhone: true,
-        canonicalEmail: true,
+        canonicalPhoneEnc: true,
+        canonicalEmailEnc: true,
+        canonicalPhoneHash: true,
+        canonicalEmailHash: true,
         status: true,
         score: true,
         tags: true,
@@ -385,17 +410,32 @@ export class LeadsService {
             }
           }
 
-          if (lead1.canonicalPhone && lead2.canonicalPhone) {
-            const phone1 = lead1.canonicalPhone.replace(/\D/g, '');
-            const phone2 = lead2.canonicalPhone.replace(/\D/g, '');
-            if (phone1 === phone2) {
-              similarity += 0.2;
-              reasons.push('Same phone number');
-            }
+          // Blind-index equality: the same number in any formatting hashes
+          // the same, and nothing is decrypted just to compare.
+          if (
+            lead1.canonicalPhoneHash &&
+            lead2.canonicalPhoneHash &&
+            lead1.canonicalPhoneHash === lead2.canonicalPhoneHash
+          ) {
+            similarity += 0.2;
+            reasons.push('Same phone number');
+          }
+          if (
+            lead1.canonicalEmailHash &&
+            lead2.canonicalEmailHash &&
+            lead1.canonicalEmailHash === lead2.canonicalEmailHash
+          ) {
+            similarity += 0.2;
+            reasons.push('Same email address');
           }
 
           if (similarity >= threshold) {
-            duplicates.push({ lead1, lead2, similarity, reasons });
+            duplicates.push({
+              lead1: this.pii.present(lead1, revealPii),
+              lead2: this.pii.present(lead2, revealPii),
+              similarity,
+              reasons,
+            });
           }
         }
       }
@@ -404,6 +444,15 @@ export class LeadsService {
     duplicates.sort((a, b) => b.similarity - a.similarity);
 
     return duplicates;
+  }
+
+  /** Raw row with the protected columns; findOne returns the presented shape. */
+  private async loadOwned(id: string, accountId: string) {
+    const lead = await this.prisma.lead.findFirst({ where: { id, accountId } });
+    if (!lead) {
+      throw new NotFoundException(`Lead with ID ${id} not found`);
+    }
+    return lead;
   }
 
   async mergeLeads(
@@ -418,8 +467,8 @@ export class LeadsService {
       );
     }
 
-    const source = await this.findOne(sourceId, accountId);
-    const target = await this.findOne(targetId, accountId);
+    const source = await this.loadOwned(sourceId, accountId);
+    const target = await this.loadOwned(targetId, accountId);
 
     // Update target with best data from source
     const updates: Record<string, string> = {};
@@ -438,15 +487,15 @@ export class LeadsService {
     if (!target.canonicalOwner && source.canonicalOwner) {
       updates.canonicalOwner = source.canonicalOwner;
     }
-    const inherited: { phone?: string; email?: string } = {};
-    if (!target.canonicalPhone && source.canonicalPhone) {
-      inherited.phone = source.canonicalPhone;
+    // Inherit contact fields the target lacks. Copying ciphertext and hash
+    // as-is keeps the merge free of any decryption.
+    if (!target.canonicalPhoneEnc && source.canonicalPhoneEnc) {
+      updates.canonicalPhoneEnc = source.canonicalPhoneEnc;
+      updates.canonicalPhoneHash = source.canonicalPhoneHash as string;
     }
-    if (!target.canonicalEmail && source.canonicalEmail) {
-      inherited.email = source.canonicalEmail;
-    }
-    for (const [k, v] of Object.entries(this.pii.protect(inherited))) {
-      if (v !== null && v !== undefined) updates[k] = v;
+    if (!target.canonicalEmailEnc && source.canonicalEmailEnc) {
+      updates.canonicalEmailEnc = source.canonicalEmailEnc;
+      updates.canonicalEmailHash = source.canonicalEmailHash as string;
     }
 
     await this.prisma.$transaction(async (tx) => {

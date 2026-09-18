@@ -13,6 +13,7 @@ import {
 } from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
 import { AutomationService } from '../automation/automation.service';
+import { LeadPiiService } from '../leads/lead-pii.service';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 
 @Injectable()
@@ -23,9 +24,23 @@ export class DealsService {
     private prisma: PrismaService,
     private timelineService: TimelineService,
     private automationService: AutomationService,
+    private pii: LeadPiiService,
   ) {}
 
-  async create(data: DealCreate, actorId: string | null = null) {
+  /** Deal rows carry the lead relation; shape its contact fields for the caller. */
+  private presentDeal<T extends { lead?: Record<string, unknown> | null }>(
+    deal: T,
+    revealPii: boolean,
+  ) {
+    if (!deal.lead) return deal;
+    return { ...deal, lead: this.pii.present(deal.lead as any, revealPii) };
+  }
+
+  async create(
+    data: DealCreate,
+    actorId: string | null = null,
+    opts: { revealPii?: boolean } = {},
+  ) {
     if (data.leadId) {
       const lead = await this.prisma.lead.findFirst({
         where: {
@@ -75,13 +90,14 @@ export class DealsService {
       actorType: actorId ? TimelineActorType.user : TimelineActorType.system,
     });
 
-    return deal;
+    return this.presentDeal(deal, opts.revealPii ?? false);
   }
 
   async findAll(
     accountId: string,
     stage?: string,
     pagination?: { skip?: number; take?: number },
+    revealPii = false,
   ) {
     const where: any = { accountId };
     if (stage) {
@@ -91,7 +107,7 @@ export class DealsService {
     const skip = pagination?.skip ?? 0;
     const take = pagination?.take ?? 50;
 
-    return this.prisma.deal.findMany({
+    const deals = await this.prisma.deal.findMany({
       where,
       skip,
       take,
@@ -103,9 +119,14 @@ export class DealsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return deals.map((d) => this.presentDeal(d, revealPii));
   }
 
-  async findOne(id: string, accountId: string) {
+  async findOne(
+    id: string,
+    accountId: string,
+    opts: { revealPii?: boolean } = {},
+  ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id, accountId },
       include: {
@@ -121,10 +142,15 @@ export class DealsService {
       throw new NotFoundException(`Deal with ID ${id} not found`);
     }
 
-    return deal;
+    return this.presentDeal(deal, opts.revealPii ?? false);
   }
 
-  async update(id: string, accountId: string, data: DealUpdate) {
+  async update(
+    id: string,
+    accountId: string,
+    data: DealUpdate,
+    opts: { revealPii?: boolean } = {},
+  ) {
     if (data.accountId !== undefined) {
       throw new BadRequestException(
         'accountId cannot be updated via the generic deal update endpoint',
@@ -169,7 +195,7 @@ export class DealsService {
       }
     }
 
-    return this.prisma.deal.update({
+    const updated = await this.prisma.deal.update({
       where: { id: deal.id },
       data,
       include: {
@@ -178,6 +204,7 @@ export class DealsService {
         contracts: true,
       },
     });
+    return this.presentDeal(updated, opts.revealPii ?? false);
   }
 
   async updateStage(

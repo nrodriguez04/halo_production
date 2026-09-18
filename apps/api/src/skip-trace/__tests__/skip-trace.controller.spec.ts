@@ -50,9 +50,9 @@ describe('SkipTraceController', () => {
     expect(call.where).toEqual({
       id: 'lead-1',
       accountId: 'tenant-1',
-      canonicalPhone: null,
+      canonicalPhoneEnc: null,
     });
-    expect(call.data.canonicalPhone).toBe('+15125550100');
+    expect(call.data).not.toHaveProperty('canonicalPhone');
     expect(call.data.canonicalPhoneHash).toBe(hashPhone('+15125550100'));
     expect(call.data.canonicalPhoneEnc).toEqual(expect.any(String));
   });
