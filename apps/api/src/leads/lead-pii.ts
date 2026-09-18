@@ -1,10 +1,5 @@
-import {
-  decryptPII,
-  encryptPII,
-  hashEmail,
-  hashPhone,
-  type PIIEnvelopeData,
-} from '@halo/shared';
+import { hashEmail, hashPhone } from '@halo/shared';
+import { cleanValue, openValue, sealValue } from '../pii/contact-crypto';
 
 /**
  * Contact PII on a lead lives only as envelope ciphertext plus a blind-index
@@ -35,18 +30,9 @@ export interface Contact {
   email: string | null;
 }
 
-function clean(value: string | null | undefined): string | null {
-  const v = value?.trim();
-  return v ? v : null;
-}
-
-function seal(value: string): string {
-  return JSON.stringify(encryptPII(value));
-}
-
-function open(enc: string): string {
-  return decryptPII(JSON.parse(enc) as PIIEnvelopeData);
-}
+const clean = cleanValue;
+const seal = sealValue;
+const open = openValue;
 
 /** Every column a write needs, for whichever of phone/email is provided. */
 export function protectContact(input: ContactInput): Partial<ProtectedContact> {

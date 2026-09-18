@@ -135,12 +135,20 @@ describe('TwilioService', () => {
     });
 
     expect(prisma.dNCList.findFirst).toHaveBeenCalledWith({
-      where: { accountId: 'unknown', phone: '+15551234567' },
+      where: {
+        accountId: 'unknown',
+        OR: [
+          { phoneHash: hashPhone('+15551234567') },
+          { phone: '+15551234567' },
+        ],
+      },
     });
     expect(prisma.dNCList.create).toHaveBeenCalledWith({
       data: {
         accountId: 'unknown',
         phone: '+15551234567',
+        phoneEnc: expect.any(String),
+        phoneHash: hashPhone('+15551234567'),
         source: 'stop_keyword',
         reason: 'User sent STOP keyword',
       },
