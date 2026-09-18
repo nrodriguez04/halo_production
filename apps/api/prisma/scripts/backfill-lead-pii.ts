@@ -8,6 +8,10 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { protectContact } from '../../src/leads/lead-pii';
 import { protectEmail, protectPhone } from '../../src/pii/contact-crypto';
+import {
+  counterpartyColumns,
+  recipientFromMetadata,
+} from '../../src/communications/message-counterparty';
 
 const prisma = new PrismaClient();
 const BATCH = 500;
@@ -82,7 +86,43 @@ async function backfillConsents(): Promise<number> {
   return done;
 }
 
+/** messages: metadata.to/phone/email/from -> counterpartyEnc/Hash, keys stripped */
+async function backfillMessages(): Promise<number> {
+  if (!(await columnsExist('messages', ['counterpartyEnc', 'counterpartyHash']))) return 0;
+  let done = 0;
+  for (;;) {
+    const rows = await prisma.$queryRaw<
+      { id: string; channel: string; direction: string; metadata: Record<string, unknown> | null }[]
+    >`
+      SELECT "id", "channel", "direction", "metadata" FROM "messages"
+      WHERE "counterpartyEnc" IS NULL
+        AND "metadata" IS NOT NULL
+        AND ("metadata" ? 'to' OR "metadata" ? 'phone' OR "metadata" ? 'email' OR "metadata" ? 'from')
+      LIMIT ${BATCH}`;
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      const value = recipientFromMetadata(
+        row.channel,
+        row.metadata,
+        row.direction === 'inbound' ? 'inbound' : 'outbound',
+      );
+      const cols = counterpartyColumns(row.channel, value);
+      // Strip the plaintext keys whether or not a value was found, so the
+      // same row is not re-read on the next pass; keep the rest of metadata.
+      await prisma.$executeRaw`
+        UPDATE "messages"
+        SET "counterpartyEnc" = ${cols.counterpartyEnc},
+            "counterpartyHash" = ${cols.counterpartyHash},
+            "metadata" = ("metadata" - 'to' - 'phone' - 'email' - 'from')
+        WHERE "id" = ${row.id}`;
+      done++;
+    }
+  }
+  return done;
+}
+
 async function main() {
+  console.log(`messages: ${await backfillMessages()} rows protected`);
   console.log(`dnc_list: ${await backfillDnc()} rows protected`);
   console.log(`consents: ${await backfillConsents()} rows protected`);
   if (!(await plaintextColumnsExist())) {

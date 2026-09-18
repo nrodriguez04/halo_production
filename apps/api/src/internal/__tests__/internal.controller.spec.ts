@@ -7,27 +7,45 @@ import { ComplianceService } from '../../compliance/compliance.service';
 import { GeocodingService } from '../../integrations/geocoding/geocoding.service';
 import { AttomService } from '../../integrations/attom/attom.service';
 import { PrismaService } from '../../prisma.service';
+import { BadRequestException } from '@nestjs/common';
+import { counterpartyColumns } from '../../communications/message-counterparty';
 
 describe('InternalController enrichment routes', () => {
   let controller: InternalController;
   let geocoding: { geocodeDetailed: jest.Mock };
   let attom: { lookupPropertyDetailed: jest.Mock };
-  let prisma: { sourceRecord: { updateMany: jest.Mock } };
+  let twilio: { sendSms: jest.Mock };
+  let compliance: { getFacts: jest.Mock };
+  let prisma: {
+    sourceRecord: { updateMany: jest.Mock };
+    message: { findFirst: jest.Mock };
+  };
+
+  beforeAll(() => {
+    process.env.PII_ENCRYPTION_KEY_V1 = '11'.repeat(32);
+    process.env.PII_ENCRYPTION_KEY_CURRENT_VERSION = '1';
+    process.env.PII_INDEX_KEY = '22'.repeat(32);
+  });
 
   beforeEach(async () => {
     geocoding = { geocodeDetailed: jest.fn() };
     attom = { lookupPropertyDetailed: jest.fn() };
+    twilio = { sendSms: jest.fn().mockResolvedValue({ sid: 'SM1' }) };
+    compliance = {
+      getFacts: jest.fn().mockResolvedValue({ isDnc: false, hasConsent: true }),
+    };
     prisma = {
       sourceRecord: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      message: { findFirst: jest.fn() },
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InternalController],
       providers: [
         { provide: OpenAIService, useValue: {} },
-        { provide: TwilioSendService, useValue: {} },
+        { provide: TwilioSendService, useValue: twilio },
         { provide: EmailSendService, useValue: {} },
-        { provide: ComplianceService, useValue: {} },
+        { provide: ComplianceService, useValue: compliance },
         { provide: GeocodingService, useValue: geocoding },
         { provide: AttomService, useValue: attom },
         { provide: PrismaService, useValue: prisma },
@@ -106,5 +124,53 @@ describe('InternalController enrichment routes', () => {
       cached: true,
     });
     expect(prisma.sourceRecord.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('send routes resolve the recipient server-side', () => {
+    it('reads the SMS recipient from the message counterparty when `to` is omitted', async () => {
+      prisma.message.findFirst.mockResolvedValue({
+        channel: 'sms',
+        direction: 'outbound',
+        metadata: {},
+        ...counterpartyColumns('sms', '+15125550100'),
+      });
+
+      await controller.sendSms('tenant-1', {
+        from: '+15550009999',
+        body: 'hi',
+        messageId: 'msg-1',
+      } as any);
+
+      expect(prisma.message.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'msg-1', accountId: 'tenant-1' },
+        }),
+      );
+      expect(compliance.getFacts).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: '+15125550100', channel: 'sms' }),
+      );
+      expect(twilio.sendSms).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '+15125550100', messageId: 'msg-1' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects a send with no resolvable recipient', async () => {
+      prisma.message.findFirst.mockResolvedValue({
+        channel: 'sms',
+        direction: 'outbound',
+        metadata: {},
+        counterpartyEnc: null,
+      });
+
+      await expect(
+        controller.sendSms('tenant-1', {
+          from: '+15550009999',
+          body: 'hi',
+          messageId: 'msg-x',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(twilio.sendSms).not.toHaveBeenCalled();
+    });
   });
 });
