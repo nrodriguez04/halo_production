@@ -36,7 +36,10 @@ describe('ControlPlaneService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ControlPlaneService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ControlPlaneService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get(ControlPlaneService);
@@ -78,7 +81,10 @@ describe('ControlPlaneService', () => {
 
   describe('GLOBAL master switch', () => {
     it('can turn a flag off that the tenant has on', async () => {
-      stub(row('tenant-a', { smsEnabled: true }), row('GLOBAL', { smsEnabled: false }));
+      stub(
+        row('tenant-a', { smsEnabled: true }),
+        row('GLOBAL', { smsEnabled: false }),
+      );
       const status = await service.getStatus('tenant-a');
       expect(status.smsEnabled).toBe(false);
       expect(status.globallyConstrained).toBe(true);
@@ -86,7 +92,10 @@ describe('ControlPlaneService', () => {
 
     it('cannot turn a flag on that the tenant has off', async () => {
       // GLOBAL restricts; it never grants more than the tenant configured.
-      stub(row('tenant-a', { smsEnabled: false }), row('GLOBAL', { smsEnabled: true }));
+      stub(
+        row('tenant-a', { smsEnabled: false }),
+        row('GLOBAL', { smsEnabled: true }),
+      );
       expect((await service.getStatus('tenant-a')).smsEnabled).toBe(false);
     });
 
@@ -101,7 +110,10 @@ describe('ControlPlaneService', () => {
     });
 
     it('a disabled GLOBAL row disables every tenant', async () => {
-      stub(row('tenant-a', { enabled: true }), row('GLOBAL', { enabled: false }));
+      stub(
+        row('tenant-a', { enabled: true }),
+        row('GLOBAL', { enabled: false }),
+      );
       expect((await service.getStatus('tenant-a')).enabled).toBe(false);
     });
 

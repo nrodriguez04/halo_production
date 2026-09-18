@@ -31,10 +31,14 @@ export class GeocodingController {
     @Query('lat') lat: string,
     @Query('lng') lng: string,
   ) {
-    return this.geocodingService.reverseGeocode(parseFloat(lat), parseFloat(lng), {
-      accountId,
-      actor: 'user',
-      userId,
-    });
+    return this.geocodingService.reverseGeocode(
+      parseFloat(lat),
+      parseFloat(lng),
+      {
+        accountId,
+        actor: 'user',
+        userId,
+      },
+    );
   }
 }

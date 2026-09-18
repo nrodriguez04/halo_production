@@ -6,4 +6,3 @@ import { QueueService } from './queue.service';
   exports: [QueueService],
 })
 export class QueuesModule {}
-

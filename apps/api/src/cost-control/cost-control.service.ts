@@ -68,7 +68,9 @@ class BoundedCache<V> {
 // Sentinel for "no row" so we still cache the negative answer without
 // re-hitting Postgres on every paid call (the common case).
 const NO_TENANT_FLAG = Symbol('NO_TENANT_FLAG');
-type TenantFlagCacheValue = { enabled: boolean; flag: string } | typeof NO_TENANT_FLAG;
+type TenantFlagCacheValue =
+  | { enabled: boolean; flag: string }
+  | typeof NO_TENANT_FLAG;
 
 @Injectable()
 export class IntegrationCostControlService {
@@ -89,7 +91,9 @@ export class IntegrationCostControlService {
    * record the actual cost. The single chokepoint that every paid call
    * in the system flows through.
    */
-  async checkAndCall<P, R>(intent: CostIntent<P, R>): Promise<CheckAndCallResult<R>> {
+  async checkAndCall<P, R>(
+    intent: CostIntent<P, R>,
+  ): Promise<CheckAndCallResult<R>> {
     const triedProviders = new Set<string>();
     return this.checkAndCallInner(intent, triedProviders);
   }
@@ -113,7 +117,11 @@ export class IntegrationCostControlService {
         // so the spend dashboards showed a clean ledger while the pipeline
         // was being throttled.
         await this.recordBlockedDecision(intent, decision);
-        throw new CostBlockedException(decision, intent.provider, intent.action);
+        throw new CostBlockedException(
+          decision,
+          intent.provider,
+          intent.action,
+        );
 
       case 'USE_CACHE': {
         // Cache hit: skip the network call but still record an event so
@@ -152,13 +160,18 @@ export class IntegrationCostControlService {
     triedProviders: Set<string> = new Set<string>(),
   ): Promise<CostDecision> {
     if (!intent.context.accountId || intent.context.accountId === 'system') {
-      throw new Error('CostIntent.context.accountId is required and must not be "system"');
+      throw new Error(
+        'CostIntent.context.accountId is required and must not be "system"',
+      );
     }
 
     // 1. Provider feature flag (registry + tenant override)
     const provider = await this.findProvider(intent.provider);
     if (!provider || !provider.enabled) {
-      return { kind: 'BLOCK_FEATURE_DISABLED', flag: `provider.${intent.provider}` };
+      return {
+        kind: 'BLOCK_FEATURE_DISABLED',
+        flag: `provider.${intent.provider}`,
+      };
     }
     const tenantFlag = await this.findTenantFlag(
       intent.context.accountId,
@@ -178,18 +191,35 @@ export class IntegrationCostControlService {
     }
 
     // 3. Cache lookup
-    const cacheKey = this.cache.buildKey(intent.provider, intent.action, intent.payload);
+    const cacheKey = this.cache.buildKey(
+      intent.provider,
+      intent.action,
+      intent.payload,
+    );
     if (!intent.hints?.skipCache) {
-      const cached = await this.cache.lookup(intent.context.accountId, intent.provider, cacheKey);
+      const cached = await this.cache.lookup(
+        intent.context.accountId,
+        intent.provider,
+        cacheKey,
+      );
       if (cached) {
-        return { kind: 'USE_CACHE', cachedResponse: cached.payload, cachedAt: cached.fetchedAt, resolvedProvider: intent.provider };
+        return {
+          kind: 'USE_CACHE',
+          cachedResponse: cached.payload,
+          cachedAt: cached.fetchedAt,
+          resolvedProvider: intent.provider,
+        };
       }
     }
 
     // 4. Estimate cost
     const estimatedCost =
       intent.hints?.estimatedCostOverrideUsd ??
-      (await this.pricing.estimate(intent.provider, intent.action, intent.payload));
+      (await this.pricing.estimate(
+        intent.provider,
+        intent.action,
+        intent.payload,
+      ));
 
     // Load applicable buckets early so override-backed calls still debit
     // the same caps they are bypassing.
@@ -200,8 +230,15 @@ export class IntegrationCostControlService {
     // 5. Manual override
     if (intent.context.leadId || intent.context.campaignId) {
       const override = await this.findActiveOverride(intent);
-      if (override && override.extraBudgetUsd >= estimatedCost && !intent.hints?.skipBudget) {
-        const claimed = await this.claimOverride(override.id, intent.context.accountId);
+      if (
+        override &&
+        override.extraBudgetUsd >= estimatedCost &&
+        !intent.hints?.skipBudget
+      ) {
+        const claimed = await this.claimOverride(
+          override.id,
+          intent.context.accountId,
+        );
         if (claimed) {
           try {
             const reservationId = await this.reserve(
@@ -253,13 +290,19 @@ export class IntegrationCostControlService {
     // 7. Lead-score gate
     if (intent.context.leadId && intent.hints?.leadScore !== undefined) {
       const t = thresholdFor(intent.provider, intent.action);
-      const meta = (intent.payload as Record<string, unknown> | undefined) ?? {};
-      const expectedRoi = (meta.expectedRoiUsd as number | undefined) ?? Infinity;
+      const meta =
+        (intent.payload as Record<string, unknown> | undefined) ?? {};
+      const expectedRoi =
+        (meta.expectedRoiUsd as number | undefined) ?? Infinity;
       if (
         intent.hints.leadScore < t.minScore ||
         (t.minExpectedRoiUsd !== undefined && expectedRoi < t.minExpectedRoiUsd)
       ) {
-        return { kind: 'BLOCK_LOW_LEAD_SCORE', leadScore: intent.hints.leadScore, threshold: t.minScore };
+        return {
+          kind: 'BLOCK_LOW_LEAD_SCORE',
+          leadScore: intent.hints.leadScore,
+          threshold: t.minScore,
+        };
       }
     }
 
@@ -282,10 +325,19 @@ export class IntegrationCostControlService {
     }
 
     // 9. Manual-approval threshold (only for non-user actors)
-    if (estimatedCost > MANUAL_APPROVAL_THRESHOLD_USD && intent.context.actor !== 'user') {
+    if (
+      estimatedCost > MANUAL_APPROVAL_THRESHOLD_USD &&
+      intent.context.actor !== 'user'
+    ) {
       // Reservation row in 'reserved' state with REQUIRE_MANUAL_APPROVAL decision -
       // surfaced in the admin queue. An approver re-runs with hints.skipBudget.
-      const reservationId = await this.reserve(intent, estimatedCost, buckets.map((b) => b.id), 'REQUIRE_MANUAL_APPROVAL', cacheKey);
+      const reservationId = await this.reserve(
+        intent,
+        estimatedCost,
+        buckets.map((b) => b.id),
+        'REQUIRE_MANUAL_APPROVAL',
+        cacheKey,
+      );
       return {
         kind: 'REQUIRE_MANUAL_APPROVAL',
         approvalRequestId: reservationId,
@@ -308,20 +360,35 @@ export class IntegrationCostControlService {
         reservationId,
         estimatedCostUsd: estimatedCost,
         resolvedProvider: intent.provider,
-        reason: `${overSoft.scope}/${overSoft.scopeRef} at ${Math.round((overSoft.currentSpendUsd + estimatedCost) / overSoft.hardCapUsd * 100)}% of cap`,
+        reason: `${overSoft.scope}/${overSoft.scopeRef} at ${Math.round(((overSoft.currentSpendUsd + estimatedCost) / overSoft.hardCapUsd) * 100)}% of cap`,
       };
     }
-    return { kind: 'ALLOW', reservationId, estimatedCostUsd: estimatedCost, resolvedProvider: intent.provider };
+    return {
+      kind: 'ALLOW',
+      reservationId,
+      estimatedCostUsd: estimatedCost,
+      resolvedProvider: intent.provider,
+    };
   }
 
-  async recordActual(reservationId: string, p: RecordActualParams): Promise<void> {
-    const event = await this.prisma.integrationCostEvent.findUnique({ where: { reservationId } });
+  async recordActual(
+    reservationId: string,
+    p: RecordActualParams,
+  ): Promise<void> {
+    const event = await this.prisma.integrationCostEvent.findUnique({
+      where: { reservationId },
+    });
     if (!event) {
       this.logger.warn(`recordActual: reservation ${reservationId} not found`);
       return;
     }
 
-    const status = p.status === 'ok' ? 'completed' : p.status === 'rate_limited' ? 'errored' : 'errored';
+    const status =
+      p.status === 'ok'
+        ? 'completed'
+        : p.status === 'rate_limited'
+          ? 'errored'
+          : 'errored';
     const mergedMetadata = mergeJson(event.metadata, p.metadata);
     const updated = await this.prisma.integrationCostEvent.update({
       where: { reservationId },
@@ -350,7 +417,9 @@ export class IntegrationCostControlService {
     });
 
     if (p.status === 'ok' && p.cachePayload !== undefined) {
-      const ttl = p.cacheTtlSec ?? defaultCacheTtlSec(updated.providerKey, updated.action);
+      const ttl =
+        p.cacheTtlSec ??
+        defaultCacheTtlSec(updated.providerKey, updated.action);
       if (ttl > 0 && p.cacheKey) {
         await this.cache.write({
           accountId: updated.accountId,
@@ -404,7 +473,10 @@ export class IntegrationCostControlService {
 
   private async runAndRecord<P, R>(
     intent: CostIntent<P, R>,
-    decision: Extract<CostDecision, { kind: 'ALLOW' | 'ALLOW_WITH_WARNING' | 'ALLOW_WITH_OVERRIDE' }>,
+    decision: Extract<
+      CostDecision,
+      { kind: 'ALLOW' | 'ALLOW_WITH_WARNING' | 'ALLOW_WITH_OVERRIDE' }
+    >,
   ): Promise<CheckAndCallSuccess<R>> {
     const startedAt = Date.now();
     let result: R;
@@ -424,7 +496,11 @@ export class IntegrationCostControlService {
       ? intent.computeActualCostUsd(result)
       : decision.estimatedCostUsd;
 
-    const cacheKey = this.cache.buildKey(intent.provider, intent.action, intent.payload);
+    const cacheKey = this.cache.buildKey(
+      intent.provider,
+      intent.action,
+      intent.payload,
+    );
     await this.recordActual(decision.reservationId, {
       actualCostUsd: actualCost,
       durationMs,
@@ -496,7 +572,11 @@ export class IntegrationCostControlService {
       const provider = await this.findProvider(intent.provider);
       if (!provider) return;
 
-      const estimated = await this.pricing.estimate(intent.provider, intent.action, intent.payload);
+      const estimated = await this.pricing.estimate(
+        intent.provider,
+        intent.action,
+        intent.payload,
+      );
       await this.prisma.integrationCostEvent.create({
         data: {
           accountId: intent.context.accountId,
@@ -521,8 +601,17 @@ export class IntegrationCostControlService {
           metadata: { cachedAt: decision.cachedAt.toISOString() },
         },
       });
-      const cacheKey = this.cache.buildKey(intent.provider, intent.action, intent.payload);
-      await this.cache.recordHit(intent.context.accountId, intent.provider, cacheKey, estimated);
+      const cacheKey = this.cache.buildKey(
+        intent.provider,
+        intent.action,
+        intent.payload,
+      );
+      await this.cache.recordHit(
+        intent.context.accountId,
+        intent.provider,
+        cacheKey,
+        estimated,
+      );
       await this.aggregator.bump({
         accountId: intent.context.accountId,
         providerKey: intent.provider,
@@ -589,7 +678,9 @@ export class IntegrationCostControlService {
   private async findProvider(key: string): Promise<ProviderRow | null> {
     const hit = this.providerCache.get(key);
     if (hit) return hit;
-    const row = await this.prisma.integrationProvider.findUnique({ where: { key } });
+    const row = await this.prisma.integrationProvider.findUnique({
+      where: { key },
+    });
     if (!row) return null;
     const trimmed: ProviderRow = {
       id: row.id,
@@ -647,8 +738,10 @@ export class IntegrationCostControlService {
     const ctx = intent.context;
     const orFilters: { scope: string; scopeRef: string }[] = [];
     if (ctx.leadId) orFilters.push({ scope: 'lead', scopeRef: ctx.leadId });
-    if (ctx.campaignId) orFilters.push({ scope: 'campaign', scopeRef: ctx.campaignId });
-    if (intent.hints?.workflow) orFilters.push({ scope: 'workflow', scopeRef: intent.hints.workflow });
+    if (ctx.campaignId)
+      orFilters.push({ scope: 'campaign', scopeRef: ctx.campaignId });
+    if (intent.hints?.workflow)
+      orFilters.push({ scope: 'workflow', scopeRef: intent.hints.workflow });
     if (orFilters.length === 0) return null;
 
     // Fast path: most accounts have zero active overrides at any given
@@ -685,7 +778,10 @@ export class IntegrationCostControlService {
     return hasAny;
   }
 
-  private async claimOverride(overrideId: string, accountId: string): Promise<boolean> {
+  private async claimOverride(
+    overrideId: string,
+    accountId: string,
+  ): Promise<boolean> {
     const result = await this.prisma.manualBudgetOverride.updateMany({
       where: {
         id: overrideId,
@@ -702,7 +798,10 @@ export class IntegrationCostControlService {
     return false;
   }
 
-  private async releaseOverride(overrideId: string, accountId: string): Promise<void> {
+  private async releaseOverride(
+    overrideId: string,
+    accountId: string,
+  ): Promise<void> {
     await this.prisma.manualBudgetOverride.updateMany({
       where: { id: overrideId, accountId, consumed: true },
       data: { consumed: false },
@@ -715,7 +814,10 @@ function mergeJson(
   base: unknown,
   extra: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-  const baseObj = (base && typeof base === 'object' && !Array.isArray(base) ? (base as Record<string, unknown>) : {});
+  const baseObj =
+    base && typeof base === 'object' && !Array.isArray(base)
+      ? (base as Record<string, unknown>)
+      : {};
   if (!extra && Object.keys(baseObj).length === 0) return undefined;
   return { ...baseObj, ...(extra ?? {}) };
 }
@@ -725,5 +827,7 @@ function getOverrideId(metadata: unknown): string | null {
     return null;
   }
   const overrideId = (metadata as Record<string, unknown>).overrideId;
-  return typeof overrideId === 'string' && overrideId.length > 0 ? overrideId : null;
+  return typeof overrideId === 'string' && overrideId.length > 0
+    ? overrideId
+    : null;
 }

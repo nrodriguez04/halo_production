@@ -36,9 +36,7 @@ const UpsertDealEconomicsSchema = z
 @Controller('deal-economics')
 @UseGuards(AuthGuard)
 export class DealEconomicsController {
-  constructor(
-    private readonly dealEconomicsService: DealEconomicsService,
-  ) {}
+  constructor(private readonly dealEconomicsService: DealEconomicsService) {}
 
   @Get()
   async listAll(
@@ -75,9 +73,6 @@ export class DealEconomicsController {
     @Param('dealId') dealId: string,
     @CurrentAccountId() accountId: string,
   ) {
-    return this.dealEconomicsService.allocateAutomationCosts(
-      dealId,
-      accountId,
-    );
+    return this.dealEconomicsService.allocateAutomationCosts(dealId, accountId);
   }
 }

@@ -12,4 +12,3 @@ import { TimelineModule } from '../timeline/timeline.module';
   exports: [UnderwritingService],
 })
 export class UnderwritingModule {}
-

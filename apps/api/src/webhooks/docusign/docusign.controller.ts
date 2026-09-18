@@ -48,9 +48,7 @@ export class DocuSignController {
     }
 
     if (!signature) {
-      throw new ForbiddenException(
-        'Missing x-docusign-signature-1 header',
-      );
+      throw new ForbiddenException('Missing x-docusign-signature-1 header');
     }
 
     // Prefer the raw bytes captured in main.ts; JSON.stringify(body) does not

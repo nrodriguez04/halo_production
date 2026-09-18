@@ -62,13 +62,39 @@ export interface CostIntent<TPayload = unknown, TResult = unknown> {
 }
 
 export type CostDecision =
-  | { kind: 'ALLOW'; reservationId: string; estimatedCostUsd: number; resolvedProvider: string }
-  | { kind: 'ALLOW_WITH_WARNING'; reservationId: string; estimatedCostUsd: number; resolvedProvider: string; reason: string }
-  | { kind: 'ALLOW_WITH_OVERRIDE'; reservationId: string; estimatedCostUsd: number; resolvedProvider: string; overrideId: string }
-  | { kind: 'USE_CACHE'; cachedResponse: unknown; cachedAt: Date; resolvedProvider: string }
+  | {
+      kind: 'ALLOW';
+      reservationId: string;
+      estimatedCostUsd: number;
+      resolvedProvider: string;
+    }
+  | {
+      kind: 'ALLOW_WITH_WARNING';
+      reservationId: string;
+      estimatedCostUsd: number;
+      resolvedProvider: string;
+      reason: string;
+    }
+  | {
+      kind: 'ALLOW_WITH_OVERRIDE';
+      reservationId: string;
+      estimatedCostUsd: number;
+      resolvedProvider: string;
+      overrideId: string;
+    }
+  | {
+      kind: 'USE_CACHE';
+      cachedResponse: unknown;
+      cachedAt: Date;
+      resolvedProvider: string;
+    }
   | { kind: 'DOWNGRADE_PROVIDER'; suggestedProvider: string; reason: string }
   | { kind: 'QUEUE_UNTIL_NEXT_BUDGET_PERIOD'; retryAt: Date; reason: string }
-  | { kind: 'REQUIRE_MANUAL_APPROVAL'; approvalRequestId: string; reason: string }
+  | {
+      kind: 'REQUIRE_MANUAL_APPROVAL';
+      approvalRequestId: string;
+      reason: string;
+    }
   | { kind: 'BLOCK_OVER_BUDGET'; bucket: string; spent: number; cap: number }
   | { kind: 'BLOCK_LOW_LEAD_SCORE'; leadScore: number; threshold: number }
   | { kind: 'BLOCK_DUPLICATE_CALL'; previousCallAt: Date }
@@ -91,7 +117,10 @@ export interface RecordActualParams {
 }
 
 export interface CheckAndCallSuccess<R> {
-  decision: Extract<CostDecision, { kind: AllowDecisionKind | 'USE_CACHE' | 'DOWNGRADE_PROVIDER' }>;
+  decision: Extract<
+    CostDecision,
+    { kind: AllowDecisionKind | 'USE_CACHE' | 'DOWNGRADE_PROVIDER' }
+  >;
   result: R;
   actualCostUsd: number;
   reservationId?: string;
@@ -99,14 +128,19 @@ export interface CheckAndCallSuccess<R> {
 }
 
 export interface CheckAndCallBlocked {
-  decision: Exclude<CostDecision, { kind: AllowDecisionKind | 'USE_CACHE' | 'DOWNGRADE_PROVIDER' }>;
+  decision: Exclude<
+    CostDecision,
+    { kind: AllowDecisionKind | 'USE_CACHE' | 'DOWNGRADE_PROVIDER' }
+  >;
   result: null;
   actualCostUsd: 0;
   reservationId?: undefined;
   fromCache: false;
 }
 
-export type CheckAndCallResult<R> = CheckAndCallSuccess<R> | CheckAndCallBlocked;
+export type CheckAndCallResult<R> =
+  | CheckAndCallSuccess<R>
+  | CheckAndCallBlocked;
 
 /**
  * Thrown when an Allow-class decision is blocked by a downstream caller.

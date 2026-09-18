@@ -19,11 +19,18 @@ interface PricingRule {
 @Injectable()
 export class PricingService {
   private readonly logger = new Logger(PricingService.name);
-  private cache: { rules: PricingRule[]; expiresAt: number } = { rules: [], expiresAt: 0 };
+  private cache: { rules: PricingRule[]; expiresAt: number } = {
+    rules: [],
+    expiresAt: 0,
+  };
 
   constructor(private prisma: PrismaService) {}
 
-  async estimate(provider: string, action: string, payload: unknown): Promise<number> {
+  async estimate(
+    provider: string,
+    action: string,
+    payload: unknown,
+  ): Promise<number> {
     const rules = await this.lookupRules(provider, action);
     if (rules.length === 0) return 0;
 
@@ -42,7 +49,10 @@ export class PricingService {
     return all.filter((r) => r.providerKey === providerKey);
   }
 
-  private async lookupRules(provider: string, action: string): Promise<PricingRule[]> {
+  private async lookupRules(
+    provider: string,
+    action: string,
+  ): Promise<PricingRule[]> {
     const all = await this.allRules();
     return all.filter((r) => r.providerKey === provider && r.action === action);
   }

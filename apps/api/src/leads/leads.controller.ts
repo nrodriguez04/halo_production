@@ -12,7 +12,11 @@ import {
 import { LeadsService } from './leads.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
-import { LeadCreateSchema, LeadUpdateSchema, CSVImportRowSchema } from '@halo/shared';
+import {
+  LeadCreateSchema,
+  LeadUpdateSchema,
+  CSVImportRowSchema,
+} from '@halo/shared';
 
 const LeadCreateInputSchema = LeadCreateSchema.omit({ status: true });
 
@@ -29,7 +33,10 @@ export class LeadsController {
   ) {
     // Lead lifecycle starts at `new`; later states must flow through
     // LeadLifecycleService so enrichment jobs and timeline events exist.
-    const validated = LeadCreateInputSchema.parse({ ...(data as any), accountId });
+    const validated = LeadCreateInputSchema.parse({
+      ...(data as any),
+      accountId,
+    });
     return this.leadsService.create(
       {
         ...validated,
@@ -85,10 +92,7 @@ export class LeadsController {
   }
 
   @Delete(':id')
-  async remove(
-    @Param('id') id: string,
-    @CurrentAccountId() accountId: string,
-  ) {
+  async remove(@Param('id') id: string, @CurrentAccountId() accountId: string) {
     return this.leadsService.remove(id, accountId);
   }
 
@@ -130,4 +134,3 @@ export class LeadsController {
     );
   }
 }
-

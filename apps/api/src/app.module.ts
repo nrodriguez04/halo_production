@@ -97,11 +97,7 @@ import { AuditModule } from './audit/audit.module';
     SkipTraceModule,
     LeadLifecycleModule,
   ],
-  providers: [
-    PrismaService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [PrismaService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
   exports: [PrismaService],
 })
 export class AppModule {}
-

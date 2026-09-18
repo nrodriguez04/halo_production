@@ -50,7 +50,9 @@ export class StorageService implements OnModuleInit {
     try {
       await this.ensureBucket();
     } catch (err: any) {
-      this.logger.warn(`Could not ensure bucket "${this.bucket}": ${err.message}. Storage may not work until MinIO is available.`);
+      this.logger.warn(
+        `Could not ensure bucket "${this.bucket}": ${err.message}. Storage may not work until MinIO is available.`,
+      );
     }
   }
 
@@ -60,7 +62,9 @@ export class StorageService implements OnModuleInit {
       this.logger.log(`Bucket "${this.bucket}" exists`);
     } catch (err: any) {
       if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
-        await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+        await this.client.send(
+          new CreateBucketCommand({ Bucket: this.bucket }),
+        );
         this.logger.log(`Created bucket "${this.bucket}"`);
       } else {
         throw err;
@@ -100,9 +104,11 @@ export class StorageService implements OnModuleInit {
       }
 
       if (
-        ['InvalidAccessKeyId', 'SignatureDoesNotMatch', 'AccessDenied'].includes(
-          code,
-        )
+        [
+          'InvalidAccessKeyId',
+          'SignatureDoesNotMatch',
+          'AccessDenied',
+        ].includes(code)
       ) {
         throw new IntegrationUnavailableException(
           's3',
@@ -147,11 +153,11 @@ export class StorageService implements OnModuleInit {
     };
   }
 
-  async download(key: string): Promise<{ body: Readable; contentType?: string }> {
+  async download(
+    key: string,
+  ): Promise<{ body: Readable; contentType?: string }> {
     const result = await this.s3(() =>
-      this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      ),
+      this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key })),
     );
 
     return {

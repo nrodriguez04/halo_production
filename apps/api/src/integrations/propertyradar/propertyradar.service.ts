@@ -73,7 +73,8 @@ export class PropertyRadarService {
     private controlPlane: ControlPlaneService,
     private costControl: IntegrationCostControlService,
   ) {
-    this.baseUrl = process.env.PROPERTYRADAR_BASE_URL || 'https://api.propertyradar.com/v1';
+    this.baseUrl =
+      process.env.PROPERTYRADAR_BASE_URL || 'https://api.propertyradar.com/v1';
     this.apiKey = process.env.PROPERTYRADAR_API_KEY || '';
   }
 
@@ -86,31 +87,57 @@ export class PropertyRadarService {
       const params: Record<string, string> = {};
       if (opts?.limit) params.Limit = String(opts.limit);
       if (opts?.start) params.Start = String(opts.start);
-      const data = await this.request<PropertyRadarRecord[]>('POST', '/properties', { Criteria: criteria }, params);
-      const sourceRecord = await this.storeSourceRecord('/properties', { criteria, opts }, data);
+      const data = await this.request<PropertyRadarRecord[]>(
+        'POST',
+        '/properties',
+        { Criteria: criteria },
+        params,
+      );
+      const sourceRecord = await this.storeSourceRecord(
+        '/properties',
+        { criteria, opts },
+        data,
+      );
       return { data, sourceRecordId: sourceRecord.id };
     });
   }
 
   async getPropertyDetails(radarId: string, ctx: CostContext) {
     return this.run('property_lookup', { radarId }, ctx, async () => {
-      const data = await this.request<PropertyRadarRecord>('GET', `/properties/${radarId}`);
-      const sourceRecord = await this.storeSourceRecord(`/properties/${radarId}`, { radarId }, data);
+      const data = await this.request<PropertyRadarRecord>(
+        'GET',
+        `/properties/${radarId}`,
+      );
+      const sourceRecord = await this.storeSourceRecord(
+        `/properties/${radarId}`,
+        { radarId },
+        data,
+      );
       return { data, sourceRecordId: sourceRecord.id };
     });
   }
 
   async getOwnerDetails(radarId: string, ctx: CostContext) {
     return this.run('owner_details', { radarId }, ctx, async () => {
-      const data = await this.request<unknown>('GET', `/properties/${radarId}/owner`);
-      const sourceRecord = await this.storeSourceRecord(`/properties/${radarId}/owner`, { radarId }, data);
+      const data = await this.request<unknown>(
+        'GET',
+        `/properties/${radarId}/owner`,
+      );
+      const sourceRecord = await this.storeSourceRecord(
+        `/properties/${radarId}/owner`,
+        { radarId },
+        data,
+      );
       return { data, sourceRecordId: sourceRecord.id };
     });
   }
 
   async appendContacts(radarId: string, ctx: CostContext) {
     return this.run('append_contacts', { radarId }, ctx, async () => {
-      const data = await this.request<PropertyRadarSkipTraceResponse>('GET', `/properties/${radarId}/contacts`);
+      const data = await this.request<PropertyRadarSkipTraceResponse>(
+        'GET',
+        `/properties/${radarId}/contacts`,
+      );
       const sourceRecord = await this.storeSourceRecord(
         `/properties/${radarId}/contacts`,
         { radarId },
@@ -122,7 +149,10 @@ export class PropertyRadarService {
 
   async getTransactionHistory(radarId: string, ctx: CostContext) {
     return this.run('transaction_history', { radarId }, ctx, async () => {
-      const data = await this.request<unknown[]>('GET', `/properties/${radarId}/transactions`);
+      const data = await this.request<unknown[]>(
+        'GET',
+        `/properties/${radarId}/transactions`,
+      );
       const sourceRecord = await this.storeSourceRecord(
         `/properties/${radarId}/transactions`,
         { radarId },
@@ -157,14 +187,30 @@ export class PropertyRadarService {
   }
 
   async importRecords(
-    records: Array<{ Address: string; City?: string; State?: string; Zip?: string }>,
+    records: Array<{
+      Address: string;
+      City?: string;
+      State?: string;
+      Zip?: string;
+    }>,
     ctx: CostContext,
   ) {
-    return this.run('import', { recordCount: records.length }, ctx, async () => {
-      const data = await this.request<unknown>('POST', '/import', { Records: records });
-      const sourceRecord = await this.storeSourceRecord('/import', { recordCount: records.length }, data);
-      return { data, sourceRecordId: sourceRecord.id };
-    });
+    return this.run(
+      'import',
+      { recordCount: records.length },
+      ctx,
+      async () => {
+        const data = await this.request<unknown>('POST', '/import', {
+          Records: records,
+        });
+        const sourceRecord = await this.storeSourceRecord(
+          '/import',
+          { recordCount: records.length },
+          data,
+        );
+        return { data, sourceRecordId: sourceRecord.id };
+      },
+    );
   }
 
   // ---- internal helpers ----
@@ -184,13 +230,15 @@ export class PropertyRadarService {
         'PROPERTYRADAR_API_KEY',
       );
     }
-    const out = await this.costControl.checkAndCall<Record<string, unknown>, T>({
-      provider: 'propertyradar',
-      action,
-      payload,
-      context: ctx,
-      execute: exec,
-    });
+    const out = await this.costControl.checkAndCall<Record<string, unknown>, T>(
+      {
+        provider: 'propertyradar',
+        action,
+        payload,
+        context: ctx,
+        execute: exec,
+      },
+    );
     return (out.result as T | null) ?? null;
   }
 
@@ -219,13 +267,20 @@ export class PropertyRadarService {
 
         const res = await fetch(url, init);
         if (!res.ok) {
-          if ((res.status === 429 || res.status >= 500) && attempt < retries - 1) {
+          if (
+            (res.status === 429 || res.status >= 500) &&
+            attempt < retries - 1
+          ) {
             const delay = Math.pow(2, attempt) * 1000;
-            this.logger.warn(`PropertyRadar ${res.status} on ${path}, retrying in ${delay}ms`);
+            this.logger.warn(
+              `PropertyRadar ${res.status} on ${path}, retrying in ${delay}ms`,
+            );
             await sleep(delay);
             continue;
           }
-          throw new Error(`PropertyRadar API error: ${res.status} ${res.statusText}`);
+          throw new Error(
+            `PropertyRadar API error: ${res.status} ${res.statusText}`,
+          );
         }
         return (await res.json()) as T;
       } catch (err) {
@@ -241,7 +296,10 @@ export class PropertyRadarService {
     request: Record<string, unknown>,
     response: unknown,
   ) {
-    const requestHash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    const requestHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(request))
+      .digest('hex');
     return this.prisma.sourceRecord.create({
       data: {
         provider: 'propertyradar',

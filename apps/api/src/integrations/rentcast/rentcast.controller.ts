@@ -15,7 +15,11 @@ export class RentCastController {
     @Query('city') city: string,
     @Query('state') state: string,
   ) {
-    return this.rentCastService.getListings(city, state, { accountId, actor: 'user', userId });
+    return this.rentCastService.getListings(city, state, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 
   @Get('property')

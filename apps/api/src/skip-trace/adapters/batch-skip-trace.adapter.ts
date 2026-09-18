@@ -24,21 +24,34 @@ interface BatchResponse {
 export class BatchSkipTraceAdapter implements SkipTraceAdapter {
   readonly providerKey = 'batch_skiptrace';
   private readonly logger = new Logger(BatchSkipTraceAdapter.name);
-  private readonly baseUrl = process.env.BATCH_SKIPTRACE_BASE_URL || 'https://api.batchskiptracing.com/v2';
+  private readonly baseUrl =
+    process.env.BATCH_SKIPTRACE_BASE_URL ||
+    'https://api.batchskiptracing.com/v2';
   private readonly apiKey = process.env.BATCH_SKIPTRACE_API_KEY || '';
 
   constructor(private costControl: IntegrationCostControlService) {}
 
-  async appendContacts(input: SkipTraceInput, ctx?: CostContext): Promise<SkipTraceResult> {
+  async appendContacts(
+    input: SkipTraceInput,
+    ctx?: CostContext,
+  ): Promise<SkipTraceResult> {
     if (!this.apiKey) {
       this.logger.warn('BATCH_SKIPTRACE_API_KEY missing — returning no_match');
-      return { provider: this.providerKey, status: 'error', phones: [], emails: [] };
+      return {
+        provider: this.providerKey,
+        status: 'error',
+        phones: [],
+        emails: [],
+      };
     }
     if (!ctx) {
       throw new Error('BatchSkipTraceAdapter requires a CostContext');
     }
 
-    const out = await this.costControl.checkAndCall<SkipTraceInput, BatchResponse>({
+    const out = await this.costControl.checkAndCall<
+      SkipTraceInput,
+      BatchResponse
+    >({
       provider: this.providerKey,
       action: 'append_contacts',
       payload: input,
@@ -67,7 +80,9 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
           }),
         });
         if (!res.ok) {
-          throw new Error(`Batch skip-trace failed: ${res.status} ${res.statusText}`);
+          throw new Error(
+            `Batch skip-trace failed: ${res.status} ${res.statusText}`,
+          );
         }
         const json = (await res.json()) as { results?: BatchResponse[] };
         return json.results?.[0] ?? {};
@@ -75,12 +90,23 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
     });
 
     if (!out.result) {
-      return { provider: this.providerKey, status: 'error', phones: [], emails: [] };
+      return {
+        provider: this.providerKey,
+        status: 'error',
+        phones: [],
+        emails: [],
+      };
     }
 
     const data = out.result;
     if (!data.phones?.length && !data.emails?.length) {
-      return { provider: this.providerKey, status: 'no_match', phones: [], emails: [], raw: data };
+      return {
+        provider: this.providerKey,
+        status: 'no_match',
+        phones: [],
+        emails: [],
+        raw: data,
+      };
     }
     return {
       provider: this.providerKey,
@@ -97,7 +123,9 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
   }
 }
 
-function normalizePhoneType(t: string | undefined): 'mobile' | 'landline' | 'voip' | 'unknown' {
+function normalizePhoneType(
+  t: string | undefined,
+): 'mobile' | 'landline' | 'voip' | 'unknown' {
   switch ((t ?? '').toLowerCase()) {
     case 'mobile':
     case 'wireless':

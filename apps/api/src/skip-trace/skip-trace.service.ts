@@ -21,23 +21,37 @@ export class SkipTraceService {
   private readonly logger = new Logger(SkipTraceService.name);
 
   constructor(
-    @Inject(BatchSkipTraceAdapter) private readonly batch: BatchSkipTraceAdapter,
+    @Inject(BatchSkipTraceAdapter)
+    private readonly batch: BatchSkipTraceAdapter,
     @Inject(StubSkipTraceAdapter) private readonly stub: StubSkipTraceAdapter,
-    @Inject(PropertyRadarSkipTraceAdapter) private readonly propertyRadar: PropertyRadarSkipTraceAdapter,
+    @Inject(PropertyRadarSkipTraceAdapter)
+    private readonly propertyRadar: PropertyRadarSkipTraceAdapter,
   ) {}
 
-  async appendContacts(input: SkipTraceInput, ctx: CostContext): Promise<SkipTraceResult> {
+  async appendContacts(
+    input: SkipTraceInput,
+    ctx: CostContext,
+  ): Promise<SkipTraceResult> {
     const adapter = this.resolveAdapter();
     try {
       return await callAdapter(adapter, input, ctx);
     } catch (err) {
-      this.logger.error(`Skip-trace failed via ${adapter.providerKey}: ${(err as Error).message}`);
-      return { provider: adapter.providerKey, status: 'error', phones: [], emails: [] };
+      this.logger.error(
+        `Skip-trace failed via ${adapter.providerKey}: ${(err as Error).message}`,
+      );
+      return {
+        provider: adapter.providerKey,
+        status: 'error',
+        phones: [],
+        emails: [],
+      };
     }
   }
 
   private resolveAdapter(): SkipTraceAdapter {
-    const requested = (process.env.SKIP_TRACE_PROVIDER || 'batch').toLowerCase() as SkipTraceProviderKey;
+    const requested = (
+      process.env.SKIP_TRACE_PROVIDER || 'batch'
+    ).toLowerCase() as SkipTraceProviderKey;
     switch (requested) {
       case 'stub':
         return this.stub;

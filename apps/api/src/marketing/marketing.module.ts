@@ -12,5 +12,3 @@ import { TimelineModule } from '../timeline/timeline.module';
   exports: [MarketingService],
 })
 export class MarketingModule {}
-
-

@@ -59,7 +59,11 @@ export class RentCastService {
     private costControl: IntegrationCostControlService,
   ) {}
 
-  async getListings(city: string, state: string, ctx: CostContext): Promise<RentCastListing[]> {
+  async getListings(
+    city: string,
+    state: string,
+    ctx: CostContext,
+  ): Promise<RentCastListing[]> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('rentcast');
     }
@@ -70,18 +74,28 @@ export class RentCastService {
       );
     }
 
-    const out = await this.costControl.checkAndCall<{ city: string; state: string }, RentCastListing[]>({
+    const out = await this.costControl.checkAndCall<
+      { city: string; state: string },
+      RentCastListing[]
+    >({
       provider: 'rentcast',
       action: 'listings',
       payload: { city, state },
       context: ctx,
       execute: async () => {
-        const params = new URLSearchParams({ city, state, status: 'Active', limit: '50' });
+        const params = new URLSearchParams({
+          city,
+          state,
+          status: 'Active',
+          limit: '50',
+        });
         const res = await fetch(`${this.baseUrl}/listings/sale?${params}`, {
           headers: { 'X-Api-Key': this.apiKey, Accept: 'application/json' },
         });
         if (!res.ok) {
-          this.logger.error(`RentCast listings API error: ${res.status} ${res.statusText}`);
+          this.logger.error(
+            `RentCast listings API error: ${res.status} ${res.statusText}`,
+          );
           return [];
         }
         return (await res.json()) as RentCastListing[];
@@ -90,7 +104,10 @@ export class RentCastService {
     return (out.result as RentCastListing[] | null) ?? [];
   }
 
-  async getPropertyRecord(address: string, ctx: CostContext): Promise<RentCastPropertyRecord | null> {
+  async getPropertyRecord(
+    address: string,
+    ctx: CostContext,
+  ): Promise<RentCastPropertyRecord | null> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('rentcast');
     }
@@ -101,7 +118,10 @@ export class RentCastService {
       );
     }
 
-    const out = await this.costControl.checkAndCall<{ address: string }, RentCastPropertyRecord | null>({
+    const out = await this.costControl.checkAndCall<
+      { address: string },
+      RentCastPropertyRecord | null
+    >({
       provider: 'rentcast',
       action: 'property',
       payload: { address },
@@ -134,7 +154,10 @@ export class RentCastService {
       );
     }
 
-    const out = await this.costControl.checkAndCall<{ address: string }, RentCastValueEstimate | null>({
+    const out = await this.costControl.checkAndCall<
+      { address: string },
+      RentCastValueEstimate | null
+    >({
       provider: 'rentcast',
       action: 'value_estimate',
       payload: { address },

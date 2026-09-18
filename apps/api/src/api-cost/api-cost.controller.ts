@@ -29,7 +29,10 @@ export class ApiCostController {
     @CurrentAccountId() accountId: string,
     @Query('days') days?: string,
   ) {
-    return this.apiCostService.getDailyTrend(accountId, days ? parseInt(days) : 30);
+    return this.apiCostService.getDailyTrend(
+      accountId,
+      days ? parseInt(days) : 30,
+    );
   }
 
   @Get('endpoint-breakdown')

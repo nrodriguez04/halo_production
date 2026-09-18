@@ -117,9 +117,15 @@ export class ApiCostService {
     const dailyAvg30 = (monthResult._sum.costUsd || 0) / 30;
 
     return {
-      today: { cost: todayResult._sum.costUsd || 0, calls: todayResult._count.id },
+      today: {
+        cost: todayResult._sum.costUsd || 0,
+        calls: todayResult._count.id,
+      },
       week: { cost: weekResult._sum.costUsd || 0, calls: weekResult._count.id },
-      month: { cost: monthResult._sum.costUsd || 0, calls: monthResult._count.id },
+      month: {
+        cost: monthResult._sum.costUsd || 0,
+        calls: monthResult._count.id,
+      },
       projectedMonthly: dailyAvg30 * 30,
     };
   }

@@ -57,15 +57,19 @@ export class QueueService {
     jobRunId: string;
     tenantId: string;
     dealId: string;
-    type: 'GENERATE_FLYER_DRAFT' | 'GENERATE_BUYER_BLAST_DRAFT' | 'GENERATE_VIDEO_SCRIPT';
+    type:
+      | 'GENERATE_FLYER_DRAFT'
+      | 'GENERATE_BUYER_BLAST_DRAFT'
+      | 'GENERATE_VIDEO_SCRIPT';
     buyerIds?: string[];
     actorId?: string | null;
   }) {
     // Route GENERATE_VIDEO_SCRIPT to its dedicated queue so it doesn't
     // share concurrency with the rest of the marketing pipeline.
-    const queue = payload.type === 'GENERATE_VIDEO_SCRIPT'
-      ? this.marketingVideoQueue
-      : this.marketingQueue;
+    const queue =
+      payload.type === 'GENERATE_VIDEO_SCRIPT'
+        ? this.marketingVideoQueue
+        : this.marketingQueue;
     return queue.add(payload.type, payload);
   }
 }

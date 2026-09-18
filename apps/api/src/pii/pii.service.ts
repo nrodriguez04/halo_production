@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { encryptPII, decryptPII, needsRotation, reEncryptPII } from '@halo/shared';
+import {
+  encryptPII,
+  decryptPII,
+  needsRotation,
+  reEncryptPII,
+} from '@halo/shared';
 
 @Injectable()
 export class PIIService {
@@ -8,7 +13,13 @@ export class PIIService {
 
   constructor(private prisma: PrismaService) {}
 
-  async encrypt(accountId: string, fieldName: string, plaintext: string, leadId?: string, propertyId?: string): Promise<string> {
+  async encrypt(
+    accountId: string,
+    fieldName: string,
+    plaintext: string,
+    leadId?: string,
+    propertyId?: string,
+  ): Promise<string> {
     const envelope = encryptPII(plaintext);
 
     const record = await this.prisma.pIIEnvelope.create({
@@ -60,7 +71,10 @@ export class PIIService {
   }
 
   async rotateAll(): Promise<number> {
-    const currentVersion = parseInt(process.env.PII_ENCRYPTION_KEY_CURRENT_VERSION || '1', 10);
+    const currentVersion = parseInt(
+      process.env.PII_ENCRYPTION_KEY_CURRENT_VERSION || '1',
+      10,
+    );
     const records = await this.prisma.pIIEnvelope.findMany({
       where: { keyVersion: { lt: currentVersion } },
     });
@@ -79,7 +93,9 @@ export class PIIService {
         });
         rotated++;
       } catch (err: any) {
-        this.logger.error(`Failed to rotate PII envelope ${record.id}: ${err.message}`);
+        this.logger.error(
+          `Failed to rotate PII envelope ${record.id}: ${err.message}`,
+        );
       }
     }
 

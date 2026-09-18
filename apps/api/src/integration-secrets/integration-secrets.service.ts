@@ -18,7 +18,7 @@ export class IntegrationSecretsService {
     } else if (process.env.NODE_ENV === 'production') {
       throw new Error(
         'SECRETS_ENCRYPTION_KEY must be set to a 64-char hex string in production. ' +
-          'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+          "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
       );
     } else {
       this.encryptionKey = crypto
@@ -163,7 +163,10 @@ export class IntegrationSecretsService {
           result = await this.testPropertyRadar();
           break;
         case 'docusign':
-          result = { connected: false, error: 'DocuSign connectivity test requires OAuth flow' };
+          result = {
+            connected: false,
+            error: 'DocuSign connectivity test requires OAuth flow',
+          };
           break;
         case 'openclaw':
           result = await this.testOpenClaw();
@@ -176,7 +179,13 @@ export class IntegrationSecretsService {
     }
 
     if (accountId) {
-      await this.logConnectivityTest(provider, accountId, userId, result, Date.now() - startedAt);
+      await this.logConnectivityTest(
+        provider,
+        accountId,
+        userId,
+        result,
+        Date.now() - startedAt,
+      );
     }
     return result;
   }
@@ -219,7 +228,9 @@ export class IntegrationSecretsService {
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to log connectivity test for ${providerKey}: ${err}`);
+      this.logger.warn(
+        `Failed to log connectivity test for ${providerKey}: ${err}`,
+      );
     }
   }
 
@@ -273,7 +284,8 @@ export class IntegrationSecretsService {
   private async testTwilio(): Promise<{ connected: boolean; error?: string }> {
     const sid = await this.resolve('twilio', 'TWILIO_ACCOUNT_SID');
     const token = await this.resolve('twilio', 'TWILIO_AUTH_TOKEN');
-    if (!sid || !token) return { connected: false, error: 'Missing SID or Auth Token' };
+    if (!sid || !token)
+      return { connected: false, error: 'Missing SID or Auth Token' };
 
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}.json`,
@@ -390,7 +402,8 @@ export class IntegrationSecretsService {
     error?: string;
   }> {
     const enabled = process.env.FEATURE_OPENCLAW === 'true';
-    if (!enabled) return { connected: false, error: 'FEATURE_OPENCLAW is not true' };
+    if (!enabled)
+      return { connected: false, error: 'FEATURE_OPENCLAW is not true' };
     return { connected: true };
   }
 }

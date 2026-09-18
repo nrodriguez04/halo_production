@@ -27,9 +27,10 @@ export class CommunicationsService {
   async create(data: MessageCreate) {
     // Check control plane
     const controlPlane = await this.getControlPlane(data.accountId);
-    const channelEnabled = data.channel === 'sms' 
-      ? controlPlane.smsEnabled 
-      : controlPlane.emailEnabled;
+    const channelEnabled =
+      data.channel === 'sms'
+        ? controlPlane.smsEnabled
+        : controlPlane.emailEnabled;
 
     if (!controlPlane.enabled || !channelEnabled) {
       throw new BadRequestException('Communications are currently disabled');
@@ -37,7 +38,9 @@ export class CommunicationsService {
 
     const compliance = await this.getComplianceFacts(data);
     const localHour =
-      typeof compliance.localHour === 'number' ? compliance.localHour : undefined;
+      typeof compliance.localHour === 'number'
+        ? compliance.localHour
+        : undefined;
 
     try {
       assertPolicy({
@@ -123,9 +126,14 @@ export class CommunicationsService {
     return message;
   }
 
-  async approve(id: string, accountId: string, userId: string, queueService?: any) {
+  async approve(
+    id: string,
+    accountId: string,
+    userId: string,
+    queueService?: any,
+  ) {
     const message = await this.findOne(id, accountId);
-    
+
     if (message.status !== 'pending_approval') {
       throw new BadRequestException('Message is not pending approval');
     }
@@ -133,9 +141,12 @@ export class CommunicationsService {
     // A provider receipt means this message was already dispatched once.
     // Whatever put it back into pending_approval, approving it again would
     // send a second copy.
-    const priorReceipt = (message.metadata as Record<string, unknown> | null)?.twilioMessageSid;
+    const priorReceipt = (message.metadata as Record<string, unknown> | null)
+      ?.twilioMessageSid;
     if (typeof priorReceipt === 'string' && priorReceipt.length > 0) {
-      throw new BadRequestException('Message was already dispatched to the provider');
+      throw new BadRequestException(
+        'Message was already dispatched to the provider',
+      );
     }
 
     const controlPlane = await this.getControlPlane(accountId);
@@ -253,6 +264,4 @@ export class CommunicationsService {
       leadId: data.leadId,
     });
   }
-
 }
-

@@ -1,6 +1,8 @@
 import request = require('supertest');
 
-const describePolicy = process.env.E2E_TOKEN_TENANT_A ? describe : describe.skip;
+const describePolicy = process.env.E2E_TOKEN_TENANT_A
+  ? describe
+  : describe.skip;
 
 describePolicy('Policy enforcement (e2e)', () => {
   const apiBase = process.env.API_BASE_URL || 'http://localhost:3001';
@@ -54,9 +56,7 @@ describePolicy('Policy enforcement (e2e)', () => {
   });
 
   it('Allows operations when control plane is fully enabled', async () => {
-    const res = await request(apiBase)
-      .get('/api/leads')
-      .set(authHeader);
+    const res = await request(apiBase).get('/api/leads').set(authHeader);
     expect(res.status).toBe(200);
   });
 });

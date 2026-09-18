@@ -1,6 +1,8 @@
 import request = require('supertest');
 
-const describeTenant = process.env.E2E_TOKEN_TENANT_A ? describe : describe.skip;
+const describeTenant = process.env.E2E_TOKEN_TENANT_A
+  ? describe
+  : describe.skip;
 
 describeTenant('Tenant isolation (e2e)', () => {
   const apiBase = process.env.API_BASE_URL || 'http://localhost:3001';
@@ -50,9 +52,7 @@ describeTenant('Tenant isolation (e2e)', () => {
       .set(authHeader(tenantA.token))
       .expect(200);
 
-    const leaked = (res.body || []).find(
-      (l: any) => l.id === tenantB.leadId,
-    );
+    const leaked = (res.body || []).find((l: any) => l.id === tenantB.leadId);
     expect(leaked).toBeUndefined();
   });
 
@@ -62,9 +62,7 @@ describeTenant('Tenant isolation (e2e)', () => {
       .set(authHeader(tenantA.token))
       .expect(200);
 
-    const leaked = (res.body || []).find(
-      (d: any) => d.id === tenantB.dealId,
-    );
+    const leaked = (res.body || []).find((d: any) => d.id === tenantB.dealId);
     expect(leaked).toBeUndefined();
   });
 

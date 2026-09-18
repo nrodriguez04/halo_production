@@ -59,18 +59,13 @@ export class DealEconomicsService {
     });
 
     if (!economics) {
-      throw new NotFoundException(
-        `Economics for deal ${dealId} not found`,
-      );
+      throw new NotFoundException(`Economics for deal ${dealId} not found`);
     }
 
     return economics;
   }
 
-  async getByTenant(
-    tenantId: string,
-    opts?: { skip?: number; take?: number },
-  ) {
+  async getByTenant(tenantId: string, opts?: { skip?: number; take?: number }) {
     return this.prisma.dealEconomics.findMany({
       where: { tenantId },
       orderBy: { updatedAt: 'desc' },
@@ -110,10 +105,7 @@ export class DealEconomicsService {
       grossRevenue = data.assignmentFee;
     } else if (data.salePrice != null && data.purchasePrice != null) {
       grossRevenue = data.salePrice - data.purchasePrice;
-    } else if (
-      data.assignmentPrice != null &&
-      data.contractPrice != null
-    ) {
+    } else if (data.assignmentPrice != null && data.contractPrice != null) {
       grossRevenue = data.assignmentPrice - data.contractPrice;
     }
 
@@ -135,10 +127,7 @@ export class DealEconomicsService {
       where: { tenantId, entityType: 'deal', entityId: dealId },
     });
 
-    const totalAiCost = runs.reduce(
-      (sum, r) => sum + (r.aiCostUsd || 0),
-      0,
-    );
+    const totalAiCost = runs.reduce((sum, r) => sum + (r.aiCostUsd || 0), 0);
     const totalMsgCost = runs.reduce(
       (sum, r) => sum + (r.messageCostUsd || 0),
       0,

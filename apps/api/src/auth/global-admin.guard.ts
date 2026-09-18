@@ -26,7 +26,9 @@ export class GlobalAdminGuard implements CanActivate {
 
     if (
       (typeof accountId === 'string' && GLOBAL_ADMIN_ACCOUNTS.has(accountId)) ||
-      permissions.some((permission) => GLOBAL_ADMIN_PERMISSIONS.has(permission)) ||
+      permissions.some((permission) =>
+        GLOBAL_ADMIN_PERMISSIONS.has(permission),
+      ) ||
       roles.some((role) => GLOBAL_ADMIN_ROLES.has(role))
     ) {
       return true;
@@ -39,7 +41,9 @@ export class GlobalAdminGuard implements CanActivate {
 
   private normalizeStringArray(value: unknown): string[] {
     if (Array.isArray(value)) {
-      return value.filter((entry): entry is string => typeof entry === 'string');
+      return value.filter(
+        (entry): entry is string => typeof entry === 'string',
+      );
     }
     if (typeof value === 'string') {
       return value.split(' ').filter(Boolean);

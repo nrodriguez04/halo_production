@@ -43,14 +43,22 @@ export class EmailSendService {
     return this._smtp;
   }
 
-  async sendEmail(input: SendEmailInput, ctx: CostContext): Promise<SendEmailResult | null> {
+  async sendEmail(
+    input: SendEmailInput,
+    ctx: CostContext,
+  ): Promise<SendEmailResult | null> {
     const preferredProvider = process.env.RESEND_API_KEY ? 'resend' : 'smtp';
-    const out = await this.costControl.checkAndCall<SendEmailInput, SendEmailResult>({
+    const out = await this.costControl.checkAndCall<
+      SendEmailInput,
+      SendEmailResult
+    >({
       provider: preferredProvider,
       action: 'send_email',
       payload: input,
       context: ctx,
-      hints: input.messageId ? { idempotencyKey: `email:${input.messageId}` } : undefined,
+      hints: input.messageId
+        ? { idempotencyKey: `email:${input.messageId}` }
+        : undefined,
       execute: async (resolved) => {
         if (resolved.provider === 'resend') {
           return this.sendViaResend(input);

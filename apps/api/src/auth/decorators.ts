@@ -20,4 +20,3 @@ export const CurrentUserId = createParamDecorator(
     return request.user?.userId ?? request.userId;
   },
 );
-

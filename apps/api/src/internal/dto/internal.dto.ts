@@ -41,10 +41,16 @@ export class ChatCompletionDto extends CostAttributionDto {
   @Type(() => ChatMessageDto)
   messages!: ChatMessageDto[];
 
-  @IsOptional() @IsNumber() @Min(0) @Max(2)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(2)
   temperature?: number;
 
-  @IsOptional() @IsInt() @Min(1) @Max(32_000)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(32_000)
   maxTokens?: number;
 }
 
@@ -56,11 +62,13 @@ export class SendSmsDto extends CostAttributionDto {
   @MaxLength(1600)
   body!: string;
 
-  @IsOptional() @IsIn(['us', 'toll_free'])
+  @IsOptional()
+  @IsIn(['us', 'toll_free'])
   variant?: 'us' | 'toll_free';
 
   /** Doubles as the idempotency key so a retried job cannot double-send. */
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   messageId?: string;
 }
 
@@ -72,6 +80,7 @@ export class SendEmailDto extends CostAttributionDto {
   @IsOptional() @IsString() @MaxLength(200_000) html?: string;
   @IsOptional() @IsString() from?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   messageId?: string;
 }

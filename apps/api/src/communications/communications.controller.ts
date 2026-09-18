@@ -23,11 +23,11 @@ export class CommunicationsController {
   ) {}
 
   @Post('messages')
-  async create(
-    @Body() data: unknown,
-    @CurrentAccountId() accountId: string,
-  ) {
-    const validated = MessageCreateSchema.parse({ ...(data as any), accountId });
+  async create(@Body() data: unknown, @CurrentAccountId() accountId: string) {
+    const validated = MessageCreateSchema.parse({
+      ...(data as any),
+      accountId,
+    });
     return this.communicationsService.create(validated);
   }
 
@@ -73,7 +73,12 @@ export class CommunicationsController {
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
   ) {
-    return this.communicationsService.reject(id, accountId, userId, body.reason);
+    return this.communicationsService.reject(
+      id,
+      accountId,
+      userId,
+      body.reason,
+    );
   }
 
   @Get('approval-queue')
@@ -88,4 +93,3 @@ export class CommunicationsController {
     });
   }
 }
-

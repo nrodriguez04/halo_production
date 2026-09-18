@@ -37,7 +37,10 @@ const THRESHOLDS: Record<string, ScoreThreshold> = {
   // AI — cheap for classification, expensive for reasoning
   'openai.chat_completion.gpt-4o-mini': { minScore: 0 },
   'openai.chat_completion.gpt-4o': { minScore: 80, minExpectedRoiUsd: 10000 },
-  'openai.chat_completion.gpt-4-turbo': { minScore: 80, minExpectedRoiUsd: 10000 },
+  'openai.chat_completion.gpt-4-turbo': {
+    minScore: 80,
+    minExpectedRoiUsd: 10000,
+  },
 };
 
 export const DEFAULT_THRESHOLD: ScoreThreshold = { minScore: 0 };

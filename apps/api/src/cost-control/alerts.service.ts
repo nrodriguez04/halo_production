@@ -29,7 +29,8 @@ export class AlertsService {
       const buckets = await this.prisma.integrationBudgetBucket.findMany({
         where: { id: { in: params.bucketIds } },
       });
-      const events: { threshold: number; bucket: typeof buckets[number] }[] = [];
+      const events: { threshold: number; bucket: (typeof buckets)[number] }[] =
+        [];
       for (const b of buckets) {
         const post = b.currentSpendUsd / b.hardCapUsd;
         const pre = (b.currentSpendUsd - params.deltaUsd) / b.hardCapUsd;
@@ -48,7 +49,11 @@ export class AlertsService {
           eventType: `cost_governance.${thresholdLabel(e.threshold)}_cap_crossed`,
           actorType: 'system' as const,
           payloadJson: {
-            bucket: { scope: e.bucket.scope, scopeRef: e.bucket.scopeRef, period: e.bucket.period },
+            bucket: {
+              scope: e.bucket.scope,
+              scopeRef: e.bucket.scopeRef,
+              period: e.bucket.period,
+            },
             spent: e.bucket.currentSpendUsd,
             cap: e.bucket.hardCapUsd,
             ratio: e.bucket.currentSpendUsd / e.bucket.hardCapUsd,

@@ -47,8 +47,7 @@ export class AuthGuard implements CanActivate {
         claims?.uid ||
         undefined;
 
-      const { accountId, permissions, roles } =
-        this.extractTenantInfo(claims);
+      const { accountId, permissions, roles } = this.extractTenantInfo(claims);
 
       if (!accountId) {
         this.logger.warn(
@@ -146,4 +145,3 @@ export class AuthGuard implements CanActivate {
     return [];
   }
 }
-

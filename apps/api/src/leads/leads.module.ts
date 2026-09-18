@@ -11,4 +11,3 @@ import { TimelineModule } from '../timeline/timeline.module';
   exports: [LeadsService],
 })
 export class LeadsModule {}
-

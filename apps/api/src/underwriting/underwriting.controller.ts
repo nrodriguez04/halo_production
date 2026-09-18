@@ -25,4 +25,3 @@ export class UnderwritingController {
     return this.underwritingService.getResult(accountId, dealId);
   }
 }
-

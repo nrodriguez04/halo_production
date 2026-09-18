@@ -18,7 +18,9 @@ import * as fallbackChain from '../policy/fallback-chain';
 //
 // Mocks the entire data layer so we can drive every decision deterministically.
 
-const baseIntent = (over: Partial<CostIntent<unknown, unknown>> = {}): CostIntent<unknown, { ok: true }> => ({
+const baseIntent = (
+  over: Partial<CostIntent<unknown, unknown>> = {},
+): CostIntent<unknown, { ok: true }> => ({
   provider: 'attom',
   action: 'property_expanded_profile',
   payload: { address: '1 Main St' },
@@ -43,7 +45,14 @@ describe('IntegrationCostControlService', () => {
       integrationFeatureFlag: { findUnique: jest.fn().mockResolvedValue(null) },
       integrationCostEvent: {
         create: jest.fn(async (args: any) => ({ ...args.data })),
-        update: jest.fn(async (args: any) => ({ ...args.data, accountId: 'acc_1', providerKey: 'attom', action: 'property_expanded_profile', completedAt: new Date(), bucketIds: [] })),
+        update: jest.fn(async (args: any) => ({
+          ...args.data,
+          accountId: 'acc_1',
+          providerKey: 'attom',
+          action: 'property_expanded_profile',
+          completedAt: new Date(),
+          bucketIds: [],
+        })),
         findUnique: jest.fn(),
       },
       integrationBudgetBucket: {
@@ -92,19 +101,65 @@ describe('IntegrationCostControlService', () => {
       ],
     }).compile();
 
-    service = module.get<IntegrationCostControlService>(IntegrationCostControlService);
+    service = module.get<IntegrationCostControlService>(
+      IntegrationCostControlService,
+    );
 
     // Default provider — ATTOM, enabled, with rate limit
-    prisma.integrationProvider.findUnique.mockImplementation(async (args: any) => {
-      if (args.where.key === 'attom') return { id: 'p_attom', key: 'attom', enabled: true, rateLimitPerMin: 60 };
-      if (args.where.key === 'propertyradar') return { id: 'p_pr', key: 'propertyradar', enabled: true, rateLimitPerMin: 60 };
-      if (args.where.key === 'rentcast') return { id: 'p_rc', key: 'rentcast', enabled: true, rateLimitPerMin: 120 };
-      if (args.where.key === 'batch_skiptrace') return { id: 'p_bst', key: 'batch_skiptrace', enabled: true, rateLimitPerMin: null };
-      if (args.where.key === 'datazapp') return { id: 'p_dz', key: 'datazapp', enabled: true, rateLimitPerMin: null };
-      if (args.where.key === 'resend') return { id: 'p_resend', key: 'resend', enabled: true, rateLimitPerMin: null };
-      if (args.where.key === 'smtp') return { id: 'p_smtp', key: 'smtp', enabled: true, rateLimitPerMin: null };
-      return null;
-    });
+    prisma.integrationProvider.findUnique.mockImplementation(
+      async (args: any) => {
+        if (args.where.key === 'attom')
+          return {
+            id: 'p_attom',
+            key: 'attom',
+            enabled: true,
+            rateLimitPerMin: 60,
+          };
+        if (args.where.key === 'propertyradar')
+          return {
+            id: 'p_pr',
+            key: 'propertyradar',
+            enabled: true,
+            rateLimitPerMin: 60,
+          };
+        if (args.where.key === 'rentcast')
+          return {
+            id: 'p_rc',
+            key: 'rentcast',
+            enabled: true,
+            rateLimitPerMin: 120,
+          };
+        if (args.where.key === 'batch_skiptrace')
+          return {
+            id: 'p_bst',
+            key: 'batch_skiptrace',
+            enabled: true,
+            rateLimitPerMin: null,
+          };
+        if (args.where.key === 'datazapp')
+          return {
+            id: 'p_dz',
+            key: 'datazapp',
+            enabled: true,
+            rateLimitPerMin: null,
+          };
+        if (args.where.key === 'resend')
+          return {
+            id: 'p_resend',
+            key: 'resend',
+            enabled: true,
+            rateLimitPerMin: null,
+          };
+        if (args.where.key === 'smtp')
+          return {
+            id: 'p_smtp',
+            key: 'smtp',
+            enabled: true,
+            rateLimitPerMin: null,
+          };
+        return null;
+      },
+    );
 
     // Default reservation lookup
     prisma.integrationCostEvent.findUnique.mockResolvedValue({
@@ -119,24 +174,36 @@ describe('IntegrationCostControlService', () => {
   });
 
   it('rejects intents missing accountId', async () => {
-    const intent = baseIntent({ context: { accountId: '', actor: 'system' } as any });
+    const intent = baseIntent({
+      context: { accountId: '', actor: 'system' } as any,
+    });
     await expect(service.preflight(intent)).rejects.toThrow(/accountId/);
   });
 
   it('blocks when provider feature flag is disabled at registry', async () => {
-    prisma.integrationProvider.findUnique.mockResolvedValueOnce({ id: 'p_attom', key: 'attom', enabled: false, rateLimitPerMin: 60 });
+    prisma.integrationProvider.findUnique.mockResolvedValueOnce({
+      id: 'p_attom',
+      key: 'attom',
+      enabled: false,
+      rateLimitPerMin: 60,
+    });
     const decision = await service.preflight(baseIntent());
     expect(decision.kind).toBe('BLOCK_FEATURE_DISABLED');
   });
 
   it('blocks when tenant feature flag overrides registry off', async () => {
-    prisma.integrationFeatureFlag.findUnique.mockResolvedValueOnce({ enabled: false, flag: 'provider.attom' });
+    prisma.integrationFeatureFlag.findUnique.mockResolvedValueOnce({
+      enabled: false,
+      flag: 'provider.attom',
+    });
     const decision = await service.preflight(baseIntent());
     expect(decision.kind).toBe('BLOCK_FEATURE_DISABLED');
   });
 
   it('blocks duplicate calls when idempotency key has been seen', async () => {
-    rateLimit.checkDuplicate.mockResolvedValueOnce(new Date('2026-04-01T00:00:00Z'));
+    rateLimit.checkDuplicate.mockResolvedValueOnce(
+      new Date('2026-04-01T00:00:00Z'),
+    );
     const decision = await service.preflight(
       baseIntent({ hints: { idempotencyKey: 'lead-1:attom' } }),
     );
@@ -157,9 +224,27 @@ describe('IntegrationCostControlService', () => {
     // rentcast has no fallback chain configured, so the over-budget decision
     // is BLOCK rather than DOWNGRADE.
     budgets.findApplicable.mockResolvedValueOnce([
-      { id: 'b_1', scope: 'provider', scopeRef: 'rentcast', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
+      {
+        id: 'b_1',
+        scope: 'provider',
+        scopeRef: 'rentcast',
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      },
     ]);
-    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'rentcast', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true });
+    budgets.findOverHardCap.mockReturnValueOnce({
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'rentcast',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
     const decision = await service.preflight({
       ...baseIntent(),
       provider: 'rentcast',
@@ -170,18 +255,54 @@ describe('IntegrationCostControlService', () => {
 
   it('blocks ATTOM when over hard cap because cross-provider fallback is unsupported', async () => {
     budgets.findApplicable.mockResolvedValueOnce([
-      { id: 'b_1', scope: 'provider', scopeRef: 'attom', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
+      {
+        id: 'b_1',
+        scope: 'provider',
+        scopeRef: 'attom',
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      },
     ]);
-    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'attom', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true });
+    budgets.findOverHardCap.mockReturnValueOnce({
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'attom',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
     const decision = await service.preflight(baseIntent());
     expect(decision.kind).toBe('BLOCK_OVER_BUDGET');
   });
 
   it('blocks skip-trace when over hard cap because cross-provider fallback is unsupported', async () => {
     budgets.findApplicable.mockResolvedValueOnce([
-      { id: 'b_1', scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true },
+      {
+        id: 'b_1',
+        scope: 'provider',
+        scopeRef: 'batch_skiptrace',
+        period: 'month',
+        hardCapUsd: 100,
+        softCapUsd: 80,
+        currentSpendUsd: 99.95,
+        enabled: true,
+      },
     ]);
-    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 99.95, enabled: true });
+    budgets.findOverHardCap.mockReturnValueOnce({
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'batch_skiptrace',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 99.95,
+      enabled: true,
+    });
     const decision = await service.preflight({
       ...baseIntent(),
       provider: 'batch_skiptrace',
@@ -192,9 +313,27 @@ describe('IntegrationCostControlService', () => {
 
   it('returns DOWNGRADE_PROVIDER when over hard cap and provider has a supported fallback', async () => {
     budgets.findApplicable.mockResolvedValueOnce([
-      { id: 'b_1', scope: 'provider', scopeRef: 'resend', period: 'month', hardCapUsd: 20, softCapUsd: 16, currentSpendUsd: 19.95, enabled: true },
+      {
+        id: 'b_1',
+        scope: 'provider',
+        scopeRef: 'resend',
+        period: 'month',
+        hardCapUsd: 20,
+        softCapUsd: 16,
+        currentSpendUsd: 19.95,
+        enabled: true,
+      },
     ]);
-    budgets.findOverHardCap.mockReturnValueOnce({ id: 'b_1', scope: 'provider', scopeRef: 'resend', period: 'month', hardCapUsd: 20, softCapUsd: 16, currentSpendUsd: 19.95, enabled: true });
+    budgets.findOverHardCap.mockReturnValueOnce({
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'resend',
+      period: 'month',
+      hardCapUsd: 20,
+      softCapUsd: 16,
+      currentSpendUsd: 19.95,
+      enabled: true,
+    });
     const decision = await service.preflight({
       ...baseIntent(),
       provider: 'resend',
@@ -221,20 +360,24 @@ describe('IntegrationCostControlService', () => {
       .mockImplementation((key) => (chains[key]?.length ?? 0) > 0);
     const nextSpy = jest
       .spyOn(fallbackChain, 'nextFallback')
-      .mockImplementation((key, tried) => chains[key]?.find((c) => !tried.has(c)) ?? null);
+      .mockImplementation(
+        (key, tried) => chains[key]?.find((c) => !tried.has(c)) ?? null,
+      );
 
-    budgets.findApplicable.mockImplementation(async (intent: CostIntent<unknown, unknown>) => [
-      {
-        id: `b_${intent.provider}`,
-        scope: 'provider',
-        scopeRef: intent.provider,
-        period: 'month',
-        hardCapUsd: 100,
-        softCapUsd: 80,
-        currentSpendUsd: 99.95,
-        enabled: true,
-      },
-    ]);
+    budgets.findApplicable.mockImplementation(
+      async (intent: CostIntent<unknown, unknown>) => [
+        {
+          id: `b_${intent.provider}`,
+          scope: 'provider',
+          scopeRef: intent.provider,
+          period: 'month',
+          hardCapUsd: 100,
+          softCapUsd: 80,
+          currentSpendUsd: 99.95,
+          enabled: true,
+        },
+      ],
+    );
     budgets.findOverHardCap.mockImplementation((buckets: any[]) => buckets[0]);
 
     const exec = jest.fn(async () => ({ ok: true }));
@@ -252,12 +395,14 @@ describe('IntegrationCostControlService', () => {
     // The final block is recorded as an auditable ledger row; nothing was
     // executed, so there must be no non-blocked event.
     expect(prisma.integrationCostEvent.create).toHaveBeenCalledTimes(1);
-    expect(prisma.integrationCostEvent.create.mock.calls[0][0].data.status).toBe('blocked');
-    expect(budgets.findApplicable.mock.calls.map(([intent]: [CostIntent<unknown, unknown>]) => intent.provider)).toEqual([
-      'batch_skiptrace',
-      'datazapp',
-      'propertyradar',
-    ]);
+    expect(
+      prisma.integrationCostEvent.create.mock.calls[0][0].data.status,
+    ).toBe('blocked');
+    expect(
+      budgets.findApplicable.mock.calls.map(
+        ([intent]: [CostIntent<unknown, unknown>]) => intent.provider,
+      ),
+    ).toEqual(['batch_skiptrace', 'datazapp', 'propertyradar']);
 
     hasSpy.mockRestore();
     nextSpy.mockRestore();
@@ -277,7 +422,10 @@ describe('IntegrationCostControlService', () => {
   });
 
   it('queues when rate limit token is unavailable', async () => {
-    rateLimit.tryConsume.mockResolvedValueOnce({ allowed: false, retryAt: new Date(Date.now() + 30_000) });
+    rateLimit.tryConsume.mockResolvedValueOnce({
+      allowed: false,
+      retryAt: new Date(Date.now() + 30_000),
+    });
     const decision = await service.preflight(baseIntent());
     expect(decision.kind).toBe('QUEUE_UNTIL_NEXT_BUDGET_PERIOD');
   });
@@ -298,7 +446,16 @@ describe('IntegrationCostControlService', () => {
   });
 
   it('returns ALLOW_WITH_WARNING when soft cap crossed', async () => {
-    const overSoft = { id: 'b_1', scope: 'provider', scopeRef: 'attom', period: 'month', hardCapUsd: 100, softCapUsd: 80, currentSpendUsd: 79.95, enabled: true };
+    const overSoft = {
+      id: 'b_1',
+      scope: 'provider',
+      scopeRef: 'attom',
+      period: 'month',
+      hardCapUsd: 100,
+      softCapUsd: 80,
+      currentSpendUsd: 79.95,
+      enabled: true,
+    };
     budgets.findApplicable.mockResolvedValueOnce([overSoft]);
     budgets.findOverHardCap.mockReturnValueOnce(null);
     budgets.findOverSoftCap.mockReturnValueOnce(overSoft);
@@ -320,7 +477,9 @@ describe('IntegrationCostControlService', () => {
       },
     ]);
     prisma.manualBudgetOverride.findFirst.mockResolvedValueOnce({
-      id: 'o_1', extraBudgetUsd: 100, expiresAt: new Date(Date.now() + 86400000),
+      id: 'o_1',
+      extraBudgetUsd: 100,
+      expiresAt: new Date(Date.now() + 86400000),
     });
     const decision = await service.preflight({
       ...baseIntent(),
@@ -361,7 +520,9 @@ describe('IntegrationCostControlService', () => {
       },
     ]);
     prisma.manualBudgetOverride.findFirst.mockResolvedValueOnce({
-      id: 'o_1', extraBudgetUsd: 100, expiresAt: new Date(Date.now() + 86400000),
+      id: 'o_1',
+      extraBudgetUsd: 100,
+      expiresAt: new Date(Date.now() + 86400000),
     });
     prisma.integrationCostEvent.findUnique.mockResolvedValueOnce({
       reservationId: 'res-1',

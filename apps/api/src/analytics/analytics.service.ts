@@ -62,10 +62,8 @@ export class AnalyticsService {
     const totalAICost = aiCostAgg._sum.cost || 0;
     const aiRequests = aiCostAgg._count.id;
 
-    const leadToDealRate =
-      totalLeads > 0 ? (totalDeals / totalLeads) * 100 : 0;
-    const dealCloseRate =
-      totalDeals > 0 ? (closedDeals / totalDeals) * 100 : 0;
+    const leadToDealRate = totalLeads > 0 ? (totalDeals / totalLeads) * 100 : 0;
+    const dealCloseRate = totalDeals > 0 ? (closedDeals / totalDeals) * 100 : 0;
     const messageApprovalRate =
       totalMessages > 0 ? (approvedMessages / totalMessages) * 100 : 0;
 
@@ -149,7 +147,12 @@ export class AnalyticsService {
       costByDay.set(r.day.toISOString().split('T')[0], Number(r.cost));
     }
 
-    const data: Array<{ date: string; leads: number; deals: number; aiCost: number }> = [];
+    const data: Array<{
+      date: string;
+      leads: number;
+      deals: number;
+      aiCost: number;
+    }> = [];
     for (let i = 0; i < days; i++) {
       const d = new Date(start);
       d.setUTCDate(d.getUTCDate() + i);
@@ -167,7 +170,11 @@ export class AnalyticsService {
 
   // --- Automation & ROI Analytics ---
 
-  async getAutomationOverview(accountId: string, startDate?: Date, endDate?: Date) {
+  async getAutomationOverview(
+    accountId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();
     const where = { tenantId: accountId, createdAt: { gte: start, lte: end } };
@@ -214,7 +221,8 @@ export class AnalyticsService {
       runs: { total, completed, failed, cancelled, awaitingApproval, running },
       drafts: draftMessages,
       approvedMessages,
-      approvalRate: draftMessages > 0 ? (approvedMessages / draftMessages) * 100 : 0,
+      approvalRate:
+        draftMessages > 0 ? (approvedMessages / draftMessages) * 100 : 0,
       period: { start: start.toISOString(), end: end.toISOString() },
     };
   }
@@ -234,7 +242,11 @@ export class AnalyticsService {
     });
   }
 
-  async getAutomationCosts(accountId: string, startDate?: Date, endDate?: Date) {
+  async getAutomationCosts(
+    accountId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();
 
@@ -268,7 +280,11 @@ export class AnalyticsService {
     };
   }
 
-  async getAutomationOutcomes(accountId: string, startDate?: Date, endDate?: Date) {
+  async getAutomationOutcomes(
+    accountId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();
     const inRange = { gte: start, lte: end };
@@ -327,7 +343,8 @@ export class AnalyticsService {
       dealEconomics: {
         totalGrossRevenue: economicsAgg._sum.grossRevenue || 0,
         totalNetProfit: economicsAgg._sum.netProfit || 0,
-        avgRoi: economicsAgg._count.id > 0 ? economicsAgg._avg.roiPercent : null,
+        avgRoi:
+          economicsAgg._count.id > 0 ? economicsAgg._avg.roiPercent : null,
       },
       derivedMetrics: {
         costPerReply,
@@ -420,7 +437,12 @@ export class AnalyticsService {
           this.prisma.automationRun.findFirst({
             where,
             orderBy: { createdAt: 'desc' },
-            select: { id: true, status: true, createdAt: true, completedAt: true },
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              completedAt: true,
+            },
           }),
         ]);
 
@@ -445,7 +467,8 @@ export class AnalyticsService {
           running,
           queued,
           awaitingApproval,
-          successRate: finishedRuns > 0 ? (completed / finishedRuns) * 100 : null,
+          successRate:
+            finishedRuns > 0 ? (completed / finishedRuns) * 100 : null,
           totalSpend:
             (totals._sum.aiCostUsd || 0) +
             (totals._sum.messageCostUsd || 0) +

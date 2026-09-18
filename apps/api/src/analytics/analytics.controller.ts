@@ -87,23 +87,17 @@ export class AnalyticsController {
   }
 
   @Get('automation/by-workflow')
-  async getAutomationByWorkflow(
-    @CurrentAccountId() accountId: string,
-  ) {
+  async getAutomationByWorkflow(@CurrentAccountId() accountId: string) {
     return this.analyticsService.getAutomationByWorkflow(accountId);
   }
 
   @Get('automation/by-agent')
-  async getAutomationByAgent(
-    @CurrentAccountId() accountId: string,
-  ) {
+  async getAutomationByAgent(@CurrentAccountId() accountId: string) {
     return this.analyticsService.getAutomationByAgent(accountId);
   }
 
   @Get('automation/agent-cards')
-  async getAutomationAgentCards(
-    @CurrentAccountId() accountId: string,
-  ) {
+  async getAutomationAgentCards(@CurrentAccountId() accountId: string) {
     return this.analyticsService.getAutomationAgentCards(accountId);
   }
 }

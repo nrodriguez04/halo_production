@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
-import {
-  PolicyViolationError,
-  assertPolicy,
-} from '@halo/shared';
+import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { TimelineService } from '../../timeline/timeline.service';
 import { DealsService } from '../../deals/deals.service';
@@ -25,7 +22,8 @@ interface DocuSignEnvelope {
 @Injectable()
 export class DocuSignService {
   private readonly logger = new Logger(DocuSignService.name);
-  private readonly baseUrl = process.env.DOCUSIGN_BASE_URL || 'https://demo.docusign.net';
+  private readonly baseUrl =
+    process.env.DOCUSIGN_BASE_URL || 'https://demo.docusign.net';
   private readonly clientId = process.env.DOCUSIGN_CLIENT_ID || '';
   private readonly clientSecret = process.env.DOCUSIGN_CLIENT_SECRET || '';
   private readonly accountId = process.env.DOCUSIGN_ACCOUNT_ID || '';
@@ -122,7 +120,10 @@ export class DocuSignService {
           reason: error.reason,
         });
       }
-      this.logger.error(`DocuSign envelope creation failed: ${error.message}`, error.stack);
+      this.logger.error(
+        `DocuSign envelope creation failed: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -150,7 +151,7 @@ export class DocuSignService {
         `${this.baseUrl}/restapi/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         },
@@ -175,8 +176,8 @@ export class DocuSignService {
         `${this.baseUrl}/restapi/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/documents/combined`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/pdf',
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/pdf',
           },
         },
       );
@@ -200,11 +201,13 @@ export class DocuSignService {
     }
 
     // Request new token
-    const authHeader = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+    const authHeader = Buffer.from(
+      `${this.clientId}:${this.clientSecret}`,
+    ).toString('base64');
     const response = await fetch(`${this.baseUrl}/oauth/token`, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${authHeader}`,
+        Authorization: `Basic ${authHeader}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: 'grant_type=client_credentials&scope=signature',
@@ -274,7 +277,7 @@ export class DocuSignService {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(envelope),
@@ -283,7 +286,9 @@ export class DocuSignService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`DocuSign envelope creation failed: ${response.status} - ${errorText}`);
+      throw new Error(
+        `DocuSign envelope creation failed: ${response.status} - ${errorText}`,
+      );
     }
 
     return await response.json();
@@ -360,5 +365,3 @@ startxref
     return Buffer.from(pdfContent).toString('base64');
   }
 }
-
-

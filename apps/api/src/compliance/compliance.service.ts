@@ -108,12 +108,8 @@ export class ComplianceService {
         accountId: subject.accountId,
         channel: subject.channel,
         revokedAt: null,
-        OR: [
-          ...identifiers.map((id) => ({ ...id })),
-        ],
-        AND: [
-          { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-        ],
+        OR: [...identifiers.map((id) => ({ ...id }))],
+        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
       },
       orderBy: { grantedAt: 'desc' },
       select: { source: true },

@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
-  TimelineActorType,
-  TimelineEntityType,
-} from '@prisma/client';
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { LeadCreate, LeadUpdate, CSVImportRow } from '@halo/shared';
 import * as reconciliationUtils from '@halo/shared';
@@ -39,7 +40,12 @@ export class LeadsService {
 
   async findAll(
     accountId: string,
-    options?: { status?: string; skip?: number; take?: number; search?: string },
+    options?: {
+      status?: string;
+      skip?: number;
+      take?: number;
+      search?: string;
+    },
   ) {
     const where: any = { accountId };
     if (options?.status) {
@@ -155,13 +161,21 @@ export class LeadsService {
             zip: (row.zip || '').trim(),
           };
         } catch (error) {
-          results.errors.push(`Row ${row.address}: ${(error as Error).message}`);
+          results.errors.push(
+            `Row ${row.address}: ${(error as Error).message}`,
+          );
           return null;
         }
       })
       .filter(
-        (r): r is { idx: number; row: CSVImportRow; normalizedAddr: string; zip: string } =>
-          !!r,
+        (
+          r,
+        ): r is {
+          idx: number;
+          row: CSVImportRow;
+          normalizedAddr: string;
+          zip: string;
+        } => !!r,
       );
 
     if (!normalized.length) return results;
@@ -169,7 +183,9 @@ export class LeadsService {
     // Pull every existing canonical address in this account whose zip matches one of the
     // imports. With the (accountId, ...) + trgm indexes this is one bounded query, replacing
     // an N-row sequential `findFirst` loop.
-    const zips = Array.from(new Set(normalized.map((r) => r.zip).filter(Boolean)));
+    const zips = Array.from(
+      new Set(normalized.map((r) => r.zip).filter(Boolean)),
+    );
     const existingRows = await this.prisma.lead.findMany({
       where: {
         accountId,
@@ -181,10 +197,16 @@ export class LeadsService {
     const existingKeys = new Set(
       existingRows
         .filter((r) => r.canonicalAddress)
-        .map((r) =>
-          `${(r.canonicalZip || '').trim()}|${reconciliationUtils
-            .normalizeAddress(r.canonicalAddress as string, undefined, undefined, r.canonicalZip || undefined)
-            .toLowerCase()}`,
+        .map(
+          (r) =>
+            `${(r.canonicalZip || '').trim()}|${reconciliationUtils
+              .normalizeAddress(
+                r.canonicalAddress as string,
+                undefined,
+                undefined,
+                r.canonicalZip || undefined,
+              )
+              .toLowerCase()}`,
         ),
     );
 
@@ -325,7 +347,10 @@ export class LeadsService {
             lead2.canonicalZip || undefined,
           );
 
-          const addrSimilarity = reconciliationUtils.stringSimilarity(addr1, addr2);
+          const addrSimilarity = reconciliationUtils.stringSimilarity(
+            addr1,
+            addr2,
+          );
           if (addrSimilarity > 0.7) {
             similarity += addrSimilarity * 0.5;
             reasons.push(
@@ -522,4 +547,3 @@ export class LeadsService {
     return { success: true };
   }
 }
-

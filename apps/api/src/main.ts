@@ -107,7 +107,9 @@ async function bootstrap() {
         return max;
       };
       if (depth(req.body) > 20) {
-        return _res.status(400).json({ statusCode: 400, message: 'Request body nested too deeply' });
+        return _res
+          .status(400)
+          .json({ statusCode: 400, message: 'Request body nested too deeply' });
       }
     }
     next();

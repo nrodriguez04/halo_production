@@ -12,7 +12,11 @@ interface GeocodingResponse {
   results: Array<{
     formatted_address: string;
     geometry: { location: { lat: number; lng: number } };
-    address_components: Array<{ long_name: string; short_name: string; types: string[] }>;
+    address_components: Array<{
+      long_name: string;
+      short_name: string;
+      types: string[];
+    }>;
   }>;
   status: string;
 }
@@ -51,16 +55,23 @@ export class GeocodingService {
     }
     const query = [address, city, state, zip].filter(Boolean).join(', ');
 
-    const out = await this.costControl.checkAndCall<{ address: string }, GeocodingResult>({
+    const out = await this.costControl.checkAndCall<
+      { address: string },
+      GeocodingResult
+    >({
       provider: 'google_geocoding',
       action: 'geocode',
       payload: { address: query },
       context: ctx,
       execute: async () => {
         const url = 'https://maps.googleapis.com/maps/api/geocode/json';
-        const params = new URLSearchParams({ address: query, key: this.apiKey });
+        const params = new URLSearchParams({
+          address: query,
+          key: this.apiKey,
+        });
         const response = await fetch(`${url}?${params.toString()}`);
-        if (!response.ok) throw new Error(`Geocoding API error: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`Geocoding API error: ${response.status}`);
         const data = (await response.json()) as GeocodingResponse;
         if (data.status === 'REQUEST_DENIED') {
           // Google returns HTTP 200 with REQUEST_DENIED for a bad or
@@ -71,15 +82,25 @@ export class GeocodingService {
             data.error_message || 'REQUEST_DENIED',
           );
         }
-        if (data.status !== 'OK') throw new Error(`Geocoding failed: ${data.status}`);
-        const sourceRecord = await this.storeSourceRecord('google_geocoding', url, { address: query }, data);
+        if (data.status !== 'OK')
+          throw new Error(`Geocoding failed: ${data.status}`);
+        const sourceRecord = await this.storeSourceRecord(
+          'google_geocoding',
+          url,
+          { address: query },
+          data,
+        );
         return { data, sourceRecordId: sourceRecord.id };
       },
     });
     return (out.result as GeocodingResult | null) ?? null;
   }
 
-  async reverseGeocode(lat: number, lng: number, ctx: CostContext): Promise<GeocodingResult | null> {
+  async reverseGeocode(
+    lat: number,
+    lng: number,
+    ctx: CostContext,
+  ): Promise<GeocodingResult | null> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('google_geocoding');
     }
@@ -90,18 +111,30 @@ export class GeocodingService {
       );
     }
 
-    const out = await this.costControl.checkAndCall<{ lat: number; lng: number }, GeocodingResult>({
+    const out = await this.costControl.checkAndCall<
+      { lat: number; lng: number },
+      GeocodingResult
+    >({
       provider: 'google_geocoding',
       action: 'reverse_geocode',
       payload: { lat, lng },
       context: ctx,
       execute: async () => {
         const url = 'https://maps.googleapis.com/maps/api/geocode/json';
-        const params = new URLSearchParams({ latlng: `${lat},${lng}`, key: this.apiKey });
+        const params = new URLSearchParams({
+          latlng: `${lat},${lng}`,
+          key: this.apiKey,
+        });
         const response = await fetch(`${url}?${params.toString()}`);
         const data = (await response.json()) as GeocodingResponse;
-        if (data.status !== 'OK') throw new Error(`Reverse geocoding failed: ${data.status}`);
-        const sourceRecord = await this.storeSourceRecord('google_geocoding', url, { lat, lng }, data);
+        if (data.status !== 'OK')
+          throw new Error(`Reverse geocoding failed: ${data.status}`);
+        const sourceRecord = await this.storeSourceRecord(
+          'google_geocoding',
+          url,
+          { lat, lng },
+          data,
+        );
         return { data, sourceRecordId: sourceRecord.id };
       },
     });
@@ -114,7 +147,10 @@ export class GeocodingService {
     request: Record<string, unknown>,
     response: unknown,
   ) {
-    const requestHash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    const requestHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(request))
+      .digest('hex');
     return this.prisma.sourceRecord.create({
       data: {
         provider,

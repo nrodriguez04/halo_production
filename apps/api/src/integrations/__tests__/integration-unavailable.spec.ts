@@ -5,7 +5,10 @@ describe('IntegrationUnavailableException', () => {
   // These states used to surface as bare Errors -> HTTP 500, which an
   // operator could not tell apart from a crash.
   it('is a 503, not a 500', () => {
-    const err = IntegrationUnavailableException.notConfigured('attom', 'ATTOM_API_KEY');
+    const err = IntegrationUnavailableException.notConfigured(
+      'attom',
+      'ATTOM_API_KEY',
+    );
     expect(err.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE);
   });
 
@@ -22,7 +25,8 @@ describe('IntegrationUnavailableException', () => {
   });
 
   it('distinguishes a deliberate disable from a missing key', () => {
-    const disabled: any = IntegrationUnavailableException.disabled('attom').getResponse();
+    const disabled: any =
+      IntegrationUnavailableException.disabled('attom').getResponse();
     expect(disabled.reason).toBe('DISABLED');
     expect(disabled.message).toContain('control plane');
   });

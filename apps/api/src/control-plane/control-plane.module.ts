@@ -14,4 +14,3 @@ import { AuthModule } from '../auth/auth.module';
   exports: [ControlPlaneService],
 })
 export class ControlPlaneModule {}
-

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { BuyerCreate, BuyerUpdate } from '@halo/shared';
 
@@ -84,7 +88,9 @@ export class BuyersService {
       // Match by location
       if (prefs.locations && deal.property) {
         const dealLocation = `${deal.property.state}, ${deal.property.city}`;
-        if (!prefs.locations.some((loc: string) => dealLocation.includes(loc))) {
+        if (
+          !prefs.locations.some((loc: string) => dealLocation.includes(loc))
+        ) {
           return false;
         }
       }
@@ -112,4 +118,3 @@ export class BuyersService {
     return matches;
   }
 }
-

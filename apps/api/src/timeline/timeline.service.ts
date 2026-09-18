@@ -1,8 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  TimelineActorType,
-  TimelineEntityType,
-} from '@prisma/client';
+import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()

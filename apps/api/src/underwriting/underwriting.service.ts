@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { JobRunEntityType, JobRunKind, TimelineActorType, TimelineEntityType } from '@prisma/client';
+import {
+  JobRunEntityType,
+  JobRunKind,
+  TimelineActorType,
+  TimelineEntityType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import {
@@ -129,7 +134,9 @@ export class UnderwritingService {
     });
 
     if (!deal) {
-      throw new NotFoundException(`No underwriting result found for deal ${dealId}`);
+      throw new NotFoundException(
+        `No underwriting result found for deal ${dealId}`,
+      );
     }
 
     const legacy = await this.prisma.underwritingResult.findUnique({
@@ -141,7 +148,9 @@ export class UnderwritingService {
     });
 
     if (!legacy) {
-      throw new NotFoundException(`No underwriting result found for deal ${dealId}`);
+      throw new NotFoundException(
+        `No underwriting result found for deal ${dealId}`,
+      );
     }
 
     return {
@@ -153,7 +162,7 @@ export class UnderwritingService {
   private async getTodayCost(accountId?: string): Promise<number> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const logs = await this.prisma.aICostLog.findMany({
       where: {
         createdAt: { gte: today },
@@ -174,4 +183,3 @@ export class UnderwritingService {
     return this.controlPlaneService.getStatus(accountId);
   }
 }
-
