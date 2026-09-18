@@ -1,3 +1,4 @@
+import { nextPeriod } from '@halo/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -121,31 +122,4 @@ export class BudgetService {
       data: { currentSpendUsd: { increment: amountUsd } },
     });
   }
-}
-
-export function nextPeriod(period: string, anchor: Date): { startedAt: Date; resetsAt: Date } {
-  const startedAt = startOfPeriod(period, anchor);
-  const resetsAt = endOfPeriod(period, startedAt);
-  return { startedAt, resetsAt };
-}
-
-export function startOfPeriod(period: string, d: Date): Date {
-  const out = new Date(d);
-  out.setHours(0, 0, 0, 0);
-  if (period === 'week') {
-    const day = out.getDay();
-    out.setDate(out.getDate() - day);
-  } else if (period === 'month') {
-    out.setDate(1);
-  }
-  return out;
-}
-
-export function endOfPeriod(period: string, start: Date): Date {
-  const out = new Date(start);
-  if (period === 'day') out.setDate(out.getDate() + 1);
-  else if (period === 'week') out.setDate(out.getDate() + 7);
-  else if (period === 'month') out.setMonth(out.getMonth() + 1);
-  else out.setDate(out.getDate() + 1);
-  return out;
 }

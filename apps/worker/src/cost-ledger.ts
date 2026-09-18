@@ -16,6 +16,7 @@
 // which point this helper becomes unnecessary.
 
 import { randomUUID } from 'crypto';
+import { isBucketExpired, nextPeriod } from '@halo/shared';
 import { prisma } from './prisma-client';
 
 export interface WorkerCostEntry {
@@ -32,6 +33,51 @@ export interface WorkerCostEntry {
   campaignId?: string;
   automationRunId?: string;
   metadata?: Record<string, unknown>;
+}
+
+type BudgetBucketRow = Awaited<ReturnType<typeof prisma.integrationBudgetBucket.findMany>>[number];
+
+/**
+ * The global + provider buckets that apply to a worker-paid call, rolled
+ * into the current period. The api's BudgetService does this rollover
+ * lazily on its own reads; the worker has to do the same, otherwise a daily
+ * bucket that hit its cap yesterday keeps blocking enrichment today until
+ * some api request happens to touch the same row.
+ */
+async function loadApplicableBuckets(
+  accountId: string,
+  providerKey: string,
+): Promise<BudgetBucketRow[]> {
+  const rows = await prisma.integrationBudgetBucket.findMany({
+    where: {
+      accountId: { in: [accountId, 'GLOBAL'] },
+      enabled: true,
+      OR: [
+        { scope: 'global', scopeRef: 'ALL' },
+        { scope: 'provider', scopeRef: providerKey },
+      ],
+    },
+  });
+
+  const now = new Date();
+  return Promise.all(
+    rows.map(async (row) => {
+      if (!isBucketExpired(row, now)) return row;
+      const { startedAt, resetsAt } = nextPeriod(row.period, now);
+      const reset = { periodStartedAt: startedAt, periodResetsAt: resetsAt, currentSpendUsd: 0 };
+      // Guard on the old periodResetsAt so a concurrent api request that
+      // already rolled the bucket (and may have debited the new period) is
+      // not overwritten back to zero.
+      const rolled = await prisma.integrationBudgetBucket.updateMany({
+        where: { id: row.id, periodResetsAt: row.periodResetsAt },
+        data: reset,
+      });
+      if (rolled.count === 0) {
+        return (await prisma.integrationBudgetBucket.findUnique({ where: { id: row.id } })) ?? { ...row, ...reset };
+      }
+      return { ...row, ...reset };
+    }),
+  );
 }
 
 export async function recordWorkerCost(entry: WorkerCostEntry): Promise<void> {
@@ -55,16 +101,7 @@ export async function recordWorkerCost(entry: WorkerCostEntry): Promise<void> {
     // Find the budget buckets that should have been debited. We only debit
     // the "global" + matching provider buckets; lead/campaign-scoped
     // buckets aren't enforced for raw-fetch worker calls.
-    const buckets = await prisma.integrationBudgetBucket.findMany({
-      where: {
-        accountId: { in: [entry.accountId, 'GLOBAL'] },
-        enabled: true,
-        OR: [
-          { scope: 'global', scopeRef: 'ALL' },
-          { scope: 'provider', scopeRef: entry.providerKey },
-        ],
-      },
-    });
+    const buckets = await loadApplicableBuckets(entry.accountId, entry.providerKey);
 
     await prisma.integrationCostEvent.create({
       data: {
@@ -112,15 +149,6 @@ export async function isOverHardCap(
   accountId: string,
   providerKey: string,
 ): Promise<boolean> {
-  const buckets = await prisma.integrationBudgetBucket.findMany({
-    where: {
-      accountId: { in: [accountId, 'GLOBAL'] },
-      enabled: true,
-      OR: [
-        { scope: 'global', scopeRef: 'ALL' },
-        { scope: 'provider', scopeRef: providerKey },
-      ],
-    },
-  });
+  const buckets = await loadApplicableBuckets(accountId, providerKey);
   return buckets.some((b) => b.currentSpendUsd >= b.hardCapUsd);
 }
