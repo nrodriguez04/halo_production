@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { hashEmail, hashPhone } from '@halo/shared';
 import {
+  presentContact,
   protectContact,
   revealContact,
+  type Contact,
   type ContactInput,
   type ContactRow,
   type ProtectedContact,
@@ -15,8 +17,12 @@ export class LeadPiiService {
     return protectContact(input);
   }
 
-  reveal(row: ContactRow) {
+  reveal(row: ContactRow): Contact {
     return revealContact(row);
+  }
+
+  present<T extends ContactRow>(row: T, reveal: boolean) {
+    return presentContact(row, reveal);
   }
 
   phoneHash(phone: string): string {

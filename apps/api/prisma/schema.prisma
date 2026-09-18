@@ -195,11 +195,9 @@ model Lead {
   canonicalState   String?
   canonicalZip     String?
   canonicalOwner   String?
-  canonicalPhone   String?
-  canonicalEmail   String?
-  // Encrypted copies (pii-envelope JSON) and blind-index hashes. Dual-write
-  // phase: the plaintext columns above are still written and read; lookups
-  // by value use the hash columns. See docs/pii-encryption-design.md.
+  // Contact PII is stored encrypted (pii-envelope JSON) with a blind-index
+  // hash for exact-match lookups; there is no plaintext column. Reads go
+  // through lead-pii.ts (reveal / present). See docs/pii-encryption-design.md.
   canonicalPhoneEnc  String?
   canonicalEmailEnc  String?
   canonicalPhoneHash String?

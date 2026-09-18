@@ -21,7 +21,11 @@ export class AgentService {
     private pii: LeadPiiService,
   ) {}
 
-  async getDealSummary(dealId: string, accountId: string) {
+  async getDealSummary(
+    dealId: string,
+    accountId: string,
+    opts: { revealPii?: boolean } = {},
+  ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
       include: {
@@ -65,7 +69,10 @@ export class AgentService {
             id: deal.lead.id,
             status: deal.lead.status,
             owner: deal.lead.canonicalOwner,
-            ...this.pii.reveal(deal.lead),
+            ...(() => {
+              const c = this.pii.present(deal.lead, opts.revealPii ?? false);
+              return { phone: c.canonicalPhone, email: c.canonicalEmail };
+            })(),
           }
         : null,
       property: deal.property
@@ -104,7 +111,11 @@ export class AgentService {
     };
   }
 
-  async getDealContext(dealId: string, accountId: string) {
+  async getDealContext(
+    dealId: string,
+    accountId: string,
+    opts: { revealPii?: boolean } = {},
+  ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
       include: {
@@ -146,7 +157,12 @@ export class AgentService {
     });
 
     return {
-      deal,
+      deal: {
+        ...deal,
+        lead: deal.lead
+          ? this.pii.present(deal.lead, opts.revealPii ?? false)
+          : null,
+      },
       communications: allMessages,
       timeline,
       automationRuns,
