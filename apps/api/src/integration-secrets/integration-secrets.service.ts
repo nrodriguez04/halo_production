@@ -168,9 +168,6 @@ export class IntegrationSecretsService {
             error: 'DocuSign connectivity test requires OAuth flow',
           };
           break;
-        case 'openclaw':
-          result = await this.testOpenClaw();
-          break;
         default:
           result = { connected: false, error: `Unknown provider: ${provider}` };
       }
@@ -395,15 +392,5 @@ export class IntegrationSecretsService {
     if (res.status === 401 || res.status === 403)
       return { connected: false, error: 'Invalid API key' };
     return { connected: false, error: `HTTP ${res.status}` };
-  }
-
-  private async testOpenClaw(): Promise<{
-    connected: boolean;
-    error?: string;
-  }> {
-    const enabled = process.env.FEATURE_OPENCLAW === 'true';
-    if (!enabled)
-      return { connected: false, error: 'FEATURE_OPENCLAW is not true' };
-    return { connected: true };
   }
 }

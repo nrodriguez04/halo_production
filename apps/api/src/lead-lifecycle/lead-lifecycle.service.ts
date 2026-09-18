@@ -17,7 +17,7 @@ import { TimelineService } from '../timeline/timeline.service';
 
 // Single owner of all lead status transitions. Replaces the previous
 // pattern where statuses were mutated ad-hoc from `LeadsService`,
-// worker processors, and OpenClaw skills with no shared validator.
+// worker processors, and agent skills with no shared validator.
 //
 // Every transition:
 //  - validates against the state-machine table in `@halo/shared`

@@ -40,7 +40,7 @@ export class AutomationService {
     const run = await this.prisma.automationRun.create({
       data: {
         tenantId: input.tenantId,
-        source: input.source || 'openclaw',
+        source: input.source || 'agent',
         agentName: input.agentName,
         workflowName: input.workflowName,
         entityType: input.entityType,

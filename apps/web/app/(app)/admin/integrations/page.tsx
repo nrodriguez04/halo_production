@@ -93,17 +93,6 @@ const INTEGRATIONS: IntegrationDef[] = [
       },
     ],
   },
-  {
-    provider: 'openclaw',
-    name: 'OpenClaw',
-    keys: [
-      {
-        keyName: 'OPENCLAW_SECRET',
-        label: 'Agent Secret',
-        placeholder: 'Your OpenClaw agent secret',
-      },
-    ],
-  },
 ];
 
 type ConnStatus = 'idle' | 'testing' | 'connected' | 'error';

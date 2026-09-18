@@ -350,7 +350,7 @@ const RUN_FILTERS = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
-export default function OpenClawPage() {
+export default function AutomationPage() {
   const queryClient = useQueryClient();
   const reduced = useReducedMotion();
   const [tab, setTab] = useState<Tab>('overview');
@@ -384,7 +384,7 @@ export default function OpenClawPage() {
   if (loading) {
     return (
       <div className="space-y-6 p-6">
-        <PageHeader title="OpenClaw Monitor" />
+        <PageHeader title="Automation Monitor" />
         <LoadingState skeleton>
           <SkeletonTable rows={4} cols={4} />
         </LoadingState>
@@ -398,7 +398,7 @@ export default function OpenClawPage() {
   return (
     <div className="space-y-6 p-6">
       <PageHeader
-        title="OpenClaw Monitor"
+        title="Automation Monitor"
         description="Agent automation runs, costs, and outcomes."
         actions={
           <Button

@@ -327,7 +327,7 @@ model Message {
   approvedAt      DateTime?
   approvedBy      String?
   sentAt          DateTime?
-  source          String?  // e.g. "openclaw", "user", "system"
+  source          String?  // e.g. "agent", "user", "system"
   automationRunId String?
   agentName       String?
   createdAt       DateTime @default(now())
@@ -591,7 +591,7 @@ model TimelineEvent {
   @@map("timeline_events")
 }
 
-// --- OpenClaw / Agent Integration ---
+// --- Agent / Automation Integration ---
 
 enum AutomationRunStatus {
   QUEUED
@@ -613,7 +613,7 @@ enum AutomationTriggerType {
 model AutomationRun {
   id                String              @id @default(cuid())
   tenantId          String
-  source            String              @default("openclaw")
+  source            String              @default("agent")
   agentName         String?
   workflowName      String?
   entityType        String?

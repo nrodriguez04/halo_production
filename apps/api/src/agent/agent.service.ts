@@ -284,7 +284,7 @@ export class AgentService {
       const run = await this.prisma.automationRun.create({
         data: {
           tenantId: accountId,
-          source: 'openclaw',
+          source: 'agent',
           agentName: input.agentName || 'unknown',
           workflowName:
             input.workflowName || `draft-${recipientType}-${channel}`,
@@ -313,7 +313,7 @@ export class AgentService {
         direction: 'outbound',
         status: 'draft',
         content: input.content,
-        source: 'openclaw',
+        source: 'agent',
         agentName: input.agentName,
         automationRunId,
         metadata: {
@@ -333,7 +333,7 @@ export class AgentService {
         messageId: message.id,
         channel,
         recipientType,
-        source: 'openclaw',
+        source: 'agent',
         agentName: input.agentName,
         automationRunId,
       },
@@ -413,7 +413,7 @@ export class AgentService {
       entityId: messageId,
       eventType: 'AGENT_REQUESTED_SEND',
       payload: {
-        source: 'openclaw',
+        source: 'agent',
         agentName: input?.agentName,
         automationRunId: input?.automationRunId || message.automationRunId,
       },
@@ -455,7 +455,7 @@ export class AgentService {
       eventType: 'AGENT_NOTE',
       payload: {
         text: input.text,
-        source: 'openclaw',
+        source: 'agent',
         agentName: input.agentName,
         automationRunId: input.automationRunId,
       },
@@ -526,7 +526,7 @@ export class AgentService {
       payload: {
         classification,
         sentiment,
-        source: 'openclaw',
+        source: 'agent',
         agentName: input.agentName,
       },
       actorId: null,
