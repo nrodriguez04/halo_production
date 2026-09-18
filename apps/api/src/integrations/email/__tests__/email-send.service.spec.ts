@@ -4,7 +4,9 @@ import { IntegrationCostControlService } from '../../../cost-control/cost-contro
 import { IntegrationSecretsService } from '../../../integration-secrets/integration-secrets.service';
 import { IntegrationUnavailableException } from '../../integration-unavailable.exception';
 
-const sendMail = jest.fn().mockResolvedValue({ messageId: '<smtp-1@localhost>' });
+const sendMail = jest
+  .fn()
+  .mockResolvedValue({ messageId: '<smtp-1@localhost>' });
 jest.mock('nodemailer', () => ({ createTransport: () => ({ sendMail }) }));
 
 describe('EmailSendService', () => {
@@ -56,14 +58,19 @@ describe('EmailSendService', () => {
     process.env = env;
   });
 
-  const requestedProvider = () => costControl.checkAndCall.mock.calls[0][0].provider;
+  const requestedProvider = () =>
+    costControl.checkAndCall.mock.calls[0][0].provider;
 
   describe('provider preference', () => {
     it('prefers SendGrid when USE_SENDGRID=true', async () => {
       process.env.USE_SENDGRID = 'true';
       process.env.RESEND_API_KEY = 're_x';
       secrets.resolve.mockResolvedValue('SG.key');
-      fetchMock.mockResolvedValue({ ok: true, status: 202, headers: { get: () => 'sg-abc' } });
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 202,
+        headers: { get: () => 'sg-abc' },
+      });
 
       const out = await service.sendEmail(input, ctx);
 
@@ -73,7 +80,10 @@ describe('EmailSendService', () => {
 
     it('uses Resend when a key is present and SendGrid is not selected', async () => {
       process.env.RESEND_API_KEY = 're_x';
-      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 're-1' }) });
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: 're-1' }),
+      });
 
       const out = await service.sendEmail(input, ctx);
 
@@ -86,7 +96,10 @@ describe('EmailSendService', () => {
 
       expect(requestedProvider()).toBe('smtp');
       expect(sendMail).toHaveBeenCalledTimes(1);
-      expect(out).toEqual({ messageId: '<smtp-1@localhost>', provider: 'smtp' });
+      expect(out).toEqual({
+        messageId: '<smtp-1@localhost>',
+        provider: 'smtp',
+      });
     });
   });
 
@@ -98,11 +111,18 @@ describe('EmailSendService', () => {
     it('reads the key through the secrets store and sends the v3 mail payload', async () => {
       secrets.resolve.mockResolvedValue('SG.key');
       process.env.SENDGRID_FROM_EMAIL = 'verified@halo.example';
-      fetchMock.mockResolvedValue({ ok: true, status: 202, headers: { get: () => 'sg-1' } });
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 202,
+        headers: { get: () => 'sg-1' },
+      });
 
       await service.sendEmail({ ...input, html: '<p>hi</p>' }, ctx);
 
-      expect(secrets.resolve).toHaveBeenCalledWith('sendgrid', 'SENDGRID_API_KEY');
+      expect(secrets.resolve).toHaveBeenCalledWith(
+        'sendgrid',
+        'SENDGRID_API_KEY',
+      );
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toBe('https://api.sendgrid.com/v3/mail/send');
       expect(init.headers.Authorization).toBe('Bearer SG.key');
@@ -123,7 +143,9 @@ describe('EmailSendService', () => {
     it('fails closed as not-configured when no key resolves', async () => {
       secrets.resolve.mockResolvedValue(null);
 
-      await expect(service.sendEmail(input, ctx)).rejects.toThrow(IntegrationUnavailableException);
+      await expect(service.sendEmail(input, ctx)).rejects.toThrow(
+        IntegrationUnavailableException,
+      );
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -136,7 +158,9 @@ describe('EmailSendService', () => {
         text: async () => '{"errors":[{"message":"bad key"}]}',
       });
 
-      await expect(service.sendEmail(input, ctx)).rejects.toThrow(/SendGrid send failed: 401/);
+      await expect(service.sendEmail(input, ctx)).rejects.toThrow(
+        /SendGrid send failed: 401/,
+      );
     });
   });
 });

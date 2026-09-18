@@ -85,7 +85,9 @@ export class EmailSendService {
     return (out.result as SendEmailResult | null) ?? null;
   }
 
-  private async sendViaSendGrid(input: SendEmailInput): Promise<SendEmailResult> {
+  private async sendViaSendGrid(
+    input: SendEmailInput,
+  ): Promise<SendEmailResult> {
     const apiKey = await this.secrets.resolve('sendgrid', 'SENDGRID_API_KEY');
     if (!apiKey) {
       throw IntegrationUnavailableException.notConfigured(
@@ -125,7 +127,8 @@ export class EmailSendService {
     }
     // 202 Accepted with the provider id in a header; no body.
     const messageId =
-      res.headers.get('x-message-id') || `sendgrid:${input.messageId ?? Date.now()}`;
+      res.headers.get('x-message-id') ||
+      `sendgrid:${input.messageId ?? Date.now()}`;
     return { messageId, provider: 'sendgrid' };
   }
 
