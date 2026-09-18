@@ -55,13 +55,13 @@ export class SkipTraceController {
     if (result.status !== 'error' && (phone || email)) {
       if (phone) {
         await this.prisma.lead.updateMany({
-          where: { id: body.leadId, accountId, canonicalPhone: null },
+          where: { id: body.leadId, accountId, canonicalPhoneEnc: null },
           data: this.pii.protect({ phone }),
         });
       }
       if (email) {
         await this.prisma.lead.updateMany({
-          where: { id: body.leadId, accountId, canonicalEmail: null },
+          where: { id: body.leadId, accountId, canonicalEmailEnc: null },
           data: this.pii.protect({ email }),
         });
       }

@@ -1,5 +1,6 @@
 import { AutomationRunStatus, PrismaClient } from '@prisma/client';
 import { seedCostGovernance } from './seed-providers';
+import { protectContact, revealContact } from '../src/leads/lead-pii';
 
 const prisma = new PrismaClient();
 
@@ -100,8 +101,10 @@ async function main() {
         canonicalState: prop.state,
         canonicalZip: prop.zip,
         canonicalOwner: `${ownerFirst} ${ownerLast}`,
-        canonicalPhone: `+1555${String(2000 + i).padStart(4, '0')}${String(100 + i).padStart(3, '0')}`,
-        canonicalEmail: `${ownerFirst.toLowerCase()}.${ownerLast.toLowerCase()}@example.com`,
+        ...protectContact({
+          phone: `+1555${String(2000 + i).padStart(4, '0')}${String(100 + i).padStart(3, '0')}`,
+          email: `${ownerFirst.toLowerCase()}.${ownerLast.toLowerCase()}@example.com`,
+        }),
       },
     });
 
@@ -191,12 +194,13 @@ async function main() {
   console.log('\nCreating consent records...');
   const leads = await prisma.lead.findMany({ where: { accountId: ACCOUNT_ID }, take: 5 });
   for (const lead of leads) {
-    if (lead.canonicalPhone) {
+    const contact = revealContact(lead);
+    if (contact.phone) {
       await prisma.consent.create({
         data: {
           accountId: ACCOUNT_ID,
           leadId: lead.id,
-          phone: lead.canonicalPhone,
+          phone: contact.phone,
           channel: 'sms',
           source: 'form',
           evidence: { type: 'web_form', timestamp: new Date().toISOString() },
