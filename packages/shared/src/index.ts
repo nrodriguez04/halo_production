@@ -17,6 +17,7 @@ export * from './state-machine/lead-status';
 
 // Crypto
 export * from './crypto/pii-envelope';
+export * from './crypto/pii-index';
 
 // Feature flags
 export * from './feature-flags';

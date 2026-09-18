@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { LeadsModule } from './leads/leads.module';
+import { LeadPiiModule } from './leads/lead-pii.module';
 import { PropertiesModule } from './properties/properties.module';
 import { DealsModule } from './deals/deals.module';
 import { CommunicationsModule } from './communications/communications.module';
@@ -61,6 +62,7 @@ import { AuditModule } from './audit/audit.module';
       { name: 'medium', ttl: 60000, limit: 100 },
     ]),
     HealthModule,
+    LeadPiiModule,
     LeadsModule,
     PropertiesModule,
     DealsModule,

@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
 import { AuthModule } from '../auth/auth.module';
 import { PropertyRadarModule } from '../integrations/propertyradar/propertyradar.module';
 import { BatchSkipTraceAdapter } from './adapters/batch-skip-trace.adapter';
@@ -12,6 +13,7 @@ import { SkipTraceService } from './skip-trace.service';
   imports: [AuthModule, PropertyRadarModule],
   controllers: [SkipTraceController],
   providers: [
+    PrismaService,
     BatchSkipTraceAdapter,
     StubSkipTraceAdapter,
     PropertyRadarSkipTraceAdapter,

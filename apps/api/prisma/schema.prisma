@@ -197,6 +197,13 @@ model Lead {
   canonicalOwner   String?
   canonicalPhone   String?
   canonicalEmail   String?
+  // Encrypted copies (pii-envelope JSON) and blind-index hashes. Dual-write
+  // phase: the plaintext columns above are still written and read; lookups
+  // by value use the hash columns. See docs/pii-encryption-design.md.
+  canonicalPhoneEnc  String?
+  canonicalEmailEnc  String?
+  canonicalPhoneHash String?
+  canonicalEmailHash String?
 
   // Source provenance
   sourceRecords SourceRecord[]
@@ -209,6 +216,8 @@ model Lead {
   @@index([accountId, status, createdAt])
   @@index([canonicalAddress(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_canonicalAddress_trgm_idx")
   @@index([canonicalOwner(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_canonicalOwner_trgm_idx")
+  @@index([accountId, canonicalPhoneHash])
+  @@index([accountId, canonicalEmailHash])
   @@map("leads")
 }
 

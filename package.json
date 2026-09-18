@@ -17,6 +17,7 @@
     "db:generate": "cd apps/api && prisma generate",
     "db:migrate": "cd apps/api && prisma migrate dev",
     "db:seed": "cd apps/api && tsx prisma/seed.ts",
+    "db:backfill-pii": "cd apps/api && tsx prisma/scripts/backfill-lead-pii.ts",
     "db:studio": "cd apps/api && prisma studio",
     "e2e": "tsx scripts/golden-e2e.ts"
   },

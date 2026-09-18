@@ -11,6 +11,17 @@ const envSchema = z.object({
 
   SECRETS_ENCRYPTION_KEY: z.string().min(32).optional(),
 
+  // Contact PII at rest (docs/pii-encryption-design.md). Both are required:
+  // there is deliberately no "encryption off" mode. Generate with
+  // `openssl rand -hex 32`. Losing the encryption key loses the data.
+  PII_ENCRYPTION_KEY_V1: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'must be 32 bytes as 64 hex chars'),
+  PII_ENCRYPTION_KEY_CURRENT_VERSION: z.coerce.number().int().min(1).default(1),
+  PII_INDEX_KEY: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'must be 32 bytes as 64 hex chars'),
+
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),

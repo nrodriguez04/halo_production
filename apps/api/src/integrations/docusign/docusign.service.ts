@@ -11,6 +11,7 @@ import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { TimelineService } from '../../timeline/timeline.service';
 import { DealsService } from '../../deals/deals.service';
+import { LeadPiiService } from '../../leads/lead-pii.service';
 
 interface DocuSignEnvelope {
   envelopeId: string;
@@ -35,6 +36,7 @@ export class DocuSignService {
     private controlPlane: ControlPlaneService,
     private timelineService: TimelineService,
     private dealsService: DealsService,
+    private readonly pii: LeadPiiService,
   ) {}
 
   async createEnvelope(dealId: string, accountId: string, templateId?: string) {
@@ -237,7 +239,9 @@ export class DocuSignService {
       templateRoles: templateId
         ? [
             {
-              email: deal.lead?.canonicalEmail || 'seller@example.com',
+              email:
+                (deal.lead ? this.pii.reveal(deal.lead).email : null) ||
+                'seller@example.com',
               name: deal.lead?.canonicalOwner || 'Property Owner',
               roleName: 'Seller',
             },
@@ -263,7 +267,9 @@ export class DocuSignService {
         : {
             signers: [
               {
-                email: deal.lead?.canonicalEmail || 'seller@example.com',
+                email:
+                  (deal.lead ? this.pii.reveal(deal.lead).email : null) ||
+                  'seller@example.com',
                 name: deal.lead?.canonicalOwner || 'Property Owner',
                 recipientId: '1',
                 routingOrder: '1',

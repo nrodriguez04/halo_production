@@ -277,11 +277,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     return prisma.$transaction(async (tx) => {
       const lead = await tx.lead.findFirst({
         where: { id: params.leadId, accountId: params.accountId },
-        select: {
-          status: true,
-          canonicalPhone: true,
-          canonicalEmail: true,
-        },
+        select: { status: true },
       });
       if (!lead) throw new Error(`Lead ${params.leadId} not found`);
 
@@ -298,13 +294,8 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         return false;
       }
 
-      const additionalUpdate: Record<string, unknown> = {};
-      if (params.contacts.phone && !lead.canonicalPhone) {
-        additionalUpdate.canonicalPhone = params.contacts.phone;
-      }
-      if (params.contacts.email && !lead.canonicalEmail) {
-        additionalUpdate.canonicalEmail = params.contacts.email;
-      }
+      // Contacts are persisted (encrypted) by the api's skip-trace route;
+      // the worker holds no PII keys and writes none of them here.
 
       const updated = await tx.lead.updateMany({
         where: {
@@ -312,7 +303,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
           accountId: params.accountId,
           status: current,
         },
-        data: { status: 'enriched', ...additionalUpdate },
+        data: { status: 'enriched' },
       });
       if (updated.count !== 1) {
         console.warn(
