@@ -419,20 +419,17 @@ model IntegrationSecret {
 model DNCList {
   id          String   @id @default(cuid())
   accountId   String
-  phone       String
-  // Dual-write phase (docs/pii-encryption-design.md, phase 2): ciphertext
-  // and blind index beside the plaintext; the plaintext goes at cutover.
-  phoneEnc    String?
-  phoneHash   String?
+  // The suppressed number, encrypted with a blind index; no plaintext column
+  // (docs/pii-encryption-design.md, phase 2).
+  phoneEnc    String
+  phoneHash   String
   source      String   // manual, stop_keyword, help_keyword, external
   reason      String?
   createdAt   DateTime @default(now())
   expiresAt   DateTime? // null = permanent
 
-  @@unique([accountId, phone])
-  @@index([phone])
+  @@unique([accountId, phoneHash])
   @@index([accountId])
-  @@index([accountId, phoneHash])
   @@map("dnc_list")
 }
 
@@ -441,9 +438,7 @@ model Consent {
   id          String   @id @default(cuid())
   accountId   String
   leadId      String?
-  phone       String?
-  email       String?
-  // Dual-write phase: see DNCList.
+  // Contact the consent was given for, encrypted with a blind index.
   phoneEnc    String?
   phoneHash   String?
   emailEnc    String?
@@ -459,8 +454,6 @@ model Consent {
 
   @@index([accountId])
   @@index([leadId])
-  @@index([phone])
-  @@index([email])
   @@index([accountId, phoneHash])
   @@index([accountId, emailHash])
   @@map("consents")

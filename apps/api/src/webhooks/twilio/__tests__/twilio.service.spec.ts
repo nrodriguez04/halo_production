@@ -135,18 +135,11 @@ describe('TwilioService', () => {
     });
 
     expect(prisma.dNCList.findFirst).toHaveBeenCalledWith({
-      where: {
-        accountId: 'unknown',
-        OR: [
-          { phoneHash: hashPhone('+15551234567') },
-          { phone: '+15551234567' },
-        ],
-      },
+      where: { accountId: 'unknown', phoneHash: hashPhone('+15551234567') },
     });
     expect(prisma.dNCList.create).toHaveBeenCalledWith({
       data: {
         accountId: 'unknown',
-        phone: '+15551234567',
         phoneEnc: expect.any(String),
         phoneHash: hashPhone('+15551234567'),
         source: 'stop_keyword',
@@ -253,7 +246,7 @@ describe('TwilioService', () => {
     expect(data.metadata.to).toBe('+15550000000');
   });
 
-  it('matches prior outbound messages by the recipient blind index first', async () => {
+  it('matches prior outbound messages by the recipient blind index only', async () => {
     prisma.message.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
 
     await service.handleInbound({
@@ -264,8 +257,8 @@ describe('TwilioService', () => {
     });
 
     const where = prisma.message.findMany.mock.calls[0][0].where;
-    expect(where.direction).toBe('outbound');
-    expect(where.OR[0]).toEqual({
+    expect(where).toEqual({
+      direction: 'outbound',
       counterpartyHash: {
         in: expect.arrayContaining([hashPhone('+15551234567')]),
       },

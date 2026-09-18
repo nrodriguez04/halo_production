@@ -28,21 +28,15 @@ export class TwilioService {
 
       const protectedPhone = protectPhone(normalizedPhone);
       const existing = await this.prisma.dNCList.findFirst({
-        where: {
-          accountId,
-          OR: [
-            { phoneHash: protectedPhone.phoneHash },
-            { phone: normalizedPhone },
-          ],
-        },
+        where: { accountId, phoneHash: protectedPhone.phoneHash as string },
       });
 
       if (!existing) {
         await this.prisma.dNCList.create({
           data: {
             accountId,
-            phone: normalizedPhone,
-            ...protectedPhone,
+            phoneEnc: protectedPhone.phoneEnc as string,
+            phoneHash: protectedPhone.phoneHash as string,
             source: 'stop_keyword',
             reason: 'User sent STOP keyword',
           },
@@ -184,21 +178,9 @@ export class TwilioService {
       this.prisma.message.findMany({
         where: {
           direction: 'outbound',
-          OR: [
-            // Indexed blind-index match on the recipient; the JSON arm covers
-            // rows the backfill has not reached and goes once it has run.
-            {
-              counterpartyHash: {
-                in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
-              },
-            },
-            ...phoneCandidates.map((phone) => ({
-              metadata: {
-                path: ['to'],
-                string_contains: phone,
-              },
-            })),
-          ],
+          counterpartyHash: {
+            in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
+          },
         },
         select: { accountId: true },
         distinct: ['accountId'],
