@@ -1,5 +1,3 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
 import { UnderwriteDealSkill } from './underwrite-deal.skill';
 
 test('UnderwriteDealSkill rejects instead of claiming a job was queued', async () => {
@@ -22,13 +20,10 @@ test('UnderwriteDealSkill rejects instead of claiming a job was queued', async (
 
   const skill = new UnderwriteDealSkill(prisma as any).getDefinition();
 
-  await assert.rejects(
-    skill.execute({ dealId: 'deal-1', tenantId: 'acct-1' }),
-    /Underwriting is unavailable: no underwriting job was enqueued\./,
-  );
+  await expect(skill.execute({ dealId: 'deal-1', tenantId: 'acct-1' })).rejects.toThrow(/Underwriting is unavailable: no underwriting job was enqueued\./);
 
-  assert.deepEqual(findFirstCalls, [
+  expect(findFirstCalls).toEqual([
     { where: { id: 'deal-1', accountId: 'acct-1' } },
   ]);
-  assert.deepEqual(jobRunCreates, []);
+  expect(jobRunCreates).toEqual([]);
 });
