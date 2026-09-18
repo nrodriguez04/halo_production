@@ -49,22 +49,21 @@ describe('ComplianceService', () => {
         phone: '+15555550100',
       });
       const where = prisma.dNCList.findFirst.mock.calls[0][0].where;
-      expect(where.AND).toEqual([
-        { OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] },
+      expect(where.OR).toEqual([
+        { expiresAt: null },
+        { expiresAt: { gt: expect.any(Date) } },
       ]);
     });
 
-    it('matches on the phone blind index (any formatting) with a plaintext fallback', async () => {
+    it('matches on the phone blind index only, whatever the formatting', async () => {
       await service.getFacts({
         accountId: 'halo-hq',
         channel: 'sms',
         phone: '(555) 555-0100',
       });
       const where = prisma.dNCList.findFirst.mock.calls[0][0].where;
-      expect(where.OR).toEqual([
-        { phoneHash: hashPhone('+15555550100') },
-        { phone: '+15555550100' },
-      ]);
+      expect(where.phoneHash).toBe(hashPhone('+15555550100'));
+      expect(where).not.toHaveProperty('phone');
     });
 
     it('reports isDnc when a matching entry exists', async () => {
@@ -110,9 +109,7 @@ describe('ComplianceService', () => {
       expect(where.OR).toEqual([
         { leadId: 'lead_1' },
         { phoneHash: hashPhone('+15555550100') },
-        { phone: '+15555550100' },
         { emailHash: hashEmail('seller@example.com') },
-        { email: 'Seller@Example.com' },
       ]);
     });
 

@@ -201,7 +201,6 @@ async function main() {
         data: {
           accountId: ACCOUNT_ID,
           leadId: lead.id,
-          phone: contact.phone,
           ...protectPhone(contact.phone),
           channel: 'sms',
           source: 'form',
