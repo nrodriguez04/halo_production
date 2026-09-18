@@ -1,6 +1,7 @@
 import { AutomationRunStatus, PrismaClient } from '@prisma/client';
 import { seedCostGovernance } from './seed-providers';
 import { protectContact, revealContact } from '../src/leads/lead-pii';
+import { protectPhone } from '../src/pii/contact-crypto';
 
 const prisma = new PrismaClient();
 
@@ -201,6 +202,7 @@ async function main() {
           accountId: ACCOUNT_ID,
           leadId: lead.id,
           phone: contact.phone,
+          ...protectPhone(contact.phone),
           channel: 'sms',
           source: 'form',
           evidence: { type: 'web_form', timestamp: new Date().toISOString() },

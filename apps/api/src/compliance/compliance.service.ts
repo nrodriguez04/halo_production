@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { normalizePhoneNumber } from '@halo/shared';
+import { hashEmail, hashPhone } from '@halo/shared';
 
 export interface ComplianceSubject {
   accountId: string;
@@ -74,12 +75,15 @@ export class ComplianceService {
   ): Promise<boolean> {
     if (!phone) return false;
 
+    const normalized = normalizePhoneNumber(phone);
     const entry = await this.prisma.dNCList.findFirst({
       where: {
         accountId,
-        phone: normalizePhoneNumber(phone),
+        // Blind index first; the plaintext arm covers rows the backfill has
+        // not reached and goes at cutover.
+        OR: [{ phoneHash: hashPhone(normalized) }, { phone: normalized }],
         // null expiresAt means permanent.
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
       },
       select: { id: true },
     });
@@ -95,9 +99,14 @@ export class ComplianceService {
     const identifiers: Record<string, unknown>[] = [];
     if (subject.leadId) identifiers.push({ leadId: subject.leadId });
     if (subject.phone) {
-      identifiers.push({ phone: normalizePhoneNumber(subject.phone) });
+      const normalized = normalizePhoneNumber(subject.phone);
+      identifiers.push({ phoneHash: hashPhone(normalized) });
+      identifiers.push({ phone: normalized });
     }
-    if (subject.email) identifiers.push({ email: subject.email });
+    if (subject.email) {
+      identifiers.push({ emailHash: hashEmail(subject.email) });
+      identifiers.push({ email: subject.email });
+    }
 
     if (identifiers.length === 0) {
       return { applicable: false, granted: true };

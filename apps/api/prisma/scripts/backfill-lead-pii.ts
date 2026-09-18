@@ -7,6 +7,7 @@
 //   npm run db:backfill-pii            (from the repo root)
 import { Prisma, PrismaClient } from '@prisma/client';
 import { protectContact } from '../../src/leads/lead-pii';
+import { protectEmail, protectPhone } from '../../src/pii/contact-crypto';
 
 const prisma = new PrismaClient();
 const BATCH = 500;
@@ -26,10 +27,67 @@ async function plaintextColumnsExist(): Promise<boolean> {
   return Number(rows[0]?.n ?? 0) === 2;
 }
 
+async function columnsExist(table: string, columns: string[]): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+    SELECT COUNT(*)::bigint AS n FROM information_schema.columns
+    WHERE table_name = ${table} AND column_name = ANY(${columns})`;
+  return Number(rows[0]?.n ?? 0) === columns.length;
+}
+
+/** dnc_list.phone -> phoneEnc / phoneHash */
+async function backfillDnc(): Promise<number> {
+  if (!(await columnsExist('dnc_list', ['phone', 'phoneEnc']))) return 0;
+  let done = 0;
+  for (;;) {
+    const rows = await prisma.$queryRaw<{ id: string; phone: string }[]>`
+      SELECT "id", "phone" FROM "dnc_list"
+      WHERE "phone" IS NOT NULL AND "phoneEnc" IS NULL LIMIT ${BATCH}`;
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      const p = protectPhone(row.phone);
+      await prisma.$executeRaw`UPDATE "dnc_list" SET "phoneEnc" = ${p.phoneEnc}, "phoneHash" = ${p.phoneHash} WHERE "id" = ${row.id}`;
+      done++;
+    }
+  }
+  return done;
+}
+
+/** consents.phone / consents.email -> *Enc / *Hash */
+async function backfillConsents(): Promise<number> {
+  if (!(await columnsExist('consents', ['phone', 'email', 'phoneEnc', 'emailEnc']))) return 0;
+  let done = 0;
+  for (;;) {
+    const rows = await prisma.$queryRaw<
+      { id: string; phone: string | null; email: string | null; phoneEnc: string | null; emailEnc: string | null }[]
+    >`
+      SELECT "id", "phone", "email", "phoneEnc", "emailEnc" FROM "consents"
+      WHERE ("phone" IS NOT NULL AND "phoneEnc" IS NULL)
+         OR ("email" IS NOT NULL AND "emailEnc" IS NULL) LIMIT ${BATCH}`;
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      const sets: Prisma.Sql[] = [];
+      if (row.phone && !row.phoneEnc) {
+        const p = protectPhone(row.phone);
+        sets.push(Prisma.sql`"phoneEnc" = ${p.phoneEnc}`, Prisma.sql`"phoneHash" = ${p.phoneHash}`);
+      }
+      if (row.email && !row.emailEnc) {
+        const e = protectEmail(row.email);
+        sets.push(Prisma.sql`"emailEnc" = ${e.emailEnc}`, Prisma.sql`"emailHash" = ${e.emailHash}`);
+      }
+      if (sets.length === 0) continue;
+      await prisma.$executeRaw`UPDATE "consents" SET ${Prisma.join(sets, ', ')} WHERE "id" = ${row.id}`;
+      done++;
+    }
+  }
+  return done;
+}
+
 async function main() {
+  console.log(`dnc_list: ${await backfillDnc()} rows protected`);
+  console.log(`consents: ${await backfillConsents()} rows protected`);
   if (!(await plaintextColumnsExist())) {
     console.log(
-      'nothing to backfill: the plaintext contact columns have already been dropped',
+      'leads: nothing to backfill, the plaintext contact columns are already dropped',
     );
     return;
   }
@@ -63,7 +121,7 @@ async function main() {
     }
     console.log(`backfilled ${done} leads so far`);
   }
-  console.log(`done: ${done} leads protected`);
+  console.log(`leads: ${done} rows protected`);
 }
 
 main()
