@@ -9,6 +9,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { LeadPiiService } from '../../leads/lead-pii.service';
 
 describe('AgentService', () => {
   let service: AgentService;
@@ -92,6 +93,7 @@ describe('AgentService', () => {
         { provide: CommunicationsService, useValue: {} },
         { provide: TimelineService, useValue: timelineService },
         { provide: ControlPlaneService, useValue: controlPlaneService },
+        LeadPiiService,
       ],
     }).compile();
 

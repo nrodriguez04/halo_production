@@ -2,8 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TwilioService } from '../twilio.service';
 import { PrismaService } from '../../../prisma.service';
 import { AutomationService } from '../../../automation/automation.service';
+import { LeadPiiService } from '../../../leads/lead-pii.service';
+import { hashPhone } from '@halo/shared';
 
 describe('TwilioService', () => {
+  beforeAll(() => {
+    process.env.PII_ENCRYPTION_KEY_V1 = '11'.repeat(32);
+    process.env.PII_ENCRYPTION_KEY_CURRENT_VERSION = '1';
+    process.env.PII_INDEX_KEY = '22'.repeat(32);
+  });
+
   let service: TwilioService;
   let prisma: any;
   let automationService: any;
@@ -35,6 +43,7 @@ describe('TwilioService', () => {
         TwilioService,
         { provide: PrismaService, useValue: prisma },
         { provide: AutomationService, useValue: automationService },
+        LeadPiiService,
       ],
     }).compile();
 
@@ -198,5 +207,27 @@ describe('TwilioService', () => {
       });
       expect(writtenStatus()).toBe('sent');
     });
+  });
+
+  it('looks leads up by the phone blind index as well as plaintext during dual-write', async () => {
+    prisma.message.findMany.mockResolvedValueOnce([]);
+    prisma.lead.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
+
+    await service.handleInbound({
+      From: '+15551234567',
+      To: '+15550000000',
+      Body: 'hello',
+      MessageSid: 'SM124',
+    });
+
+    const where = prisma.lead.findMany.mock.calls[0][0].where;
+    expect(where.OR[0]).toEqual({
+      canonicalPhoneHash: {
+        in: expect.arrayContaining([hashPhone('+15551234567')]),
+      },
+    });
+    expect(where.OR).toEqual(
+      expect.arrayContaining([{ canonicalPhone: '+15551234567' }]),
+    );
   });
 });

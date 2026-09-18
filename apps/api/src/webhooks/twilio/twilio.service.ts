@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { AutomationService } from '../../automation/automation.service';
 import * as complianceUtils from '@halo/shared';
+import { LeadPiiService } from '../../leads/lead-pii.service';
 
 @Injectable()
 export class TwilioService {
@@ -10,6 +11,7 @@ export class TwilioService {
   constructor(
     private prisma: PrismaService,
     private automationService: AutomationService,
+    private pii: LeadPiiService,
   ) {}
 
   async handleInbound(body: any) {
@@ -185,9 +187,16 @@ export class TwilioService {
       }),
       this.prisma.lead.findMany({
         where: {
-          OR: phoneCandidates.map((phone) => ({
-            canonicalPhone: phone,
-          })),
+          // Blind-index arm first; the plaintext arm covers rows the
+          // backfill has not reached yet and goes at cutover.
+          OR: [
+            {
+              canonicalPhoneHash: {
+                in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
+              },
+            },
+            ...phoneCandidates.map((phone) => ({ canonicalPhone: phone })),
+          ],
         },
         select: { accountId: true },
         distinct: ['accountId'],

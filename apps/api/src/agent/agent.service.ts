@@ -9,6 +9,7 @@ import { CommunicationsService } from '../communications/communications.service'
 import { TimelineService } from '../timeline/timeline.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
+import { LeadPiiService } from '../leads/lead-pii.service';
 
 @Injectable()
 export class AgentService {
@@ -17,6 +18,7 @@ export class AgentService {
     private communicationsService: CommunicationsService,
     private timelineService: TimelineService,
     private controlPlaneService: ControlPlaneService,
+    private pii: LeadPiiService,
   ) {}
 
   async getDealSummary(dealId: string, accountId: string) {
@@ -63,8 +65,7 @@ export class AgentService {
             id: deal.lead.id,
             status: deal.lead.status,
             owner: deal.lead.canonicalOwner,
-            phone: deal.lead.canonicalPhone,
-            email: deal.lead.canonicalEmail,
+            ...this.pii.reveal(deal.lead),
           }
         : null,
       property: deal.property

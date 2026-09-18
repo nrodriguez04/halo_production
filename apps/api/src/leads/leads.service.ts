@@ -8,17 +8,25 @@ import { PrismaService } from '../prisma.service';
 import { LeadCreate, LeadUpdate, CSVImportRow } from '@halo/shared';
 import * as reconciliationUtils from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
+import { LeadPiiService } from './lead-pii.service';
 
 @Injectable()
 export class LeadsService {
   constructor(
     private prisma: PrismaService,
     private timelineService: TimelineService,
+    private pii: LeadPiiService,
   ) {}
 
   async create(data: LeadCreate, actorId: string | null = null) {
     const lead = await this.prisma.lead.create({
-      data,
+      data: {
+        ...data,
+        ...this.pii.protect({
+          phone: data.canonicalPhone,
+          email: data.canonicalEmail,
+        }),
+      },
       include: {
         sourceRecords: true,
         properties: true,
@@ -123,9 +131,12 @@ export class LeadsService {
     }
 
     const lead = await this.findOne(id, accountId);
+    const contact: { phone?: string | null; email?: string | null } = {};
+    if ('canonicalPhone' in data) contact.phone = data.canonicalPhone ?? null;
+    if ('canonicalEmail' in data) contact.email = data.canonicalEmail ?? null;
     return this.prisma.lead.update({
       where: { id: lead.id },
-      data,
+      data: { ...data, ...this.pii.protect(contact) },
     });
   }
 
@@ -217,8 +228,12 @@ export class LeadsService {
       canonicalState?: string;
       canonicalZip?: string;
       canonicalOwner?: string;
-      canonicalPhone?: string;
-      canonicalEmail?: string;
+      canonicalPhone?: string | null;
+      canonicalEmail?: string | null;
+      canonicalPhoneEnc?: string | null;
+      canonicalEmailEnc?: string | null;
+      canonicalPhoneHash?: string | null;
+      canonicalEmailHash?: string | null;
       status: string;
       tags: string[];
     }> = [];
@@ -238,8 +253,7 @@ export class LeadsService {
         canonicalState: r.row.state,
         canonicalZip: r.row.zip,
         canonicalOwner: r.row.owner,
-        canonicalPhone: r.row.phone,
-        canonicalEmail: r.row.email,
+        ...this.pii.protect({ phone: r.row.phone, email: r.row.email }),
         status: 'new',
         tags: [],
       });
@@ -424,11 +438,15 @@ export class LeadsService {
     if (!target.canonicalOwner && source.canonicalOwner) {
       updates.canonicalOwner = source.canonicalOwner;
     }
+    const inherited: { phone?: string; email?: string } = {};
     if (!target.canonicalPhone && source.canonicalPhone) {
-      updates.canonicalPhone = source.canonicalPhone;
+      inherited.phone = source.canonicalPhone;
     }
     if (!target.canonicalEmail && source.canonicalEmail) {
-      updates.canonicalEmail = source.canonicalEmail;
+      inherited.email = source.canonicalEmail;
+    }
+    for (const [k, v] of Object.entries(this.pii.protect(inherited))) {
+      if (v !== null && v !== undefined) updates[k] = v;
     }
 
     await this.prisma.$transaction(async (tx) => {

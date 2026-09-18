@@ -217,7 +217,9 @@ NEXT_PUBLIC_API_URL=https://api.haloacquisitions.com/api
 CORS_ORIGINS=https://app.haloacquisitions.com
 
 # ── Encryption ─────────────────────────────────────────
-SECRETS_ENCRYPTION_KEY=<64_hex_chars>
+SECRETS_ENCRYPTION_KEY=
+PII_ENCRYPTION_KEY_V1=        # openssl rand -hex 32; back it up
+PII_INDEX_KEY=                # openssl rand -hex 32<64_hex_chars>
 
 # ── Worker -> api (service-to-service) ─────────────────
 # The worker proxies every paid call to the api so it goes through the

@@ -378,6 +378,20 @@ The daily cost cap is enforced by the app — AI requests are blocked when the c
 
 ---
 
+## 11b. Contact PII keys (required)
+
+Lead phone and email are stored encrypted with a blind index for lookups
+(`docs/pii-encryption-design.md`). The api refuses to start without both keys:
+
+```bash
+PII_ENCRYPTION_KEY_V1=$(openssl rand -hex 32)
+PII_INDEX_KEY=$(openssl rand -hex 32)
+```
+
+Back them up outside the database — losing `PII_ENCRYPTION_KEY_V1` loses the
+encrypted values. After the first deploy with these keys, run
+`npm run db:backfill-pii` once to protect existing rows.
+
 ## 12. Agent Runtime
 
 The former OpenClaw gateway has been retired. The API agent endpoints
