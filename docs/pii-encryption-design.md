@@ -12,9 +12,22 @@ Rollout tracker:
 
 | step | state |
 |---|---|
-| additive columns, dual-write, blind-index lookups, `db:backfill-pii` | merged (#93) |
-| cutover: drop plaintext columns, mask in responses, hash-based dedupe | in progress |
-| phase 2 | pending |
+| leads: additive columns, dual-write, blind-index lookups, `db:backfill-pii` | merged (#93) |
+| leads: drop plaintext columns, present/mask on read, hash-based dedupe | #95 |
+| dnc_list + consents: columns, dual-write, backfill | #96 |
+| messages: encrypted counterparty, recipients resolved server-side, worker sends by id | #97 |
+| dnc_list + consents: guarded drop of plaintext, index-only lookups | #98 |
+| payload scrubbing | **verified nothing to scrub** — see below |
+
+### Payload audit (2026-09-18)
+
+Checked every place a contact value could be persisted outside the tables above:
+
+- `integration_cost_events.metadata` — written only from explicit `metadata` arguments; no adapter passes one and the intent `payload` is never stored.
+- `cached_provider_responses` — comms and AI actions have cache TTL 0, so send/complete payloads are never written. Geocode/ATTOM responses are cached, and contain property addresses, which are out of scope.
+- Timeline `payloadJson` and audit `details` — lifecycle `from`/`to` are stage names, not addresses; no writer includes a phone or email.
+
+So the scrubbing step in the original plan is closed with no code change.
 
 ## Where we are
 
