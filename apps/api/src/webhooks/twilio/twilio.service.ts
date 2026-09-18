@@ -4,6 +4,7 @@ import { AutomationService } from '../../automation/automation.service';
 import * as complianceUtils from '@halo/shared';
 import { LeadPiiService } from '../../leads/lead-pii.service';
 import { protectPhone } from '../../pii/contact-crypto';
+import { counterpartyColumns } from '../../communications/message-counterparty';
 
 @Injectable()
 export class TwilioService {
@@ -55,8 +56,8 @@ export class TwilioService {
           direction: 'inbound',
           status: 'delivered',
           content: messageBody,
+          ...counterpartyColumns('sms', from),
           metadata: {
-            from,
             to,
             twilioMessageSid: body.MessageSid,
             handledStop: true,
@@ -75,8 +76,8 @@ export class TwilioService {
           direction: 'inbound',
           status: 'delivered',
           content: messageBody,
+          ...counterpartyColumns('sms', from),
           metadata: {
-            from,
             to,
             twilioMessageSid: body.MessageSid,
             handledHelp: true,
@@ -94,8 +95,8 @@ export class TwilioService {
         direction: 'inbound',
         status: 'delivered',
         content: messageBody,
+        ...counterpartyColumns('sms', from),
         metadata: {
-          from,
           to,
           twilioMessageSid: body.MessageSid,
         },
@@ -183,12 +184,21 @@ export class TwilioService {
       this.prisma.message.findMany({
         where: {
           direction: 'outbound',
-          OR: phoneCandidates.map((phone) => ({
-            metadata: {
-              path: ['to'],
-              string_contains: phone,
+          OR: [
+            // Indexed blind-index match on the recipient; the JSON arm covers
+            // rows the backfill has not reached and goes once it has run.
+            {
+              counterpartyHash: {
+                in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
+              },
             },
-          })),
+            ...phoneCandidates.map((phone) => ({
+              metadata: {
+                path: ['to'],
+                string_contains: phone,
+              },
+            })),
+          ],
         },
         select: { accountId: true },
         distinct: ['accountId'],

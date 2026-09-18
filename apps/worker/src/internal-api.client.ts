@@ -167,7 +167,7 @@ export function chatCompletion(
 export function sendSms(
   accountId: string,
   input: {
-    to: string;
+    to?: string;
     from: string;
     body: string;
     variant?: 'us' | 'toll_free';
@@ -180,7 +180,7 @@ export function sendSms(
 export function sendEmail(
   accountId: string,
   input: {
-    to: string;
+    to?: string;
     subject: string;
     text?: string;
     html?: string;
