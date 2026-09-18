@@ -59,6 +59,8 @@ describe('AgentService', () => {
       automationRun: {
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
         update: jest.fn().mockResolvedValue({ id: 'run-1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       },
       quietHours: {
@@ -147,6 +149,41 @@ describe('AgentService', () => {
           content: 'Hi',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+    it('rejects a caller-supplied automationRunId from another tenant', async () => {
+      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1', accountId: 'tenant-1', lead: null, property: null });
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+          content: 'hi',
+          automationRunId: 'run-of-other-tenant',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.automationRun.findFirst).toHaveBeenCalledWith({
+        where: { id: 'run-of-other-tenant', tenantId: 'tenant-1' },
+        select: { id: true },
+      });
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(prisma.automationRun.update).not.toHaveBeenCalled();
+      expect(prisma.automationRun.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('scopes the run status write to the tenant', async () => {
+      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1', accountId: 'tenant-1', lead: null, property: null });
+      prisma.automationRun.findFirst.mockResolvedValue({ id: 'run-1' });
+      prisma.message.create.mockResolvedValue({ id: 'msg-1' });
+
+      await service.draftMessage('deal-1', 'tenant-1', 'sms', 'seller', {
+        content: 'hi',
+        automationRunId: 'run-1',
+      });
+
+      expect(prisma.automationRun.updateMany).toHaveBeenCalledWith({
+        where: { id: 'run-1', tenantId: 'tenant-1' },
+        data: expect.objectContaining({ status: 'AWAITING_APPROVAL' }),
+      });
     });
   });
 
