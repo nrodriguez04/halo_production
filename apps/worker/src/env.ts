@@ -23,9 +23,6 @@ const envSchema = z.object({
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
 
-  OPENCLAW_GATEWAY_URL: z.string().optional(),
-  OPENCLAW_AUTH_TOKEN: z.string().optional(),
-  FEATURE_OPENCLAW: z.string().optional(),
 
   // Health probe HTTP server port (used by docker-compose / k8s
   // liveness/readiness checks). Default matches apps/worker/src/main.ts.

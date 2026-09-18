@@ -10,7 +10,7 @@ Every agent-initiated action creates an `AutomationRun` record in the database. 
 |-------|-------------|
 | `id` | Unique identifier |
 | `tenantId` | Multi-tenant scope |
-| `source` | Originating system (default: `openclaw`) |
+| `source` | Originating system (default: `agent`) |
 | `agentName` | Name of the agent that triggered the run |
 | `workflowName` | Workflow identifier (e.g., `draft-seller-sms`) |
 | `entityType` | Target entity type (`deal`, `lead`, `message`) |

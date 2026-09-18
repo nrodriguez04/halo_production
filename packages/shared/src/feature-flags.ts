@@ -1,7 +1,6 @@
 const FLAGS = [
   'OPENSEARCH',
   'CLAUDE',
-  'OPENCLAW',
   'PUBLIC_DEAL_PAGES',
   'STRIPE',
 ] as const;

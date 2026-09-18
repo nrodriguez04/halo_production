@@ -203,7 +203,7 @@ export class AnalyticsService {
     const draftMessages = await this.prisma.message.count({
       where: {
         accountId,
-        source: 'openclaw',
+        source: 'agent',
         createdAt: { gte: start, lte: end },
       },
     });
@@ -211,7 +211,7 @@ export class AnalyticsService {
     const approvedMessages = await this.prisma.message.count({
       where: {
         accountId,
-        source: 'openclaw',
+        source: 'agent',
         status: { in: ['approved', 'sent', 'delivered'] },
         createdAt: { gte: start, lte: end },
       },
@@ -297,7 +297,7 @@ export class AnalyticsService {
       this.prisma.message.count({
         where: {
           accountId,
-          source: 'openclaw',
+          source: 'agent',
           status: { in: ['sent', 'delivered'] },
           createdAt: inRange,
         },

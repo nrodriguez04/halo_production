@@ -224,13 +224,13 @@ async function main() {
   }
   console.log(`  Created ${eventCount} timeline events`);
 
-  // 10. Automation runs (OpenClaw integration demo data)
+  // 10. Automation runs (agent automation demo data)
   console.log('\nCreating automation runs...');
 
   const completedRun = await prisma.automationRun.create({
     data: {
       tenantId: ACCOUNT_ID,
-      source: 'openclaw',
+      source: 'agent',
       agentName: 'outreach-agent',
       workflowName: 'draft-seller-sms',
       entityType: 'deal',
@@ -251,7 +251,7 @@ async function main() {
   const failedRun = await prisma.automationRun.create({
     data: {
       tenantId: ACCOUNT_ID,
-      source: 'openclaw',
+      source: 'agent',
       agentName: 'outreach-agent',
       workflowName: 'draft-seller-email',
       entityType: 'deal',
@@ -269,7 +269,7 @@ async function main() {
   const pendingRun = await prisma.automationRun.create({
     data: {
       tenantId: ACCOUNT_ID,
-      source: 'openclaw',
+      source: 'agent',
       agentName: 'follow-up-agent',
       workflowName: 'propose-follow-up',
       entityType: 'deal',
@@ -286,7 +286,7 @@ async function main() {
     },
   });
 
-  // Pending approval message from openclaw
+  // Pending approval message from the agent
   if (createdDeals.length > 2) {
     await prisma.message.create({
       data: {
@@ -296,7 +296,7 @@ async function main() {
         direction: 'outbound',
         status: 'pending_approval',
         content: 'Hi William, following up on 789 Magnolia Dr. We can offer a competitive cash price. Interested in a quick chat?',
-        source: 'openclaw',
+        source: 'agent',
         agentName: 'follow-up-agent',
         automationRunId: pendingRun.id,
         metadata: { recipientType: 'seller', workflowName: 'propose-follow-up' },
@@ -414,7 +414,7 @@ async function main() {
     await prisma.automationRun.create({
       data: {
         tenantId: ACCOUNT_ID,
-        source: 'openclaw',
+        source: 'agent',
         agentName: agent,
         workflowName: workflow,
         status,

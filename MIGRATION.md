@@ -245,11 +245,6 @@ PROPERTYRADAR_API_KEY=
 GOOGLE_GEOCODING_API_KEY=
 RENTCAST_API_KEY=
 
-# ── OpenClaw (off until ready) ─────────────────────────
-# Names must match apps/worker/src/openclaw/openclaw.config.ts.
-FEATURE_OPENCLAW=false
-OPENCLAW_GATEWAY_URL=
-OPENCLAW_AUTH_TOKEN=
 ```
 
 Lock it down:
@@ -612,7 +607,6 @@ This is the most hardened cheap setup: VPS has only SSH open to the internet.
 - [ ] `SECRETS_ENCRYPTION_KEY` is backed up in your password manager
 - [ ] Postgres / Redis / MinIO bound to `127.0.0.1` only
 - [ ] UptimeRobot monitor active
-- [ ] (When ready) `FEATURE_OPENCLAW=true` and OpenClaw envs set on worker
 
 ---
 

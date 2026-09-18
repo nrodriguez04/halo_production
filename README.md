@@ -337,14 +337,14 @@ Required variables:
 - ✅ Dark theme UI with green primary + shadcn/ui components across all 14 pages
 - ✅ Interactive property map (MapLibre) on dashboard and properties page
 - ✅ RentCast API integration for property listings/search
-- ✅ OpenClaw bot gateway + 7 custom skills (conditional on `FEATURE_OPENCLAW`)
+- ⏳ Agent runtime: OpenClaw retired; CrewAI integration in progress (`apps/agents`)
 - ✅ Security pen test suite -- 80/80 passing (`scripts/security-pentest.ts`)
 - ✅ 5 Jest E2E test suites (tenant isolation, policy, state machine, jobs, security)
 - ✅ GitHub Actions CI pipeline (lint, typecheck, build, migration check)
 - ✅ Helmet security headers, body size/depth limits, webhook input validation
 - ✅ Chaos engineering drills + DLQ replay admin endpoints
 - ✅ Feature flag system (`packages/shared/src/feature-flags.ts`)
-- ✅ Typed feature flags for OpenSearch, Claude, OpenClaw, public deal pages, Stripe
+- ✅ Typed feature flags for OpenSearch, Claude, public deal pages, Stripe
 - ✅ Database seed script for demo data
 
 ### Pending

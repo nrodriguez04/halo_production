@@ -43,7 +43,7 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
   '/marketing': [{ path: '/deals' }],
   '/buyers': [{ path: '/buyers' }],
   '/admin': [{ path: '/health/ready' }, { path: '/control-plane' }],
-  '/admin/openclaw': [
+  '/admin/automation': [
     { path: '/analytics/automation/overview' },
     { path: '/analytics/automation/roi' },
     { path: '/analytics/automation/by-workflow' },
@@ -83,7 +83,7 @@ const navItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
   { href: '/admin', label: 'Control Plane', icon: Shield },
-  { href: '/admin/openclaw', label: 'OpenClaw', icon: Bot },
+  { href: '/admin/automation', label: 'Automation', icon: Bot },
   { href: '/admin/api-spend', label: 'API Spend', icon: DollarSign },
   { href: '/admin/cost-governance', label: 'Cost Governance', icon: Wallet },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },

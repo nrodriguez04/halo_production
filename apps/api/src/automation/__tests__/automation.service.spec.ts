@@ -57,7 +57,7 @@ describe('AutomationService', () => {
       const mockRun = {
         id: 'run-1',
         tenantId: 'tenant-1',
-        source: 'openclaw',
+        source: 'agent',
         status: 'QUEUED',
         entityType: 'deal',
         entityId: 'deal-1',
@@ -66,7 +66,7 @@ describe('AutomationService', () => {
 
       const result = await service.createRun({
         tenantId: 'tenant-1',
-        source: 'openclaw',
+        source: 'agent',
         agentName: 'test-agent',
         workflowName: 'draft-seller-sms',
         entityType: 'deal',

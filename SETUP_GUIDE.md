@@ -17,7 +17,7 @@ This guide walks you through setting up every external service, configuring envi
 9. [RentCast (Rental Data)](#9-rentcast-rental-data)
 10. [PropertyRadar (Property Intelligence)](#10-propertyradar-property-intelligence)
 11. [OpenAI (AI/LLM)](#11-openai-aillm)
-12. [OpenClaw (Agent Orchestration)](#12-openclaw-agent-orchestration)
+12. [Agent Runtime](#12-agent-runtime)
 13. [Environment Files](#13-environment-files)
 14. [Running Locally](#14-running-locally)
 15. [Production Deployment](#15-production-deployment)
@@ -378,26 +378,12 @@ The daily cost cap is enforced by the app — AI requests are blocked when the c
 
 ---
 
-## 12. OpenClaw (Agent Orchestration)
+## 12. Agent Runtime
 
-OpenClaw is the AI agent orchestration layer. It's optional — the app works without it.
-
-### Step 1: Set up OpenClaw
-
-Follow the [OpenClaw documentation](https://github.com/openclaw-ai/openclaw) to run an OpenClaw gateway. For local development, this typically runs on `ws://localhost:18789`.
-
-### Step 2: Set environment variables
-
-```
-# apps/worker/.env.local
-FEATURE_OPENCLAW=true
-OPENCLAW_GATEWAY_URL=ws://localhost:18789
-OPENCLAW_AUTH_TOKEN=your_openclaw_token
-```
-
-**If you don't have OpenClaw set up**, leave `FEATURE_OPENCLAW` unset or set to `false`. The worker will start without the OpenClaw module.
-
----
+The former OpenClaw gateway has been retired. The API agent endpoints
+(`/agent/*`, the approval queue, automation runs and analytics) are
+runtime-agnostic; the replacement runtime is CrewAI, being built under
+`apps/agents`. Nothing is required here for the core app to run.
 
 ## 13. Environment Files
 
