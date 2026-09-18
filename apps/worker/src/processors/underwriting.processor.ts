@@ -112,6 +112,27 @@ export class UnderwritingProcessor extends WorkerHost {
         },
       });
 
+      // Only write the AI numbers back if nobody touched the deal while the
+      // job was running. `deal.updatedAt` is the snapshot loaded above; a
+      // user editing arv/repairEstimate/mao through PUT /deals/:id in the
+      // meantime bumps it, and their numbers win over a result computed from
+      // stale inputs. The result row is still recorded, flagged, so the run
+      // stays auditable.
+      const dealWrite = await prisma.deal.updateMany({
+        where: { id: dealId, accountId: tenantId, updatedAt: deal.updatedAt },
+        data: {
+          arv: analysis.arv,
+          repairEstimate: analysis.repairEstimate,
+          mao: analysis.mao,
+        },
+      });
+      const staleResult = dealWrite.count === 0;
+      if (staleResult) {
+        console.warn(
+          `Underwriting result for deal ${dealId} is stale (deal changed during the job); deal economics left untouched`,
+        );
+      }
+
       await prisma.underwritingResult.upsert({
         where: { dealId },
         create: {
@@ -127,6 +148,7 @@ export class UnderwritingProcessor extends WorkerHost {
             model: completion.model,
             tokensUsed: completion.tokensIn + completion.tokensOut,
             cost,
+            stale: staleResult,
           },
         },
         update: {
@@ -140,16 +162,8 @@ export class UnderwritingProcessor extends WorkerHost {
             model: completion.model,
             tokensUsed: completion.tokensIn + completion.tokensOut,
             cost,
+            stale: staleResult,
           },
-        },
-      });
-
-      await prisma.deal.update({
-        where: { id: dealId },
-        data: {
-          arv: analysis.arv,
-          repairEstimate: analysis.repairEstimate,
-          mao: analysis.mao,
         },
       });
 
