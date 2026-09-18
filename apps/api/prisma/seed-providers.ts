@@ -87,6 +87,13 @@ const PROVIDERS = [
     ],
   },
   {
+    key: 'sendgrid',
+    displayName: 'SendGrid',
+    category: 'comms',
+    enabled: true,
+    pricing: [{ action: 'send_email', unitCostUsd: 0.0004, unit: 'per_call' }],
+  },
+  {
     key: 'resend',
     displayName: 'Resend',
     category: 'comms',

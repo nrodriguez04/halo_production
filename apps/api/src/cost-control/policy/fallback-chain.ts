@@ -19,7 +19,8 @@ const FALLBACK_CHAINS: Record<string, string[]> = {
   datazapp: [],
   propertyradar: [],
 
-  // Email — fall back to SMTP if Resend is over budget
+  // Email — fall back to SMTP if the primary provider is over budget
+  sendgrid: ['smtp'],
   resend: ['smtp'],
   smtp: [],
 
