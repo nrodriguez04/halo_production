@@ -120,7 +120,7 @@ export class TwilioService {
       await this.prisma.message.update({
         where: { id: messages[0].id },
         data: {
-          status: this.mapTwilioStatus(status),
+          status: this.nextStatus(messages[0].status, this.mapTwilioStatus(status)),
           metadata: {
             ...(messages[0].metadata as any || {}),
             deliveryStatus: status,
@@ -208,15 +208,47 @@ export class TwilioService {
     return Array.from(new Set([trimmed, normalized].filter(Boolean)));
   }
 
-  private mapTwilioStatus(status: string): string {
+  /**
+   * Twilio transport states -> app workflow states. A callback only exists
+   * for a message that was already approved and handed to Twilio, so no
+   * transport state maps back to `pending_approval`; `queued` used to, which
+   * let a retried or out-of-order callback reopen a delivered SMS in the
+   * approval queue and invite a second send.
+   */
+  private mapTwilioStatus(status: string): string | null {
     const statusMap: Record<string, string> = {
-      queued: 'pending_approval',
+      accepted: 'sent',
+      queued: 'sent',
+      sending: 'sent',
       sent: 'sent',
       delivered: 'delivered',
+      read: 'delivered',
       failed: 'failed',
       undelivered: 'failed',
+      canceled: 'failed',
     };
 
-    return statusMap[status] || 'sent';
+    return statusMap[status] ?? null;
+  }
+
+  /**
+   * Workflow status is monotonic once dispatched: sent -> delivered, and
+   * failed is terminal unless delivery was already confirmed. Callbacks can
+   * arrive out of order, so a later `sent` must not undo `delivered`.
+   */
+  private nextStatus(current: string, incoming: string | null): string {
+    if (!incoming) return current;
+    const rank: Record<string, number> = {
+      pending_approval: 0,
+      approved: 1,
+      blocked: 1,
+      sent: 2,
+      delivered: 3,
+      failed: 3,
+    };
+    if (current === 'delivered') return current;
+    if (incoming === 'failed') return 'failed';
+    if (current === 'failed') return current;
+    return (rank[incoming] ?? 0) > (rank[current] ?? 0) ? incoming : current;
   }
 }

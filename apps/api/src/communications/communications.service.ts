@@ -130,6 +130,14 @@ export class CommunicationsService {
       throw new BadRequestException('Message is not pending approval');
     }
 
+    // A provider receipt means this message was already dispatched once.
+    // Whatever put it back into pending_approval, approving it again would
+    // send a second copy.
+    const priorReceipt = (message.metadata as Record<string, unknown> | null)?.twilioMessageSid;
+    if (typeof priorReceipt === 'string' && priorReceipt.length > 0) {
+      throw new BadRequestException('Message was already dispatched to the provider');
+    }
+
     const controlPlane = await this.getControlPlane(accountId);
     const compliance = await this.getComplianceFacts(message as any);
     try {

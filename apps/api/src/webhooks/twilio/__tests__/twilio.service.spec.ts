@@ -146,4 +146,45 @@ describe('TwilioService', () => {
     );
     expect(automationService.attributeReply).not.toHaveBeenCalled();
   });
+
+
+  describe('handleStatus', () => {
+    const withMessage = (status: string) => {
+      prisma.message.findMany.mockResolvedValueOnce([
+        { id: 'msg-1', status, metadata: { twilioMessageSid: 'SM1' } },
+      ]);
+      prisma.message.update = jest.fn().mockResolvedValue({});
+    };
+    const writtenStatus = () => prisma.message.update.mock.calls[0][0].data.status;
+
+    it('does not reopen approval when a queued callback arrives for a sent message', async () => {
+      withMessage('sent');
+      await service.handleStatus({ MessageSid: 'SM1', MessageStatus: 'queued' });
+      expect(writtenStatus()).toBe('sent');
+    });
+
+    it('keeps delivered when a late sent callback arrives out of order', async () => {
+      withMessage('delivered');
+      await service.handleStatus({ MessageSid: 'SM1', MessageStatus: 'sent' });
+      expect(writtenStatus()).toBe('delivered');
+    });
+
+    it('advances sent to delivered', async () => {
+      withMessage('sent');
+      await service.handleStatus({ MessageSid: 'SM1', MessageStatus: 'delivered' });
+      expect(writtenStatus()).toBe('delivered');
+    });
+
+    it('marks an undelivered send as failed', async () => {
+      withMessage('sent');
+      await service.handleStatus({ MessageSid: 'SM1', MessageStatus: 'undelivered' });
+      expect(writtenStatus()).toBe('failed');
+    });
+
+    it('leaves the workflow status alone for an unknown transport state', async () => {
+      withMessage('sent');
+      await service.handleStatus({ MessageSid: 'SM1', MessageStatus: 'something-new' });
+      expect(writtenStatus()).toBe('sent');
+    });
+  });
 });
