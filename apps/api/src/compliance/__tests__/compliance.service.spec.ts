@@ -1,10 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ComplianceService } from '../compliance.service';
 import { PrismaService } from '../../prisma.service';
+import { hashEmail, hashPhone } from '@halo/shared';
 
 describe('ComplianceService', () => {
   let service: ComplianceService;
   let prisma: any;
+
+  beforeAll(() => {
+    process.env.PII_INDEX_KEY = '22'.repeat(32);
+  });
 
   beforeEach(async () => {
     prisma = {
@@ -44,9 +49,21 @@ describe('ComplianceService', () => {
         phone: '+15555550100',
       });
       const where = prisma.dNCList.findFirst.mock.calls[0][0].where;
+      expect(where.AND).toEqual([
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] },
+      ]);
+    });
+
+    it('matches on the phone blind index (any formatting) with a plaintext fallback', async () => {
+      await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'sms',
+        phone: '(555) 555-0100',
+      });
+      const where = prisma.dNCList.findFirst.mock.calls[0][0].where;
       expect(where.OR).toEqual([
-        { expiresAt: null },
-        { expiresAt: { gt: expect.any(Date) } },
+        { phoneHash: hashPhone('+15555550100') },
+        { phone: '+15555550100' },
       ]);
     });
 
@@ -79,6 +96,24 @@ describe('ComplianceService', () => {
         leadId: 'lead_1',
       });
       expect(facts.hasConsent).toBe(false);
+    });
+
+    it('looks consent up by lead, phone blind index and email blind index', async () => {
+      await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'email',
+        phone: '+15555550100',
+        email: 'Seller@Example.com',
+        leadId: 'lead_1',
+      });
+      const where = prisma.consent.findFirst.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { leadId: 'lead_1' },
+        { phoneHash: hashPhone('+15555550100') },
+        { phone: '+15555550100' },
+        { emailHash: hashEmail('seller@example.com') },
+        { email: 'Seller@Example.com' },
+      ]);
     });
 
     it('grants consent from a live record and reports its source', async () => {
