@@ -63,3 +63,9 @@ minio-data/
 # MailHog data
 mailhog-data/
 
+# python (apps/agents)
+__pycache__/
+*.pyc
+apps/agents/.venv/
+apps/agents/*.egg-info/
+apps/agents/.env
