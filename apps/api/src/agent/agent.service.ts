@@ -10,6 +10,11 @@ import { TimelineService } from '../timeline/timeline.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { LeadPiiService } from '../leads/lead-pii.service';
+import {
+  counterpartyColumns,
+  recipientFromMetadata,
+  stripRecipientKeys,
+} from '../communications/message-counterparty';
 
 @Injectable()
 export class AgentService {
@@ -321,6 +326,17 @@ export class AgentService {
       automationRunId = run.id;
     }
 
+    // Seller drafts address the linked lead's contact; buyer drafts use the
+    // address the caller supplied. Either way it lands encrypted on the row
+    // and never in metadata.
+    const recipient =
+      recipientType === 'seller' && deal.lead
+        ? (() => {
+            const c = this.pii.reveal(deal.lead);
+            return channel === 'sms' ? c.phone : c.email;
+          })()
+        : recipientFromMetadata(channel, input.metadata, 'outbound');
+
     const message = await this.prisma.message.create({
       data: {
         accountId,
@@ -333,10 +349,11 @@ export class AgentService {
         source: 'agent',
         agentName: input.agentName,
         automationRunId,
+        ...counterpartyColumns(channel, recipient),
         metadata: {
           recipientType,
           subject: input.subject,
-          ...(input.metadata || {}),
+          ...stripRecipientKeys(input.metadata),
         },
       },
     });

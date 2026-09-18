@@ -228,14 +228,12 @@ export class CommunicationsProcessor extends WorkerHost {
 
   private async sendSMS(message: any) {
     const metadata = (message.metadata as any) || {};
-    const to = metadata.phone || metadata.to;
-    if (!to) throw new Error('No recipient phone number');
-
     const from = process.env.TWILIO_PHONE_NUMBER;
     if (!from) throw new Error('TWILIO_PHONE_NUMBER is required');
 
+    // No recipient here on purpose: the api reads it from the message's
+    // encrypted counterparty. The worker holds no PII keys.
     const result = await sendSmsViaApi(message.accountId, {
-      to,
       from,
       body: message.content,
       // Idempotency key on the api side, so a BullMQ retry cannot double-send.
@@ -258,11 +256,8 @@ export class CommunicationsProcessor extends WorkerHost {
 
   private async sendEmail(message: any) {
     const metadata = (message.metadata as any) || {};
-    const to = metadata.email || metadata.to;
-    if (!to) throw new Error('No recipient email address');
 
     await sendEmailViaApi(message.accountId, {
-      to,
       subject: metadata.subject || 'Message from Hālo',
       text: message.content,
       html: message.content.replace(/\n/g, '<br>'),

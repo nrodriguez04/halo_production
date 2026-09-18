@@ -331,6 +331,10 @@ model Message {
   status          String   // draft, pending_approval, approved, sent, delivered, failed
   content         String
   metadata        Json?
+  // External party (recipient if outbound, sender if inbound), encrypted
+  // with a blind index. See communications/message-counterparty.ts.
+  counterpartyEnc  String?
+  counterpartyHash String?
   approvedAt      DateTime?
   approvedBy      String?
   sentAt          DateTime?
@@ -348,6 +352,7 @@ model Message {
   @@index([dealId])
   @@index([accountId, status, createdAt])
   @@index([accountId, source, status, createdAt])
+  @@index([accountId, counterpartyHash])
   @@map("messages")
 }
 

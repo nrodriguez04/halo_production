@@ -55,7 +55,8 @@ export class ChatCompletionDto extends CostAttributionDto {
 }
 
 export class SendSmsDto extends CostAttributionDto {
-  @IsString() to!: string;
+  /** Optional: resolved from the message's encrypted counterparty when omitted. */
+  @IsOptional() @IsString() to?: string;
   @IsString() from!: string;
 
   @IsString()
@@ -81,7 +82,8 @@ export class EnrichmentAddressDto extends CostAttributionDto {
 }
 
 export class SendEmailDto extends CostAttributionDto {
-  @IsString() to!: string;
+  /** Optional: resolved from the message's encrypted counterparty when omitted. */
+  @IsOptional() @IsString() to?: string;
   @IsString() @MaxLength(500) subject!: string;
 
   @IsOptional() @IsString() @MaxLength(200_000) text?: string;
