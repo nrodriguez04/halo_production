@@ -34,6 +34,22 @@ export class CommunicationsProcessor extends WorkerHost {
         throw new Error(`Message ${messageId} is not approved`);
       }
 
+      // A persisted provider receipt means the side effect already happened
+      // on an earlier attempt that died before flipping the status. Sending
+      // again would duplicate a customer-facing message; just finish the
+      // bookkeeping.
+      const receipt = this.providerReceipt(message);
+      if (receipt) {
+        console.warn(
+          `Communication ${messageId} already has provider receipt ${receipt}; finalizing without resending`,
+        );
+        await this.finalizeSent(messageId, message.accountId, message.channel, {
+          recoveredFrom: 'provider_receipt',
+          receipt,
+        });
+        return { success: true, messageId, recovered: true };
+      }
+
       // Check control plane
       const controlPlane = await getControlPlane(message.accountId);
       if (!controlPlane.enabled) {
@@ -68,26 +84,7 @@ export class CommunicationsProcessor extends WorkerHost {
         await this.sendEmail(message);
       }
 
-      // Update message status
-      await prisma.message.update({
-        where: { id: messageId },
-        data: {
-          status: 'sent',
-          sentAt: new Date(),
-        },
-      });
-
-      await prisma.timelineEvent.create({
-        data: {
-          tenantId: message.accountId,
-          entityType: TimelineEntityType.MESSAGE,
-          entityId: messageId,
-          eventType: 'MESSAGE_SENT',
-          payloadJson: { channel: message.channel },
-          actorId: null,
-          actorType: TimelineActorType.system,
-        },
-      });
+      await this.finalizeSent(messageId, message.accountId, message.channel);
 
       return { success: true, messageId };
     } catch (error) {
@@ -118,6 +115,24 @@ export class CommunicationsProcessor extends WorkerHost {
           },
         });
         return { success: false, messageId, blocked: true, reason: error.reason };
+      }
+
+      if (error instanceof CostBlockedError && error.reason === 'BLOCK_DUPLICATE_CALL') {
+        // The api's idempotency key matched an earlier successful call for
+        // this message, so the provider already has it. Parking it as
+        // `blocked` here would hide a delivered message from the timeline
+        // and invite a manual re-send.
+        console.warn(
+          `Communication ${messageId} was already sent (idempotent replay); finalizing without resending`,
+        );
+        const current = await prisma.message.findUnique({ where: { id: messageId } });
+        if (current) {
+          await this.finalizeSent(messageId, current.accountId, current.channel, {
+            recoveredFrom: 'idempotent_replay',
+            provider: error.provider,
+          });
+        }
+        return { success: true, messageId, recovered: true };
       }
 
       if (error instanceof CostBlockedError) {
@@ -173,6 +188,42 @@ export class CommunicationsProcessor extends WorkerHost {
 
       throw error;
     }
+  }
+
+  /** Provider identifier persisted by an earlier attempt, if any. */
+  private providerReceipt(message: { metadata: unknown }): string | null {
+    const metadata = (message.metadata as Record<string, unknown> | null) || {};
+    const sid = metadata.twilioMessageSid;
+    if (typeof sid === 'string' && sid.length > 0) return sid;
+    const emailId = metadata.providerMessageId;
+    if (typeof emailId === 'string' && emailId.length > 0) return emailId;
+    return null;
+  }
+
+  private async finalizeSent(
+    messageId: string,
+    accountId: string,
+    channel: string,
+    recovery?: Record<string, unknown>,
+  ) {
+    // Only stamp sentAt on the first transition; a recovered replay must not
+    // move a real send time forward.
+    await prisma.message.updateMany({
+      where: { id: messageId, status: { not: 'sent' } },
+      data: { status: 'sent', sentAt: new Date() },
+    });
+
+    await prisma.timelineEvent.create({
+      data: {
+        tenantId: accountId,
+        entityType: TimelineEntityType.MESSAGE,
+        entityId: messageId,
+        eventType: 'MESSAGE_SENT',
+        payloadJson: { channel, ...(recovery ?? {}) },
+        actorId: null,
+        actorType: TimelineActorType.system,
+      },
+    });
   }
 
   private async sendSMS(message: any) {
