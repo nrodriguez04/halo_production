@@ -5,6 +5,9 @@ import { InternalAuthGuard } from './internal-auth.guard';
 import { OpenAIService } from '../integrations/openai/openai.service';
 import { TwilioSendService } from '../integrations/twilio-send/twilio-send.service';
 import { EmailSendService } from '../integrations/email/email-send.service';
+import { GeocodingService } from '../integrations/geocoding/geocoding.service';
+import { AttomService } from '../integrations/attom/attom.service';
+import { PrismaService } from '../prisma.service';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
 import { ComplianceService } from '../compliance/compliance.service';
 import { ComplianceBlockedException } from '../compliance/compliance-blocked.exception';
@@ -12,6 +15,7 @@ import { assertPolicy, PolicyViolationError } from '@halo/shared';
 import {
   ChatCompletionDto,
   CostAttributionDto,
+  EnrichmentAddressDto,
   SendEmailDto,
   SendSmsDto,
 } from './dto/internal.dto';
@@ -39,6 +43,9 @@ export class InternalController {
     private readonly twilio: TwilioSendService,
     private readonly email: EmailSendService,
     private readonly compliance: ComplianceService,
+    private readonly geocoding: GeocodingService,
+    private readonly attom: AttomService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -183,5 +190,60 @@ export class InternalController {
       } as any,
       this.context(accountId, dto),
     );
+  }
+
+  /**
+   * Enrichment lookups. These were the last paid calls the worker still
+   * made directly (raw fetch plus a best-effort ledger row of its own), so
+   * they ran outside preflight, rate limits and the idempotency window.
+   * The api's adapters store the SourceRecord; the route links it to the
+   * lead the worker is enriching, as the worker used to.
+   */
+  @Post('enrichment/geocode')
+  async geocode(
+    @CurrentAccountId() accountId: string,
+    @Body() dto: EnrichmentAddressDto,
+  ) {
+    const out = await this.geocoding.geocodeDetailed(
+      dto.address,
+      dto.city,
+      dto.state,
+      dto.zip,
+      this.context(accountId, dto),
+    );
+    return this.enrichmentResponse(out, dto.leadId);
+  }
+
+  @Post('enrichment/property-lookup')
+  async propertyLookup(
+    @CurrentAccountId() accountId: string,
+    @Body() dto: EnrichmentAddressDto,
+  ) {
+    const out = await this.attom.lookupPropertyDetailed(
+      dto.address,
+      dto.city,
+      dto.state,
+      dto.zip,
+      this.context(accountId, dto),
+    );
+    return this.enrichmentResponse(out, dto.leadId);
+  }
+
+  private async enrichmentResponse(
+    out: {
+      result: { sourceRecordId: string | null } | null;
+      costUsd: number;
+      cached: boolean;
+    },
+    leadId?: string,
+  ) {
+    const sourceRecordId = out.result?.sourceRecordId ?? null;
+    if (sourceRecordId && leadId) {
+      await this.prisma.sourceRecord.updateMany({
+        where: { id: sourceRecordId, leadId: null },
+        data: { leadId },
+      });
+    }
+    return { sourceRecordId, costUsd: out.costUsd, cached: out.cached };
   }
 }

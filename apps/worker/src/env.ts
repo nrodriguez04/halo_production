@@ -7,11 +7,6 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_DAILY_COST_CAP: z.coerce.number().default(5),
 
-  GOOGLE_GEOCODING_API_KEY: z.string().optional(),
-  ATTOM_API_KEY: z.string().optional(),
-  ATTOM_BASE_URL: z.string().optional(),
-  PROPERTYRADAR_API_KEY: z.string().optional(),
-  PROPERTYRADAR_BASE_URL: z.string().optional(),
 
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),

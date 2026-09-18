@@ -4,23 +4,25 @@ import * as crypto from 'crypto';
 import { transitionLeadStatus } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { getControlPlane } from '../control-plane';
-import { isOverHardCap, recordWorkerCost } from '../cost-ledger';
+import {
+  CostBlockedError,
+  IntegrationUnavailableError,
+  geocode as geocodeViaApi,
+  propertyLookup as propertyLookupViaApi,
+} from '../internal-api.client';
 
 // Lead enrichment processor. Performs the staged enrichment funnel:
 //   1. Geocode the lead address (Google Geocoding)
 //   2. Pull property data (ATTOM)
-//   3. Skip trace via the api's `/skip-trace/append-contacts` endpoint
-//      (so the cost-control decision tree runs before any paid call)
+//   3. Skip trace
 //
-// The worker writes best-effort cost ledger rows for steps 1 and 2 since
-// those still use direct fetch from worker context. Step 3 already lands
-// in `integration_cost_events` because the api side calls
-// `IntegrationCostControlService.checkAndCall`. The previous duplicate
-// PropertyRadar raw-fetch path has been deleted; PropertyRadar lives
+// Every paid step goes through the api's /internal routes, so the
+// cost-control decision tree, budgets, rate limits and the idempotency
+// window apply before any provider is called, and the ledger row is the
+// api's. A step the api refuses for budget or availability reasons is
+// skipped (recorded as no source record, zero cost) rather than failing the
+// whole job, matching the old hard-cap short-circuit. PropertyRadar lives
 // behind the SkipTraceService adapter and is disabled by default.
-
-const ATTOM_COST_USD = 0.1;
-const GEOCODE_COST_USD = 0.005;
 
 interface ContactResult {
   phone: string | null;
@@ -415,7 +417,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         providerKey: params.providerKey,
         action: params.action,
         leadId: params.leadId,
-        actor: 'worker',
+        actor: { in: ['system', 'worker'] },
         createdAt: { gte: params.startedAt },
       },
       orderBy: { createdAt: 'desc' },
@@ -461,9 +463,11 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     state: string | undefined,
     zip: string | undefined,
   ): string {
+    // Must match the api adapters' storeSourceRecord, which hashes the JSON
+    // request body; recovery after a stalled replay looks records up by it.
     return crypto
       .createHash('sha256')
-      .update(this.buildAddressQuery(address, city, state, zip))
+      .update(JSON.stringify({ address: this.buildAddressQuery(address, city, state, zip) }))
       .digest('hex');
   }
 
@@ -476,46 +480,10 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     state: string | undefined,
     zip: string | undefined,
     leadId: string,
-  ): Promise<{ sourceRecordId: string | null; cost: number }> {
-    if (await isOverHardCap(accountId, 'google_geocoding')) {
-      console.warn(`Geocoding skipped: budget exceeded for ${accountId}`);
-      return { sourceRecordId: null, cost: 0 };
-    }
-    const query = this.buildAddressQuery(address, city, state, zip);
-    const url = 'https://maps.googleapis.com/maps/api/geocode/json';
-    const params = new URLSearchParams({
-      address: query,
-      key: process.env.GOOGLE_GEOCODING_API_KEY || '',
-    });
-    const startedAt = Date.now();
-    const response = await fetch(`${url}?${params.toString()}`);
-    const data = await response.json();
-    const durationMs = Date.now() - startedAt;
-
-    const requestHash = this.hashAddressQuery(address, city, state, zip);
-    const sourceRecord = await prisma.sourceRecord.create({
-      data: {
-        provider: 'google_geocoding',
-        endpoint: url,
-        requestHash,
-        response: data as object,
-        trustWeight: 0.9,
-        leadId,
-      },
-    });
-
-    await recordWorkerCost({
-      accountId,
-      providerKey: 'google_geocoding',
-      action: 'geocode',
-      costUsd: response.ok ? GEOCODE_COST_USD : 0,
-      status: response.ok ? 'completed' : 'errored',
-      durationMs,
-      responseCode: response.status,
-      leadId,
-    });
-
-    return { sourceRecordId: sourceRecord.id, cost: response.ok ? GEOCODE_COST_USD : 0 };
+  ): Promise<EnrichmentStepResult> {
+    return this.enrichmentStep('google_geocoding', () =>
+      geocodeViaApi(accountId, { address, city, state, zip, leadId }),
+    );
   }
 
   private async lookupAttom(
@@ -525,48 +493,39 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     state: string | undefined,
     zip: string | undefined,
     leadId: string,
-  ): Promise<{ sourceRecordId: string | null; cost: number }> {
-    if (await isOverHardCap(accountId, 'attom')) {
-      console.warn(`ATTOM skipped: budget exceeded for ${accountId}`);
-      return { sourceRecordId: null, cost: 0 };
+  ): Promise<EnrichmentStepResult> {
+    return this.enrichmentStep('attom', () =>
+      propertyLookupViaApi(accountId, { address, city, state, zip, leadId }),
+    );
+  }
+
+  /**
+   * Runs one optional enrichment step through the api. Budget blocks and
+   * provider unavailability skip the step; anything else (auth, network,
+   * a bug) propagates so BullMQ retries the job.
+   */
+  private async enrichmentStep(
+    provider: string,
+    call: () => Promise<{ sourceRecordId: string | null; costUsd: number }>,
+  ): Promise<EnrichmentStepResult> {
+    try {
+      const out = await call();
+      return { sourceRecordId: out.sourceRecordId, cost: out.costUsd };
+    } catch (error) {
+      if (error instanceof CostBlockedError) {
+        console.warn(
+          `[lead-enrichment] ${provider} skipped: ${error.reason} (cost control)`,
+        );
+        return { sourceRecordId: null, cost: 0 };
+      }
+      if (error instanceof IntegrationUnavailableError) {
+        console.warn(
+          `[lead-enrichment] ${provider} skipped: ${error.reason} (${error.message})`,
+        );
+        return { sourceRecordId: null, cost: 0 };
+      }
+      throw error;
     }
-    const query = this.buildAddressQuery(address, city, state, zip);
-    const url = `${process.env.ATTOM_BASE_URL || 'https://api.gateway.attomdata.com'}/propertyapi/v1.0.0/property/expandedprofile`;
-
-    const startedAt = Date.now();
-    const response = await fetch(`${url}?address=${encodeURIComponent(query)}`, {
-      headers: {
-        apikey: process.env.ATTOM_API_KEY || '',
-        Accept: 'application/json',
-      },
-    });
-    const data = await response.json();
-    const durationMs = Date.now() - startedAt;
-
-    const requestHash = this.hashAddressQuery(address, city, state, zip);
-    const sourceRecord = await prisma.sourceRecord.create({
-      data: {
-        provider: 'attom',
-        endpoint: url,
-        requestHash,
-        response: data as object,
-        trustWeight: 1.0,
-        leadId,
-      },
-    });
-
-    await recordWorkerCost({
-      accountId,
-      providerKey: 'attom',
-      action: 'property_expanded_profile',
-      costUsd: response.ok ? ATTOM_COST_USD : 0,
-      status: response.ok ? 'completed' : 'errored',
-      durationMs,
-      responseCode: response.status,
-      leadId,
-    });
-
-    return { sourceRecordId: sourceRecord.id, cost: response.ok ? ATTOM_COST_USD : 0 };
   }
 
   /**

@@ -221,11 +221,6 @@ services:
       # Used to address outbound SMS; the send itself goes through the api.
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
 
-      # Enrichment still calls these directly from worker context.
-      ATTOM_API_KEY: ${ATTOM_API_KEY:-}
-      ATTOM_BASE_URL: ${ATTOM_BASE_URL:-https://api.gateway.attomdata.com}
-      GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
-      PROPERTYRADAR_API_KEY: ${PROPERTYRADAR_API_KEY:-}
 
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3003/ || exit 1"]

@@ -43,6 +43,23 @@ export class ComplianceBlockedError extends Error {
   }
 }
 
+/**
+ * Raised when the api could not call the provider for an operational reason
+ * (HTTP 503 INTEGRATION_UNAVAILABLE: not configured, disabled, credentials
+ * rejected, upstream down). For an optional enrichment step this means
+ * "skip the step", not "fail the job".
+ */
+export class IntegrationUnavailableError extends Error {
+  constructor(
+    readonly provider: string,
+    readonly reason: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'IntegrationUnavailableError';
+  }
+}
+
 export class InternalApiError extends Error {
   constructor(
     readonly status: number,
@@ -93,6 +110,18 @@ async function postInternal<T>(
       );
     }
     throw new InternalApiError(403, payload?.message ?? 'Forbidden');
+  }
+
+  if (res.status === 503) {
+    const payload = (await res.json().catch(() => ({}))) as Record<string, any>;
+    if (payload?.code === 'INTEGRATION_UNAVAILABLE') {
+      throw new IntegrationUnavailableError(
+        payload.provider ?? 'unknown',
+        payload.reason ?? 'UPSTREAM_ERROR',
+        payload.message ?? 'Integration unavailable',
+      );
+    }
+    throw new InternalApiError(503, payload?.message ?? 'Service unavailable');
   }
 
   if (!res.ok) {
@@ -160,4 +189,37 @@ export function sendEmail(
   } & CostAttribution,
 ): Promise<{ id?: string; provider?: string } | null> {
   return postInternal('email/send', accountId, { ...input });
+}
+
+export interface EnrichmentStepResponse {
+  sourceRecordId: string | null;
+  costUsd: number;
+  cached: boolean;
+}
+
+export interface EnrichmentAddress {
+  address: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
+export function geocode(
+  accountId: string,
+  input: EnrichmentAddress & CostAttribution,
+): Promise<EnrichmentStepResponse> {
+  return postInternal<EnrichmentStepResponse>('enrichment/geocode', accountId, {
+    ...input,
+  });
+}
+
+export function propertyLookup(
+  accountId: string,
+  input: EnrichmentAddress & CostAttribution,
+): Promise<EnrichmentStepResponse> {
+  return postInternal<EnrichmentStepResponse>(
+    'enrichment/property-lookup',
+    accountId,
+    { ...input },
+  );
 }
