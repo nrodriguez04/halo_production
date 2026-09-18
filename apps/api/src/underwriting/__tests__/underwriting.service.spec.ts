@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../prisma.service';
 import { QueueService } from '../../queues/queue.service';
@@ -92,5 +92,19 @@ describe('UnderwritingService', () => {
       where: { id: 'deal_1', accountId: 'tenant_2' },
     });
     expect(prisma.underwritingResult.findUnique).not.toHaveBeenCalled();
+  });
+
+
+  it('refuses to enqueue underwriting when the tenant AI switch is off', async () => {
+    prisma.deal.findFirst.mockResolvedValueOnce({ id: 'deal-1', accountId: 'tenant-1' });
+    prisma.jobRun.create = jest.fn();
+    (service as any).controlPlaneService.getStatus.mockResolvedValueOnce({
+      enabled: true,
+      externalDataEnabled: true,
+      aiEnabled: false,
+    });
+
+    await expect(service.analyze('tenant-1', 'user-1', 'deal-1')).rejects.toThrow(ForbiddenException);
+    expect(prisma.jobRun.create).not.toHaveBeenCalled();
   });
 });
