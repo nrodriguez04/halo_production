@@ -53,7 +53,7 @@ export class MarketingService {
         globalDailySpendUsd: globalTodayCost,
         globalDailyCapUsd: dailyCap,
         sideEffectsEnabled: controlPlane.enabled,
-        aiEnabled: controlPlane.enabled && controlPlane.externalDataEnabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
       const run = await this.prisma.jobRun.create({
@@ -130,7 +130,7 @@ export class MarketingService {
         globalDailySpendUsd: globalTodayCost,
         globalDailyCapUsd: dailyCap,
         sideEffectsEnabled: controlPlane.enabled,
-        aiEnabled: controlPlane.enabled && controlPlane.externalDataEnabled,
+        aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
       const run = await this.prisma.jobRun.create({
