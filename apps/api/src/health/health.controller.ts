@@ -7,6 +7,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
 import { REDIS } from '../redis/redis.module';
 import Redis from 'ioredis';
+import { aiSpendSince, startOfToday } from '../cost-control/ai-spend';
 
 @Controller('health')
 export class HealthController {
@@ -73,12 +74,7 @@ export class HealthController {
     }
 
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const costLogs = await this.prisma.aICostLog.findMany({
-        where: { createdAt: { gte: today } },
-      });
-      const totalCost = costLogs.reduce((sum, log) => sum + log.cost, 0);
+      const totalCost = await aiSpendSince(this.prisma, startOfToday());
       const dailyCap = await this.controlPlane.getAiDailyCostCap(accountId);
       checks.aiCost = {
         today: totalCost.toFixed(4),

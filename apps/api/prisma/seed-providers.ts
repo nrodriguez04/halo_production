@@ -163,9 +163,15 @@ export async function seedCostGovernance(prisma: PrismaClient, accountId: string
   console.log(`  ${BUDGET_TEMPLATES.length * bucketAccounts.length} budget buckets seeded`);
 }
 
-export async function seedCostGovernanceReferenceData(prisma: PrismaClient) {
+export const COST_GOVERNANCE_PROVIDER_KEYS: readonly string[] = PROVIDERS.map((p) => p.key);
+
+export async function seedCostGovernanceReferenceData(
+  prisma: PrismaClient,
+  onlyKeys?: readonly string[],
+) {
   // 1. Providers + pricing rules + rate limits
-  for (const p of PROVIDERS) {
+  const selected = onlyKeys ? PROVIDERS.filter((p) => onlyKeys.includes(p.key)) : PROVIDERS;
+  for (const p of selected) {
     const provider = await prisma.integrationProvider.upsert({
       where: { key: p.key },
       update: {

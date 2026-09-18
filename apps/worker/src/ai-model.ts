@@ -2,9 +2,10 @@
 // it costs. The processors previously hardcoded 'gpt-4' in five places.
 //
 // The authoritative ledger is `integration_cost_events`, written api-side by
-// the cost-control service. These rates only feed the legacy `ai_cost_logs`
-// table that the dashboard KPIs still read, so they must stay in step with
-// TOKEN_PRICING in apps/api/src/integrations/openai/openai.service.ts.
+// the cost-control service when the worker calls /internal/ai/chat-completion.
+// These rates only produce the per-result cost the worker records in job
+// metadata for display, so they must stay in step with TOKEN_PRICING in
+// apps/api/src/integrations/openai/openai.service.ts.
 
 export const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
