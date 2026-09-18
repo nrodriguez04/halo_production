@@ -182,4 +182,63 @@ describe('LeadsService', () => {
       expect(result).toEqual({ success: true, mergedInto: 'lead-target' });
     });
   });
+
+
+  describe('update', () => {
+    it('rejects accountId rewrites through the generic update endpoint', async () => {
+      await expect(
+        service.update('lead-1', 'tenant-1', { accountId: 'tenant-2' } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.lead.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects status changes through the generic update endpoint', async () => {
+      await expect(
+        service.update('lead-1', 'tenant-1', { status: 'qualified' } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.lead.update).not.toHaveBeenCalled();
+    });
+
+    it('allows ordinary field updates on an owned lead', async () => {
+      prisma.lead.findFirst.mockResolvedValueOnce({ id: 'lead-1', accountId: 'tenant-1' });
+      prisma.lead.update.mockResolvedValueOnce({ id: 'lead-1' });
+      await service.update('lead-1', 'tenant-1', { canonicalOwner: 'New Owner' } as any);
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: 'lead-1' },
+        data: { canonicalOwner: 'New Owner' },
+      });
+    });
+  });
+
+  describe('importCSV', () => {
+    const rows = [
+      { address: '1 Good St', city: 'Austin', state: 'TX', zip: '78701' },
+      { address: '2 Dupe St', city: 'Austin', state: 'TX', zip: '78701' },
+      { address: '3 Bad St', city: 'Austin', state: 'TX', zip: '78701' },
+    ] as any[];
+
+    it('uses a single batch insert when every row is accepted', async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([]);
+      prisma.lead.createMany = jest.fn().mockResolvedValue({ count: 3 });
+      const out = await service.importCSV(rows, 'tenant-1', 'user-1');
+      expect(out.created).toBe(3);
+      expect(prisma.lead.create).not.toHaveBeenCalled();
+    });
+
+    it('falls back to per-row inserts so one bad row cannot abort the file', async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([]);
+      prisma.lead.createMany = jest.fn().mockRejectedValue(new Error('value too long'));
+      prisma.lead.create
+        .mockResolvedValueOnce({ id: 'l1' })
+        .mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }))
+        .mockRejectedValueOnce(new Error('value too long for column'));
+
+      const out = await service.importCSV(rows, 'tenant-1', 'user-1');
+
+      expect(prisma.lead.create).toHaveBeenCalledTimes(3);
+      expect(out.created).toBe(1);
+      expect(out.duplicates).toBe(1);
+      expect(out.errors).toEqual([expect.stringContaining('3 Bad St')]);
+    });
+  });
 });

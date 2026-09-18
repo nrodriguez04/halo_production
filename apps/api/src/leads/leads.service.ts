@@ -101,6 +101,21 @@ export class LeadsService {
   }
 
   async update(id: string, accountId: string, data: LeadUpdate) {
+    // LeadUpdateSchema is LeadCreateSchema.partial(), so it admits the two
+    // fields the generic path must never write: accountId would move the row
+    // into another tenant, and status bypasses LeadLifecycleService (no
+    // enrichment job, no timeline, no transition validation).
+    if (data.accountId !== undefined) {
+      throw new BadRequestException(
+        'accountId cannot be updated via the generic lead update endpoint',
+      );
+    }
+    if (data.status !== undefined) {
+      throw new BadRequestException(
+        'Lead status must be changed via the lifecycle transition endpoint',
+      );
+    }
+
     const lead = await this.findOne(id, accountId);
     return this.prisma.lead.update({
       where: { id: lead.id },
@@ -209,11 +224,41 @@ export class LeadsService {
     }
 
     if (toCreate.length) {
-      const result = await this.prisma.lead.createMany({
-        data: toCreate,
-        skipDuplicates: true,
-      });
-      results.created = result.count;
+      try {
+        const result = await this.prisma.lead.createMany({
+          data: toCreate,
+          skipDuplicates: true,
+        });
+        results.created = result.count;
+      } catch (batchError) {
+        // skipDuplicates only covers unique violations. Any other rejected
+        // row (a value too long for its column, a malformed field) fails the
+        // whole createMany, and the caller would lose every good row in the
+        // file. Fall back to one insert per row so only the bad ones are
+        // reported.
+        for (const row of toCreate) {
+          try {
+            await this.prisma.lead.create({ data: row });
+            results.created++;
+          } catch (rowError) {
+            const code = (rowError as { code?: string }).code;
+            if (code === 'P2002') {
+              results.duplicates++;
+            } else {
+              results.errors.push(
+                `Row ${row.canonicalAddress}: ${(rowError as Error).message}`,
+              );
+            }
+          }
+        }
+        if (!results.errors.length) {
+          // Every row went through individually; the batch failure was
+          // transient, note it so the operator can see it happened.
+          results.errors.push(
+            `Batch insert failed and was retried row by row: ${(batchError as Error).message}`,
+          );
+        }
+      }
     }
 
     return results;
