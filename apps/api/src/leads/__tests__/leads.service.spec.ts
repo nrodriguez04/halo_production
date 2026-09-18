@@ -74,8 +74,10 @@ describe('LeadsService', () => {
           canonicalState: 'TX',
           canonicalZip: '75001',
           canonicalOwner: 'Jane Seller',
-          canonicalPhone: '+15555550123',
-          canonicalEmail: 'jane@example.com',
+          canonicalPhoneEnc: 'enc-phone',
+          canonicalPhoneHash: 'hash-phone',
+          canonicalEmailEnc: 'enc-email',
+          canonicalEmailHash: 'hash-email',
           sourceRecords: [],
           properties: [],
           deals: [],
@@ -88,8 +90,8 @@ describe('LeadsService', () => {
           canonicalState: null,
           canonicalZip: null,
           canonicalOwner: null,
-          canonicalPhone: null,
-          canonicalEmail: null,
+          canonicalPhoneEnc: null,
+          canonicalEmailEnc: null,
           sourceRecords: [],
           properties: [],
           deals: [],
@@ -163,8 +165,8 @@ describe('LeadsService', () => {
         },
         data: { entityId: 'lead-target' },
       });
-      // Inherited contact fields are written protected: plaintext (dual-write)
-      // plus ciphertext and blind index.
+      // Inherited contact fields are copied as ciphertext + blind index;
+      // nothing is decrypted during a merge.
       expect(prisma.lead.update).toHaveBeenCalledWith({
         where: { id: 'lead-target' },
         data: {
@@ -173,12 +175,10 @@ describe('LeadsService', () => {
           canonicalState: 'TX',
           canonicalZip: '75001',
           canonicalOwner: 'Jane Seller',
-          canonicalPhone: '+15555550123',
-          canonicalEmail: 'jane@example.com',
-          canonicalPhoneEnc: expect.any(String),
-          canonicalEmailEnc: expect.any(String),
-          canonicalPhoneHash: hashPhone('+15555550123'),
-          canonicalEmailHash: hashEmail('jane@example.com'),
+          canonicalPhoneEnc: 'enc-phone',
+          canonicalPhoneHash: 'hash-phone',
+          canonicalEmailEnc: 'enc-email',
+          canonicalEmailHash: 'hash-email',
         },
       });
       expect(prisma.lead.delete).toHaveBeenCalledWith({
@@ -265,8 +265,8 @@ describe('LeadsService', () => {
     });
   });
 
-  describe('contact PII dual-write', () => {
-    it('create writes plaintext, ciphertext and blind index for phone and email', async () => {
+  describe('contact PII at rest', () => {
+    it('create writes ciphertext and blind index, never plaintext', async () => {
       prisma.lead.create.mockResolvedValueOnce({
         id: 'lead-1',
         accountId: 'tenant-1',
@@ -286,7 +286,8 @@ describe('LeadsService', () => {
       );
 
       const data = prisma.lead.create.mock.calls[0][0].data;
-      expect(data.canonicalPhone).toBe('(512) 555-0100');
+      expect(data).not.toHaveProperty('canonicalPhone');
+      expect(data).not.toHaveProperty('canonicalEmail');
       expect(data.canonicalPhoneHash).toBe(hashPhone('+15125550100'));
       expect(data.canonicalEmailHash).toBe(hashEmail('seller@example.com'));
       expect(JSON.parse(data.canonicalPhoneEnc)).toEqual(
@@ -336,7 +337,7 @@ describe('LeadsService', () => {
       );
 
       const row = prisma.lead.createMany.mock.calls[0][0].data[0];
-      expect(row.canonicalPhone).toBe('512-555-0100');
+      expect(row).not.toHaveProperty('canonicalPhone');
       expect(row.canonicalPhoneHash).toBe(hashPhone('512-555-0100'));
       expect(row.canonicalEmailHash).toBe(hashEmail('a@b.co'));
       expect(row.canonicalPhoneEnc).toEqual(expect.any(String));

@@ -1,7 +1,8 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { AuthGuard } from '../auth/auth.guard';
-import { CurrentAccountId } from '../auth/decorators';
+import { CurrentAccountId, CurrentUser } from '../auth/decorators';
+import { canRevealContactPii } from '../auth/pii-access';
 import {
   DraftMessageDto,
   LogAgentNoteDto,
@@ -20,16 +21,22 @@ export class AgentController {
   async getDealSummary(
     @Param('id') dealId: string,
     @CurrentAccountId() accountId: string,
+    @CurrentUser() user: unknown,
   ) {
-    return this.agentService.getDealSummary(dealId, accountId);
+    return this.agentService.getDealSummary(dealId, accountId, {
+      revealPii: canRevealContactPii(user),
+    });
   }
 
   @Get('deals/:id/context')
   async getDealContext(
     @Param('id') dealId: string,
     @CurrentAccountId() accountId: string,
+    @CurrentUser() user: unknown,
   ) {
-    return this.agentService.getDealContext(dealId, accountId);
+    return this.agentService.getDealContext(dealId, accountId, {
+      revealPii: canRevealContactPii(user),
+    });
   }
 
   @Post('deals/:id/next-actions')

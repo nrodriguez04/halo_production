@@ -11,7 +11,12 @@ import {
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
 import { AuthGuard } from '../auth/auth.guard';
-import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+import {
+  CurrentAccountId,
+  CurrentUser,
+  CurrentUserId,
+} from '../auth/decorators';
+import { canRevealContactPii } from '../auth/pii-access';
 import {
   LeadCreateSchema,
   LeadUpdateSchema,
@@ -30,6 +35,7 @@ export class LeadsController {
     @Body() data: unknown,
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
+    @CurrentUser() user: unknown,
   ) {
     // Lead lifecycle starts at `new`; later states must flow through
     // LeadLifecycleService so enrichment jobs and timeline events exist.
@@ -45,6 +51,7 @@ export class LeadsController {
         tags: validated.tags ?? [],
       },
       userId ?? null,
+      { revealPii: canRevealContactPii(user) },
     );
   }
 
@@ -67,28 +74,39 @@ export class LeadsController {
   @Get('duplicates')
   async findDuplicates(
     @CurrentAccountId() accountId: string,
+    @CurrentUser() user: unknown,
     @Query('threshold') threshold?: string,
   ) {
     const thresholdNum = threshold ? parseFloat(threshold) : 0.8;
-    return this.leadsService.findPotentialDuplicates(accountId, thresholdNum);
+    return this.leadsService.findPotentialDuplicates(
+      accountId,
+      thresholdNum,
+      canRevealContactPii(user),
+    );
   }
 
   @Get(':id')
   async findOne(
     @Param('id') id: string,
     @CurrentAccountId() accountId: string,
+    @CurrentUser() user: unknown,
   ) {
-    return this.leadsService.findOne(id, accountId);
+    return this.leadsService.findOne(id, accountId, {
+      revealPii: canRevealContactPii(user),
+    });
   }
 
   @Put(':id')
   async update(
     @Param('id') id: string,
     @CurrentAccountId() accountId: string,
+    @CurrentUser() user: unknown,
     @Body() data: unknown,
   ) {
     const validated = LeadUpdateSchema.parse(data);
-    return this.leadsService.update(id, accountId, validated);
+    return this.leadsService.update(id, accountId, validated, {
+      revealPii: canRevealContactPii(user),
+    });
   }
 
   @Delete(':id')

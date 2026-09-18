@@ -14,6 +14,7 @@ describe('LeadsController', () => {
       },
       'tenant-1',
       'user-1',
+      { roles: [], permissions: [] },
     );
 
     expect(leadsService.create).toHaveBeenCalledTimes(1);
@@ -25,6 +26,7 @@ describe('LeadsController', () => {
         tags: [],
       }),
       'user-1',
+      { revealPii: false },
     );
   });
 });
