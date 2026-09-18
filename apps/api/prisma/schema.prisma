@@ -415,6 +415,10 @@ model DNCList {
   id          String   @id @default(cuid())
   accountId   String
   phone       String
+  // Dual-write phase (docs/pii-encryption-design.md, phase 2): ciphertext
+  // and blind index beside the plaintext; the plaintext goes at cutover.
+  phoneEnc    String?
+  phoneHash   String?
   source      String   // manual, stop_keyword, help_keyword, external
   reason      String?
   createdAt   DateTime @default(now())
@@ -423,6 +427,7 @@ model DNCList {
   @@unique([accountId, phone])
   @@index([phone])
   @@index([accountId])
+  @@index([accountId, phoneHash])
   @@map("dnc_list")
 }
 
@@ -433,6 +438,11 @@ model Consent {
   leadId      String?
   phone       String?
   email       String?
+  // Dual-write phase: see DNCList.
+  phoneEnc    String?
+  phoneHash   String?
+  emailEnc    String?
+  emailHash   String?
   channel     String   // sms, email, call
   source      String   // manual, form, verbal, implied
   evidence    Json?    // proof/documentation
@@ -446,6 +456,8 @@ model Consent {
   @@index([leadId])
   @@index([phone])
   @@index([email])
+  @@index([accountId, phoneHash])
+  @@index([accountId, emailHash])
   @@map("consents")
 }
 

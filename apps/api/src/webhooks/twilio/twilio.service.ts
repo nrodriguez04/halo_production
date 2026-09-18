@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma.service';
 import { AutomationService } from '../../automation/automation.service';
 import * as complianceUtils from '@halo/shared';
 import { LeadPiiService } from '../../leads/lead-pii.service';
+import { protectPhone } from '../../pii/contact-crypto';
 
 @Injectable()
 export class TwilioService {
@@ -24,8 +25,15 @@ export class TwilioService {
     if (complianceUtils.containsStopKeywords(messageBody)) {
       const normalizedPhone = complianceUtils.normalizePhoneNumber(from);
 
+      const protectedPhone = protectPhone(normalizedPhone);
       const existing = await this.prisma.dNCList.findFirst({
-        where: { accountId, phone: normalizedPhone },
+        where: {
+          accountId,
+          OR: [
+            { phoneHash: protectedPhone.phoneHash },
+            { phone: normalizedPhone },
+          ],
+        },
       });
 
       if (!existing) {
@@ -33,6 +41,7 @@ export class TwilioService {
           data: {
             accountId,
             phone: normalizedPhone,
+            ...protectedPhone,
             source: 'stop_keyword',
             reason: 'User sent STOP keyword',
           },
