@@ -14,6 +14,14 @@ import {
 } from '@halo/shared';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { TimelineService } from '../timeline/timeline.service';
+import { LeadPiiService } from '../leads/lead-pii.service';
+import {
+  counterpartyColumns,
+  messageCounterparty,
+  recipientFromMetadata,
+  stripRecipientKeys,
+} from './message-counterparty';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class CommunicationsService {
@@ -22,6 +30,7 @@ export class CommunicationsService {
     private timelineService: TimelineService,
     private compliance: ComplianceService,
     private controlPlaneService: ControlPlaneService,
+    private pii: LeadPiiService,
   ) {}
 
   async create(data: MessageCreate) {
@@ -36,7 +45,17 @@ export class CommunicationsService {
       throw new BadRequestException('Communications are currently disabled');
     }
 
-    const compliance = await this.getComplianceFacts(data);
+    // The recipient is the linked lead's contact when there is one; only an
+    // explicit address in metadata (a buyer, an ad-hoc send) is used
+    // otherwise. It is stored encrypted on the row and stripped from
+    // metadata, and it is what the compliance facts are evaluated against.
+    const recipient = await this.resolveOutboundRecipient(data);
+    const compliance = await this.getComplianceFacts({
+      accountId: data.accountId,
+      channel: data.channel,
+      leadId: data.leadId,
+      recipient,
+    });
     const localHour =
       typeof compliance.localHour === 'number'
         ? compliance.localHour
@@ -76,6 +95,8 @@ export class CommunicationsService {
     const message = await this.prisma.message.create({
       data: {
         ...data,
+        metadata: stripRecipientKeys(data.metadata) as Prisma.InputJsonObject,
+        ...counterpartyColumns(data.channel, recipient),
         status: 'pending_approval',
       },
     });
@@ -150,7 +171,12 @@ export class CommunicationsService {
     }
 
     const controlPlane = await this.getControlPlane(accountId);
-    const compliance = await this.getComplianceFacts(message as any);
+    const compliance = await this.getComplianceFacts({
+      accountId,
+      channel: message.channel,
+      leadId: message.leadId,
+      recipient: messageCounterparty(message),
+    });
     try {
       assertPolicy({
         tenantId: accountId,
@@ -255,13 +281,35 @@ export class CommunicationsService {
    * DNC up by phone alone, ignoring accountId, so one tenant suppressing a
    * number suppressed it for everyone.
    */
-  private async getComplianceFacts(data: MessageCreate | any) {
+  private async getComplianceFacts(input: {
+    accountId: string;
+    channel: string;
+    leadId?: string | null;
+    recipient: string | null;
+  }) {
     return this.compliance.getFacts({
-      accountId: data.accountId,
-      channel: data.channel,
-      phone: data.metadata?.phone ?? data.metadata?.to,
-      email: data.metadata?.email,
-      leadId: data.leadId,
+      accountId: input.accountId,
+      channel: input.channel as 'sms' | 'email',
+      phone: input.channel === 'sms' ? input.recipient : undefined,
+      email: input.channel === 'email' ? input.recipient : undefined,
+      leadId: input.leadId ?? undefined,
     });
+  }
+
+  private async resolveOutboundRecipient(
+    data: MessageCreate,
+  ): Promise<string | null> {
+    if (data.leadId) {
+      const lead = await this.prisma.lead.findFirst({
+        where: { id: data.leadId, accountId: data.accountId },
+        select: { canonicalPhoneEnc: true, canonicalEmailEnc: true },
+      });
+      if (lead) {
+        const contact = this.pii.reveal(lead);
+        const fromLead = data.channel === 'sms' ? contact.phone : contact.email;
+        if (fromLead) return fromLead;
+      }
+    }
+    return recipientFromMetadata(data.channel, data.metadata, 'outbound');
   }
 }

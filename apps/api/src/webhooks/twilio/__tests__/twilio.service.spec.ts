@@ -235,4 +235,40 @@ describe('TwilioService', () => {
       },
     });
   });
+
+  it('stores the inbound sender encrypted on the row and not in metadata', async () => {
+    prisma.message.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
+
+    await service.handleInbound({
+      From: '+15551234567',
+      To: '+15550000000',
+      Body: 'hello',
+      MessageSid: 'SM125',
+    });
+
+    const data = prisma.message.create.mock.calls[0][0].data;
+    expect(data.counterpartyHash).toBe(hashPhone('+15551234567'));
+    expect(data.counterpartyEnc).toEqual(expect.any(String));
+    expect(data.metadata).not.toHaveProperty('from');
+    expect(data.metadata.to).toBe('+15550000000');
+  });
+
+  it('matches prior outbound messages by the recipient blind index first', async () => {
+    prisma.message.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
+
+    await service.handleInbound({
+      From: '+15551234567',
+      To: '+15550000000',
+      Body: 'hello',
+      MessageSid: 'SM126',
+    });
+
+    const where = prisma.message.findMany.mock.calls[0][0].where;
+    expect(where.direction).toBe('outbound');
+    expect(where.OR[0]).toEqual({
+      counterpartyHash: {
+        in: expect.arrayContaining([hashPhone('+15551234567')]),
+      },
+    });
+  });
 });

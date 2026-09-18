@@ -1,4 +1,10 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentAccountId } from '../auth/decorators';
 import { InternalAuthGuard } from './internal-auth.guard';
@@ -19,6 +25,7 @@ import {
   SendEmailDto,
   SendSmsDto,
 } from './dto/internal.dto';
+import { messageCounterparty } from '../communications/message-counterparty';
 
 /**
  * Service-to-service surface for the worker.
@@ -139,15 +146,46 @@ export class InternalController {
       : null;
   }
 
+  /**
+   * The worker sends by messageId and never sees the recipient: it is read
+   * from the message's encrypted counterparty here (metadata only for rows
+   * the backfill has not reached). An explicit `to` is still accepted for
+   * sends that have no message row.
+   */
+  private async recipientFor(
+    accountId: string,
+    channel: 'sms' | 'email',
+    dto: { to?: string; messageId?: string },
+  ): Promise<string> {
+    if (dto.to) return dto.to;
+    if (dto.messageId) {
+      const message = await this.prisma.message.findFirst({
+        where: { id: dto.messageId, accountId },
+        select: {
+          channel: true,
+          direction: true,
+          metadata: true,
+          counterpartyEnc: true,
+        },
+      });
+      const recipient = message ? messageCounterparty(message) : null;
+      if (recipient) return recipient;
+    }
+    throw new BadRequestException(
+      `No ${channel} recipient: pass \`to\` or a messageId with a stored counterparty`,
+    );
+  }
+
   @Post('sms/send')
   async sendSms(
     @CurrentAccountId() accountId: string,
     @Body() dto: SendSmsDto,
   ) {
+    const to = await this.recipientFor(accountId, 'sms', dto);
     await this.assertSendable({
       accountId,
       channel: 'sms',
-      phone: dto.to,
+      phone: to,
       leadId: dto.leadId,
       dealId: dto.dealId,
       messageId: dto.messageId,
@@ -155,7 +193,7 @@ export class InternalController {
 
     return this.twilio.sendSms(
       {
-        to: dto.to,
+        to,
         from: dto.from,
         body: dto.body,
         variant: dto.variant,
@@ -170,10 +208,11 @@ export class InternalController {
     @CurrentAccountId() accountId: string,
     @Body() dto: SendEmailDto,
   ) {
+    const to = await this.recipientFor(accountId, 'email', dto);
     await this.assertSendable({
       accountId,
       channel: 'email',
-      email: dto.to,
+      email: to,
       leadId: dto.leadId,
       dealId: dto.dealId,
       messageId: dto.messageId,
@@ -181,7 +220,7 @@ export class InternalController {
 
     return this.email.sendEmail(
       {
-        to: dto.to,
+        to,
         subject: dto.subject,
         text: dto.text,
         html: dto.html,
