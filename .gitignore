@@ -65,6 +65,7 @@ mailhog-data/
 
 # python (apps/agents)
 __pycache__/
+.pytest_cache/
 *.pyc
 apps/agents/.venv/
 apps/agents/*.egg-info/
