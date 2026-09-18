@@ -44,6 +44,26 @@ export class GeocodingService {
     zip: string | undefined,
     ctx: CostContext,
   ): Promise<GeocodingResult | null> {
+    const out = await this.geocodeDetailed(address, city, state, zip, ctx);
+    return out.result;
+  }
+
+  /**
+   * Same call, but also reports what it cost and whether the cache served
+   * it. The worker records per-step cost on its enrichment job, so the
+   * internal route needs both.
+   */
+  async geocodeDetailed(
+    address: string,
+    city: string | undefined,
+    state: string | undefined,
+    zip: string | undefined,
+    ctx: CostContext,
+  ): Promise<{
+    result: GeocodingResult | null;
+    costUsd: number;
+    cached: boolean;
+  }> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('google_geocoding');
     }
@@ -63,6 +83,9 @@ export class GeocodingService {
       action: 'geocode',
       payload: { address: query },
       context: ctx,
+      // A replayed enrichment job asks for the same address again; let the
+      // ledger's idempotency window answer it instead of Google.
+      hints: { idempotencyKey: `geocode:${this.hash(query)}` },
       execute: async () => {
         const url = 'https://maps.googleapis.com/maps/api/geocode/json';
         const params = new URLSearchParams({
@@ -93,7 +116,15 @@ export class GeocodingService {
         return { data, sourceRecordId: sourceRecord.id };
       },
     });
-    return (out.result as GeocodingResult | null) ?? null;
+    return {
+      result: (out.result as GeocodingResult | null) ?? null,
+      costUsd: out.actualCostUsd,
+      cached: out.fromCache,
+    };
+  }
+
+  private hash(input: string): string {
+    return crypto.createHash('sha1').update(input).digest('hex').slice(0, 16);
   }
 
   async reverseGeocode(

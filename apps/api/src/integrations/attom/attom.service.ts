@@ -54,6 +54,28 @@ export class AttomService {
     zip: string | undefined,
     ctx: CostContext,
   ): Promise<AttomLookupResult | null> {
+    const out = await this.lookupPropertyDetailed(
+      address,
+      city,
+      state,
+      zip,
+      ctx,
+    );
+    return out.result;
+  }
+
+  /** As lookupProperty, plus cost and cache facts for the internal route. */
+  async lookupPropertyDetailed(
+    address: string,
+    city: string | undefined,
+    state: string | undefined,
+    zip: string | undefined,
+    ctx: CostContext,
+  ): Promise<{
+    result: AttomLookupResult | null;
+    costUsd: number;
+    cached: boolean;
+  }> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('attom');
     }
@@ -90,9 +112,11 @@ export class AttomService {
         return { data, sourceRecordId: sourceRecord.id };
       },
     });
-    return out.fromCache
-      ? (out.result as AttomLookupResult)
-      : (out.result ?? null);
+    return {
+      result: (out.result as AttomLookupResult | null) ?? null,
+      costUsd: out.actualCostUsd,
+      cached: out.fromCache,
+    };
   }
 
   async lookupByAPN(

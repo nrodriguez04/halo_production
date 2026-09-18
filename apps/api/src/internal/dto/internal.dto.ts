@@ -72,6 +72,14 @@ export class SendSmsDto extends CostAttributionDto {
   messageId?: string;
 }
 
+/** Address parts for the enrichment lookups; the worker passes leadId in the attribution. */
+export class EnrichmentAddressDto extends CostAttributionDto {
+  @IsString() @MaxLength(500) address!: string;
+  @IsOptional() @IsString() @MaxLength(200) city?: string;
+  @IsOptional() @IsString() @MaxLength(100) state?: string;
+  @IsOptional() @IsString() @MaxLength(20) zip?: string;
+}
+
 export class SendEmailDto extends CostAttributionDto {
   @IsString() to!: string;
   @IsString() @MaxLength(500) subject!: string;
