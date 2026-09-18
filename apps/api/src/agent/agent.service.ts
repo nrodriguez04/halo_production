@@ -270,6 +270,18 @@ export class AgentService {
     }
 
     let automationRunId = input.automationRunId;
+    if (automationRunId) {
+      // The run id comes straight from the request body. Without this check
+      // a caller could attach its draft to, and flip the status of, another
+      // tenant's automation run.
+      const owned = await this.prisma.automationRun.findFirst({
+        where: { id: automationRunId, tenantId: accountId },
+        select: { id: true },
+      });
+      if (!owned) {
+        throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+      }
+    }
     if (!automationRunId) {
       const run = await this.prisma.automationRun.create({
         data: {
@@ -332,8 +344,8 @@ export class AgentService {
       actorType: TimelineActorType.system,
     });
 
-    await this.prisma.automationRun.update({
-      where: { id: automationRunId },
+    await this.prisma.automationRun.updateMany({
+      where: { id: automationRunId, tenantId: accountId },
       data: {
         status: 'AWAITING_APPROVAL',
         outputJson: { messageId: message.id },
@@ -413,8 +425,8 @@ export class AgentService {
     });
 
     if (message.automationRunId) {
-      await this.prisma.automationRun.update({
-        where: { id: message.automationRunId },
+      await this.prisma.automationRun.updateMany({
+        where: { id: message.automationRunId, tenantId: accountId },
         data: { status: 'AWAITING_APPROVAL' },
       });
     }
