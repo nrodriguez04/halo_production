@@ -14,7 +14,10 @@ describe('ComplianceService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ComplianceService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ComplianceService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get(ComplianceService);
@@ -58,7 +61,10 @@ describe('ComplianceService', () => {
     });
 
     it('is not DNC when no phone is supplied', async () => {
-      const facts = await service.getFacts({ accountId: 'halo-hq', channel: 'email' });
+      const facts = await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'email',
+      });
       expect(facts.isDnc).toBe(false);
       expect(prisma.dNCList.findFirst).not.toHaveBeenCalled();
     });
@@ -89,7 +95,10 @@ describe('ComplianceService', () => {
     it('does not assert absence of consent with nothing to key on', async () => {
       // No lead, phone or email: there is no record to look up, so consent is
       // left untouched rather than reported as missing.
-      const facts = await service.getFacts({ accountId: 'halo-hq', channel: 'sms' });
+      const facts = await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'sms',
+      });
       expect(facts.hasConsent).toBe(true);
       expect(prisma.consent.findFirst).not.toHaveBeenCalled();
     });
@@ -104,7 +113,10 @@ describe('ComplianceService', () => {
         endHour: 7,
       });
 
-      const facts = await service.getFacts({ accountId: 'halo-hq', channel: 'sms' });
+      const facts = await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'sms',
+      });
       expect(facts.quietHoursStart).toBe(22);
       expect(facts.quietHoursEnd).toBe(7);
       expect(facts.timezone).toBe('America/New_York');
@@ -118,7 +130,10 @@ describe('ComplianceService', () => {
         startHour: 22,
         endHour: 7,
       });
-      const facts = await service.getFacts({ accountId: 'halo-hq', channel: 'sms' });
+      const facts = await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'sms',
+      });
       expect(facts.localHour).toBeUndefined();
       expect(facts.quietHoursStart).toBeUndefined();
     });
@@ -130,7 +145,10 @@ describe('ComplianceService', () => {
         startHour: 20,
         endHour: 9,
       });
-      const facts = await service.getFacts({ accountId: 'halo-hq', channel: 'sms' });
+      const facts = await service.getFacts({
+        accountId: 'halo-hq',
+        channel: 'sms',
+      });
       // Undefined makes the policy rule skip rather than wrongly allow.
       expect(facts.localHour).toBeUndefined();
     });

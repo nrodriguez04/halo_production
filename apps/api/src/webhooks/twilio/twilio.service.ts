@@ -92,12 +92,11 @@ export class TwilioService {
     });
 
     try {
-      await this.automationService.attributeReply(
-        inboundMsg.id,
-        accountId,
-      );
+      await this.automationService.attributeReply(inboundMsg.id, accountId);
     } catch (err) {
-      this.logger.warn(`Attribution failed for message ${inboundMsg.id}: ${err}`);
+      this.logger.warn(
+        `Attribution failed for message ${inboundMsg.id}: ${err}`,
+      );
     }
 
     return { message: 'Received' };
@@ -120,9 +119,12 @@ export class TwilioService {
       await this.prisma.message.update({
         where: { id: messages[0].id },
         data: {
-          status: this.nextStatus(messages[0].status, this.mapTwilioStatus(status)),
+          status: this.nextStatus(
+            messages[0].status,
+            this.mapTwilioStatus(status),
+          ),
           metadata: {
-            ...(messages[0].metadata as any || {}),
+            ...((messages[0].metadata as any) || {}),
             deliveryStatus: status,
             deliveryStatusUpdatedAt: new Date().toISOString(),
           },

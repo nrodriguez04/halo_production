@@ -20,10 +20,7 @@ export class BuyersController {
   constructor(private readonly buyersService: BuyersService) {}
 
   @Post()
-  async create(
-    @Body() data: unknown,
-    @CurrentAccountId() accountId: string,
-  ) {
+  async create(@Body() data: unknown, @CurrentAccountId() accountId: string) {
     const validated = BuyerCreateSchema.parse({ ...(data as any), accountId });
     return this.buyersService.create(validated);
   }
@@ -67,10 +64,7 @@ export class BuyersController {
   }
 
   @Delete(':id')
-  async remove(
-    @Param('id') id: string,
-    @CurrentAccountId() accountId: string,
-  ) {
+  async remove(@Param('id') id: string, @CurrentAccountId() accountId: string) {
     return this.buyersService.remove(id, accountId);
   }
 }

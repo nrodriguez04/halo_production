@@ -20,7 +20,10 @@ export class PropertyRadarSkipTraceAdapter implements SkipTraceAdapter {
 
   constructor(private propertyRadar: PropertyRadarService) {}
 
-  async appendContacts(input: SkipTraceInput, ctx?: CostContext): Promise<SkipTraceResult> {
+  async appendContacts(
+    input: SkipTraceInput,
+    ctx?: CostContext,
+  ): Promise<SkipTraceResult> {
     if (!ctx) {
       throw new Error('PropertyRadarSkipTraceAdapter requires a CostContext');
     }
@@ -39,16 +42,28 @@ export class PropertyRadarSkipTraceAdapter implements SkipTraceAdapter {
       ],
       ctx,
     );
-    const importData = importResult?.data as { Results?: Array<{ RadarID?: string }> } | null;
+    const importData = importResult?.data as {
+      Results?: Array<{ RadarID?: string }>;
+    } | null;
     const radarId = importData?.Results?.[0]?.RadarID;
     if (!radarId) {
-      return { provider: this.providerKey, status: 'no_match', phones: [], emails: [] };
+      return {
+        provider: this.providerKey,
+        status: 'no_match',
+        phones: [],
+        emails: [],
+      };
     }
 
     const contactResult = await this.propertyRadar.appendContacts(radarId, ctx);
     const contactData = contactResult?.data;
     if (!contactData) {
-      return { provider: this.providerKey, status: 'error', phones: [], emails: [] };
+      return {
+        provider: this.providerKey,
+        status: 'error',
+        phones: [],
+        emails: [],
+      };
     }
     const phones = (contactData.Phones ?? []).map((p) => ({
       number: p.Number,
@@ -69,7 +84,9 @@ export class PropertyRadarSkipTraceAdapter implements SkipTraceAdapter {
   }
 }
 
-function normalizeType(t: string | undefined): 'mobile' | 'landline' | 'voip' | 'unknown' {
+function normalizeType(
+  t: string | undefined,
+): 'mobile' | 'landline' | 'voip' | 'unknown' {
   switch ((t ?? '').toLowerCase()) {
     case 'mobile':
     case 'cell':

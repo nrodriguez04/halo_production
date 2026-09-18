@@ -4,7 +4,11 @@ import { PrismaService } from '../../prisma.service';
 import { CommunicationsService } from '../../communications/communications.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 
 describe('AgentService', () => {
   let service: AgentService;
@@ -151,7 +155,12 @@ describe('AgentService', () => {
       ).rejects.toThrow(NotFoundException);
     });
     it('rejects a caller-supplied automationRunId from another tenant', async () => {
-      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1', accountId: 'tenant-1', lead: null, property: null });
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        accountId: 'tenant-1',
+        lead: null,
+        property: null,
+      });
       prisma.automationRun.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -171,7 +180,12 @@ describe('AgentService', () => {
     });
 
     it('scopes the run status write to the tenant', async () => {
-      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1', accountId: 'tenant-1', lead: null, property: null });
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        accountId: 'tenant-1',
+        lead: null,
+        property: null,
+      });
       prisma.automationRun.findFirst.mockResolvedValue({ id: 'run-1' });
       prisma.message.create.mockResolvedValue({ id: 'msg-1' });
 
@@ -219,9 +233,9 @@ describe('AgentService', () => {
         channel: 'sms',
       });
 
-      await expect(
-        service.requestSend('msg-1', 'tenant-1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.requestSend('msg-1', 'tenant-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should block send when control plane is disabled', async () => {
@@ -233,9 +247,9 @@ describe('AgentService', () => {
       });
       controlPlaneService.getStatus.mockResolvedValue({ enabled: false });
 
-      await expect(
-        service.requestSend('msg-1', 'tenant-1'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.requestSend('msg-1', 'tenant-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should block send when channel is disabled', async () => {
@@ -251,9 +265,9 @@ describe('AgentService', () => {
         emailEnabled: false,
       });
 
-      await expect(
-        service.requestSend('msg-1', 'tenant-1'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.requestSend('msg-1', 'tenant-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 

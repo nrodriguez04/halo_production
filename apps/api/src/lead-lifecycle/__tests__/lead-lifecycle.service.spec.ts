@@ -49,7 +49,10 @@ describe('LeadLifecycleService', () => {
     prisma.lead.update.mockResolvedValue({ id: 'lead-1', status: 'enriching' });
     prisma.leadEnrichmentJob.findFirst.mockResolvedValue(null);
     prisma.leadEnrichmentJob.create.mockResolvedValue({ id: 'job-1' });
-    prisma.lead.findUnique.mockResolvedValue({ id: 'lead-1', status: 'enriching' });
+    prisma.lead.findUnique.mockResolvedValue({
+      id: 'lead-1',
+      status: 'enriching',
+    });
 
     await service.transition({
       leadId: 'lead-1',
@@ -63,11 +66,17 @@ describe('LeadLifecycleService', () => {
   });
 
   it('does not enqueue duplicate enrichment work for enriching no-op transitions', async () => {
-    prisma.lead.findFirst.mockResolvedValue({ id: 'lead-1', status: 'enriching' });
+    prisma.lead.findFirst.mockResolvedValue({
+      id: 'lead-1',
+      status: 'enriching',
+    });
     prisma.lead.update.mockResolvedValue({ id: 'lead-1', status: 'enriching' });
     prisma.leadEnrichmentJob.findFirst.mockResolvedValue({ id: 'job-1' });
     prisma.leadEnrichmentJob.update.mockResolvedValue({ id: 'job-1' });
-    prisma.lead.findUnique.mockResolvedValue({ id: 'lead-1', status: 'enriching' });
+    prisma.lead.findUnique.mockResolvedValue({
+      id: 'lead-1',
+      status: 'enriching',
+    });
 
     await service.transition({
       leadId: 'lead-1',

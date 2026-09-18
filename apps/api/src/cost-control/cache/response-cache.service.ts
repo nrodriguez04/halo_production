@@ -34,11 +34,17 @@ export class ResponseCacheService {
   ): Promise<CacheLookupResult | null> {
     try {
       const row = await this.prisma.cachedProviderResponse.findUnique({
-        where: { accountId_providerKey_cacheKey: { accountId, providerKey, cacheKey } },
+        where: {
+          accountId_providerKey_cacheKey: { accountId, providerKey, cacheKey },
+        },
       });
       if (!row) return null;
       if (row.expiresAt.getTime() <= Date.now()) return null;
-      return { payload: row.payload, fetchedAt: row.fetchedAt, expiresAt: row.expiresAt };
+      return {
+        payload: row.payload,
+        fetchedAt: row.fetchedAt,
+        expiresAt: row.expiresAt,
+      };
     } catch (err) {
       this.logger.warn(`cache lookup failed (${providerKey}): ${err}`);
       return null;
@@ -92,7 +98,9 @@ export class ResponseCacheService {
   ): Promise<void> {
     try {
       await this.prisma.cachedProviderResponse.update({
-        where: { accountId_providerKey_cacheKey: { accountId, providerKey, cacheKey } },
+        where: {
+          accountId_providerKey_cacheKey: { accountId, providerKey, cacheKey },
+        },
         data: {
           hitCount: { increment: 1 },
           costSavedUsd: { increment: costSavedUsd },

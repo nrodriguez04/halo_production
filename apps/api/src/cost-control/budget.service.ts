@@ -92,9 +92,14 @@ export class BudgetService {
    * Returns the bucket that would tip over its hard cap if `estimatedCostUsd`
    * were debited. Returns null if all buckets have headroom.
    */
-  findOverHardCap(buckets: ApplicableBucket[], estimatedCostUsd: number): ApplicableBucket | null {
+  findOverHardCap(
+    buckets: ApplicableBucket[],
+    estimatedCostUsd: number,
+  ): ApplicableBucket | null {
     return (
-      buckets.find((b) => b.currentSpendUsd + estimatedCostUsd > b.hardCapUsd) ?? null
+      buckets.find(
+        (b) => b.currentSpendUsd + estimatedCostUsd > b.hardCapUsd,
+      ) ?? null
     );
   }
 
@@ -102,7 +107,10 @@ export class BudgetService {
    * Returns the most-loaded bucket that has crossed its soft cap. Used to
    * surface ALLOW_WITH_WARNING.
    */
-  findOverSoftCap(buckets: ApplicableBucket[], estimatedCostUsd: number): ApplicableBucket | null {
+  findOverSoftCap(
+    buckets: ApplicableBucket[],
+    estimatedCostUsd: number,
+  ): ApplicableBucket | null {
     let worst: { bucket: ApplicableBucket; ratio: number } | null = null;
     for (const b of buckets) {
       const cap = b.softCapUsd ?? b.hardCapUsd * 0.8;

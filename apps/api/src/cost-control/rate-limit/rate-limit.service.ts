@@ -31,8 +31,9 @@ export class RateLimitService {
 
   async tryConsume(cfg: RateLimitConfig): Promise<RateLimitDecision> {
     const scope = cfg.scope ?? 'per_account';
-    const bucket = scope === 'global' ? 'GLOBAL' : cfg.accountId ?? 'GLOBAL';
-    const windowStart = Math.floor(Date.now() / 1000 / cfg.windowSec) * cfg.windowSec;
+    const bucket = scope === 'global' ? 'GLOBAL' : (cfg.accountId ?? 'GLOBAL');
+    const windowStart =
+      Math.floor(Date.now() / 1000 / cfg.windowSec) * cfg.windowSec;
     const key = `cost:rl:${cfg.providerKey}:${scope}:${bucket}:${cfg.windowSec}:${windowStart}`;
     try {
       const count = await this.redis.incr(key);
@@ -60,10 +61,19 @@ export class RateLimitService {
    * Idempotency dedup. Returns the timestamp of the previous call if one
    * happened within `withinSec`; null otherwise. Implemented with SET NX EX.
    */
-  async checkDuplicate(idempotencyKey: string, withinSec = 60): Promise<Date | null> {
+  async checkDuplicate(
+    idempotencyKey: string,
+    withinSec = 60,
+  ): Promise<Date | null> {
     const key = `cost:idem:${idempotencyKey}`;
     try {
-      const result = await this.redis.set(key, Date.now().toString(), 'EX', withinSec, 'NX');
+      const result = await this.redis.set(
+        key,
+        Date.now().toString(),
+        'EX',
+        withinSec,
+        'NX',
+      );
       if (result === 'OK') return null;
       const prev = await this.redis.get(key);
       const ts = prev ? parseInt(prev, 10) : Date.now();

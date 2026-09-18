@@ -1,9 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  JobRunEntityType,
-  JobRunKind,
-  JobRunStatus,
-} from '@prisma/client';
+import { JobRunEntityType, JobRunKind, JobRunStatus } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()

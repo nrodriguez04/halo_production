@@ -34,7 +34,9 @@ const envSchema = z.object({
   OPENAI_DAILY_COST_CAP: z.coerce.number().default(2),
   COST_CONTROL_MANUAL_APPROVAL_USD: z.coerce.number().default(5),
   COST_CONTROL_IDEMPOTENCY_WINDOW_SEC: z.coerce.number().default(60),
-  SKIP_TRACE_PROVIDER: z.enum(['batch', 'stub', 'propertyradar']).default('batch'),
+  SKIP_TRACE_PROVIDER: z
+    .enum(['batch', 'stub', 'propertyradar'])
+    .default('batch'),
   BATCH_SKIPTRACE_API_KEY: z.string().optional(),
   BATCH_SKIPTRACE_BASE_URL: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
@@ -59,7 +61,9 @@ const envSchema = z.object({
   DOCUSIGN_CLIENT_SECRET: z.string().optional(),
   DOCUSIGN_ACCOUNT_ID: z.string().optional(),
 
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z
+    .enum(['development', 'production', 'test'])
+    .default('development'),
 });
 
 export type Env = z.infer<typeof envSchema>;

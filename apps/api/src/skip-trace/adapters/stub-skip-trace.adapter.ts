@@ -19,7 +19,12 @@ export class StubSkipTraceAdapter implements SkipTraceAdapter {
     const hash = simpleHash(input.propertyAddress);
     const matched = hash % 2 === 0;
     if (!matched) {
-      return { provider: this.providerKey, status: 'no_match', phones: [], emails: [] };
+      return {
+        provider: this.providerKey,
+        status: 'no_match',
+        phones: [],
+        emails: [],
+      };
     }
     const last4 = String(hash % 10000).padStart(4, '0');
     return {

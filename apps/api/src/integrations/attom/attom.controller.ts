@@ -30,6 +30,10 @@ export class AttomController {
     @CurrentUserId() userId: string,
     @Query('apn') apn: string,
   ) {
-    return this.attomService.lookupByAPN(apn, { accountId, actor: 'user', userId });
+    return this.attomService.lookupByAPN(apn, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 }

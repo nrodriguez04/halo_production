@@ -100,7 +100,10 @@ describe('DealEconomicsService', () => {
 
   describe('upsert', () => {
     it('should create economics for existing deal', async () => {
-      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1', accountId: 'tenant-1' });
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        accountId: 'tenant-1',
+      });
       prisma.dealEconomics.upsert.mockResolvedValue({
         id: 'econ-1',
         dealId: 'deal-1',
@@ -137,7 +140,10 @@ describe('DealEconomicsService', () => {
         dealId: 'deal-1',
         smsCost: 5,
       });
-      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1', accountId: 'tenant-1' });
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        accountId: 'tenant-1',
+      });
       prisma.dealEconomics.upsert.mockResolvedValue({ id: 'econ-1' });
 
       await service.allocateAutomationCosts('deal-1', 'tenant-1');

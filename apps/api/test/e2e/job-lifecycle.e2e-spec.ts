@@ -34,7 +34,9 @@ describe('Job lifecycle (e2e)', () => {
       .expect(200);
 
     expect(statusRes.body.id).toBe(jobId);
-    expect(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED']).toContain(statusRes.body.status);
+    expect(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED']).toContain(
+      statusRes.body.status,
+    );
   });
 
   it('Enqueues marketing flyer and returns jobId', async () => {

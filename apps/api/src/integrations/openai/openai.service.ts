@@ -53,7 +53,10 @@ export class OpenAIService {
     return this._client;
   }
 
-  async chatCompletion(input: ChatCompletionInput, ctx: CostContext): Promise<ChatCompletionResult | null> {
+  async chatCompletion(
+    input: ChatCompletionInput,
+    ctx: CostContext,
+  ): Promise<ChatCompletionResult | null> {
     const action = `chat_completion.${input.model}`;
     const out = await this.costControl.checkAndCall<
       ChatCompletionInput & { tokensIn: number; tokensOut: number },
@@ -84,7 +87,8 @@ export class OpenAIService {
           raw: completion,
         };
       },
-      computeActualCostUsd: (result) => priceFromTokens(input.model, result.tokensIn, result.tokensOut),
+      computeActualCostUsd: (result) =>
+        priceFromTokens(input.model, result.tokensIn, result.tokensOut),
     });
     return (out.result as ChatCompletionResult | null) ?? null;
   }
@@ -111,7 +115,11 @@ const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4-32k': { input: 0.06, output: 0.12 },
 };
 
-function priceFromTokens(model: string, tokensIn: number, tokensOut: number): number {
+function priceFromTokens(
+  model: string,
+  tokensIn: number,
+  tokensOut: number,
+): number {
   const p = TOKEN_PRICING[model] ?? TOKEN_PRICING['gpt-4o-mini'];
   return (tokensIn / 1000) * p.input + (tokensOut / 1000) * p.output;
 }

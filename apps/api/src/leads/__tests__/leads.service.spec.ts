@@ -183,7 +183,6 @@ describe('LeadsService', () => {
     });
   });
 
-
   describe('update', () => {
     it('rejects accountId rewrites through the generic update endpoint', async () => {
       await expect(
@@ -200,9 +199,14 @@ describe('LeadsService', () => {
     });
 
     it('allows ordinary field updates on an owned lead', async () => {
-      prisma.lead.findFirst.mockResolvedValueOnce({ id: 'lead-1', accountId: 'tenant-1' });
+      prisma.lead.findFirst.mockResolvedValueOnce({
+        id: 'lead-1',
+        accountId: 'tenant-1',
+      });
       prisma.lead.update.mockResolvedValueOnce({ id: 'lead-1' });
-      await service.update('lead-1', 'tenant-1', { canonicalOwner: 'New Owner' } as any);
+      await service.update('lead-1', 'tenant-1', {
+        canonicalOwner: 'New Owner',
+      } as any);
       expect(prisma.lead.update).toHaveBeenCalledWith({
         where: { id: 'lead-1' },
         data: { canonicalOwner: 'New Owner' },
@@ -227,10 +231,14 @@ describe('LeadsService', () => {
 
     it('falls back to per-row inserts so one bad row cannot abort the file', async () => {
       prisma.lead.findMany.mockResolvedValueOnce([]);
-      prisma.lead.createMany = jest.fn().mockRejectedValue(new Error('value too long'));
+      prisma.lead.createMany = jest
+        .fn()
+        .mockRejectedValue(new Error('value too long'));
       prisma.lead.create
         .mockResolvedValueOnce({ id: 'l1' })
-        .mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }))
+        .mockRejectedValueOnce(
+          Object.assign(new Error('unique'), { code: 'P2002' }),
+        )
         .mockRejectedValueOnce(new Error('value too long for column'));
 
       const out = await service.importCSV(rows, 'tenant-1', 'user-1');

@@ -84,7 +84,9 @@ describe('GlobalAdminGuard', () => {
     // ControlPlane rows are scoped by accountId and the controller only
     // touches the caller's own row, so tenant admins must keep access.
     const guards = Reflect.getMetadata(GUARDS_METADATA, ControlPlaneController);
-    expect(guards).toEqual(expect.arrayContaining([AuthGuard, PermissionsGuard]));
+    expect(guards).toEqual(
+      expect.arrayContaining([AuthGuard, PermissionsGuard]),
+    );
     expect(guards).not.toContain(GlobalAdminGuard);
   });
 });

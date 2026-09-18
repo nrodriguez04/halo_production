@@ -65,5 +65,3 @@ export class MarketingController {
     return this.marketingService.generateVideoScript(accountId, userId, dealId);
   }
 }
-
-

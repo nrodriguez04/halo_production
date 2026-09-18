@@ -47,7 +47,10 @@ export class TwilioSendService {
     return this._client;
   }
 
-  async sendSms(input: SendSmsInput, ctx: CostContext): Promise<SendSmsResult | null> {
+  async sendSms(
+    input: SendSmsInput,
+    ctx: CostContext,
+  ): Promise<SendSmsResult | null> {
     const action = `send_sms.${input.variant ?? 'us'}`;
     const out = await this.costControl.checkAndCall<
       SendSmsInput & { segmentCount: number },
@@ -57,7 +60,9 @@ export class TwilioSendService {
       action,
       payload: { ...input, segmentCount: estimateSegments(input.body) },
       context: ctx,
-      hints: input.messageId ? { idempotencyKey: `sms:${input.messageId}` } : undefined,
+      hints: input.messageId
+        ? { idempotencyKey: `sms:${input.messageId}` }
+        : undefined,
       execute: async () => {
         const result = await this.client.messages.create({
           body: input.body,

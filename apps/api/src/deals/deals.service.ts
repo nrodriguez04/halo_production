@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import {
   DealCreate,
@@ -45,7 +50,9 @@ export class DealsService {
       });
 
       if (!property) {
-        throw new NotFoundException(`Property with ID ${data.propertyId} not found`);
+        throw new NotFoundException(
+          `Property with ID ${data.propertyId} not found`,
+        );
       }
     }
 
@@ -188,18 +195,16 @@ export class DealsService {
       throw new NotFoundException(`Deal with ID ${id} not found`);
     }
 
-    const transition = transitionDealStage(
-      deal.stage as DealStage,
-      stage,
-      {
-        tenantId: accountId,
-        actorId,
-        actorType,
-      },
-    );
+    const transition = transitionDealStage(deal.stage as DealStage, stage, {
+      tenantId: accountId,
+      actorId,
+      actorType,
+    });
 
     if (!transition.allowed) {
-      throw new BadRequestException(transition.reason || 'Invalid stage transition');
+      throw new BadRequestException(
+        transition.reason || 'Invalid stage transition',
+      );
     }
 
     const updated = await this.prisma.deal.update({
@@ -223,10 +228,11 @@ export class DealsService {
     try {
       await this.automationService.attributeStageChange(id, accountId, stage);
     } catch (err) {
-      this.logger.warn(`Stage-change attribution failed for deal ${id}: ${err}`);
+      this.logger.warn(
+        `Stage-change attribution failed for deal ${id}: ${err}`,
+      );
     }
 
     return updated;
   }
 }
-

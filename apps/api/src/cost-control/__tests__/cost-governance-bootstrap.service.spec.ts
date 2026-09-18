@@ -24,15 +24,27 @@ describe('CostGovernanceBootstrapService', () => {
 
   it('seeds default governance data when the provider registry is empty', async () => {
     prisma.integrationProvider.count.mockResolvedValue(0);
-    prisma.account.findMany.mockResolvedValue([{ id: 'acct_1' }, { id: 'acct_2' }]);
+    prisma.account.findMany.mockResolvedValue([
+      { id: 'acct_1' },
+      { id: 'acct_2' },
+    ]);
 
     await service.onModuleInit();
 
     expect(seedCostGovernanceReferenceData).toHaveBeenCalledWith(prisma);
     expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledTimes(3);
-    expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledWith(prisma, 'GLOBAL');
-    expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledWith(prisma, 'acct_1');
-    expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledWith(prisma, 'acct_2');
+    expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledWith(
+      prisma,
+      'GLOBAL',
+    );
+    expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledWith(
+      prisma,
+      'acct_1',
+    );
+    expect(seedCostGovernanceBudgetBuckets).toHaveBeenCalledWith(
+      prisma,
+      'acct_2',
+    );
   });
 
   it('skips seeding when providers already exist', async () => {

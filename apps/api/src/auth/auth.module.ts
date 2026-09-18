@@ -8,4 +8,3 @@ import { PermissionsGuard } from './permissions.guard';
   exports: [AuthGuard, PermissionsGuard, GlobalAdminGuard],
 })
 export class AuthModule {}
-

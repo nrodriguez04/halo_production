@@ -37,7 +37,8 @@ export interface AttomLookupResult {
 @Injectable()
 export class AttomService {
   private readonly logger = new Logger(AttomService.name);
-  private readonly baseUrl = process.env.ATTOM_BASE_URL || 'https://api.gateway.attomdata.com';
+  private readonly baseUrl =
+    process.env.ATTOM_BASE_URL || 'https://api.gateway.attomdata.com';
   private readonly apiKey = process.env.ATTOM_API_KEY || '';
 
   constructor(
@@ -59,11 +60,17 @@ export class AttomService {
     if (!this.apiKey) {
       // Checked before checkAndCall so a missing key does not reserve budget
       // or burn a round-trip just to be rejected with a 401.
-      throw IntegrationUnavailableException.notConfigured('attom', 'ATTOM_API_KEY');
+      throw IntegrationUnavailableException.notConfigured(
+        'attom',
+        'ATTOM_API_KEY',
+      );
     }
     const query = [address, city, state, zip].filter(Boolean).join(', ');
 
-    const out = await this.costControl.checkAndCall<{ address: string }, AttomLookupResult>({
+    const out = await this.costControl.checkAndCall<
+      { address: string },
+      AttomLookupResult
+    >({
       provider: 'attom',
       action: 'property_expanded_profile',
       payload: { address: query },
@@ -71,25 +78,43 @@ export class AttomService {
       hints: { idempotencyKey: `attom:lookup:${this.hash(query)}` },
       execute: async () => {
         const url = `${this.baseUrl}/propertyapi/v1.0.0/property/expandedprofile`;
-        const data = (await this.makeRequest(url, { address: query })) as ATTOMResponse;
-        const sourceRecord = await this.storeSourceRecord('attom', url, { address: query }, data);
+        const data = (await this.makeRequest(url, {
+          address: query,
+        })) as ATTOMResponse;
+        const sourceRecord = await this.storeSourceRecord(
+          'attom',
+          url,
+          { address: query },
+          data,
+        );
         return { data, sourceRecordId: sourceRecord.id };
       },
     });
-    return out.fromCache ? (out.result as AttomLookupResult) : out.result ?? null;
+    return out.fromCache
+      ? (out.result as AttomLookupResult)
+      : (out.result ?? null);
   }
 
-  async lookupByAPN(apn: string, ctx: CostContext): Promise<AttomLookupResult | null> {
+  async lookupByAPN(
+    apn: string,
+    ctx: CostContext,
+  ): Promise<AttomLookupResult | null> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('attom');
     }
     if (!this.apiKey) {
       // Checked before checkAndCall so a missing key does not reserve budget
       // or burn a round-trip just to be rejected with a 401.
-      throw IntegrationUnavailableException.notConfigured('attom', 'ATTOM_API_KEY');
+      throw IntegrationUnavailableException.notConfigured(
+        'attom',
+        'ATTOM_API_KEY',
+      );
     }
 
-    const out = await this.costControl.checkAndCall<{ apn: string }, AttomLookupResult>({
+    const out = await this.costControl.checkAndCall<
+      { apn: string },
+      AttomLookupResult
+    >({
       provider: 'attom',
       action: 'property_expanded_profile',
       payload: { apn },
@@ -98,11 +123,18 @@ export class AttomService {
       execute: async () => {
         const url = `${this.baseUrl}/propertyapi/v1.0.0/property/expandedprofile`;
         const data = (await this.makeRequest(url, { apn })) as ATTOMResponse;
-        const sourceRecord = await this.storeSourceRecord('attom', url, { apn }, data);
+        const sourceRecord = await this.storeSourceRecord(
+          'attom',
+          url,
+          { apn },
+          data,
+        );
         return { data, sourceRecordId: sourceRecord.id };
       },
     });
-    return out.fromCache ? (out.result as AttomLookupResult) : out.result ?? null;
+    return out.fromCache
+      ? (out.result as AttomLookupResult)
+      : (out.result ?? null);
   }
 
   private async makeRequest(
@@ -130,13 +162,20 @@ export class AttomService {
               `HTTP ${response.status}`,
             );
           }
-          if ((response.status === 429 || response.status >= 500) && attempt < retries - 1) {
+          if (
+            (response.status === 429 || response.status >= 500) &&
+            attempt < retries - 1
+          ) {
             const delay = Math.pow(2, attempt) * 1000;
-            this.logger.warn(`ATTOM ${response.status}, retrying after ${delay}ms`);
+            this.logger.warn(
+              `ATTOM ${response.status}, retrying after ${delay}ms`,
+            );
             await sleep(delay);
             continue;
           }
-          throw new Error(`ATTOM API error: ${response.status} ${response.statusText}`);
+          throw new Error(
+            `ATTOM API error: ${response.status} ${response.statusText}`,
+          );
         }
 
         return await response.json();
@@ -153,7 +192,10 @@ export class AttomService {
     request: Record<string, unknown>,
     response: unknown,
   ) {
-    const requestHash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    const requestHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(request))
+      .digest('hex');
     return this.prisma.sourceRecord.create({
       data: {
         provider,

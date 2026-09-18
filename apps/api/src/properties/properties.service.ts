@@ -92,9 +92,13 @@ export class PropertiesService {
     });
   }
 
-  async getMapPins(accountId: string, filters: { city?: string; state?: string; bbox?: string }) {
+  async getMapPins(
+    accountId: string,
+    filters: { city?: string; state?: string; bbox?: string },
+  ) {
     const where: any = { accountId };
-    if (filters.city) where.city = { contains: filters.city, mode: 'insensitive' };
+    if (filters.city)
+      where.city = { contains: filters.city, mode: 'insensitive' };
     if (filters.state) where.state = filters.state;
 
     const properties = await this.prisma.property.findMany({
@@ -125,10 +129,16 @@ export class PropertiesService {
 
   async search(
     accountId: string,
-    filters: { city?: string; state?: string; minPrice?: number; maxPrice?: number },
+    filters: {
+      city?: string;
+      state?: string;
+      minPrice?: number;
+      maxPrice?: number;
+    },
   ) {
     const where: any = { accountId };
-    if (filters.city) where.city = { contains: filters.city, mode: 'insensitive' };
+    if (filters.city)
+      where.city = { contains: filters.city, mode: 'insensitive' };
     if (filters.state) where.state = filters.state;
 
     return this.prisma.property.findMany({
@@ -140,9 +150,9 @@ export class PropertiesService {
   }
 
   private calculateFreshness(createdAt: Date): number {
-    const daysSince = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    const daysSince =
+      (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
     // Freshness decays linearly: 1.0 for today, 0.5 for 30 days ago, 0.0 for 60+ days
     return Math.max(0, 1 - daysSince / 60);
   }
 }
-

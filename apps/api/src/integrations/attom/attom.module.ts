@@ -11,4 +11,3 @@ import { ControlPlaneModule } from '../../control-plane/control-plane.module';
   exports: [AttomService],
 })
 export class AttomModule {}
-

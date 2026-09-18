@@ -106,7 +106,9 @@ export class LeadLifecycleService {
 
     const stage = ENRICHMENT_STAGES[params.next];
     if (stage) {
-      ops.push(this.upsertEnrichmentJob(lead.id, params.accountId, stage, params));
+      ops.push(
+        this.upsertEnrichmentJob(lead.id, params.accountId, stage, params),
+      );
     }
 
     ops.push(
@@ -147,7 +149,10 @@ export class LeadLifecycleService {
     });
     if (!lead) return;
     if (lead.status === 'new' || isLeadStatus(lead.status)) return;
-    await this.prisma.lead.update({ where: { id: leadId }, data: { status: 'new' } });
+    await this.prisma.lead.update({
+      where: { id: leadId },
+      data: { status: 'new' },
+    });
   }
 
   private async upsertEnrichmentJob(

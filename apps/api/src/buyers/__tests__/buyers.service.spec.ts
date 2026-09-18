@@ -22,10 +22,7 @@ describe('BuyersService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        BuyersService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [BuyersService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get<BuyersService>(BuyersService);
@@ -34,7 +31,9 @@ describe('BuyersService', () => {
   describe('update', () => {
     it('rejects accountId rewrites before mutating the buyer', async () => {
       await expect(
-        service.update('buyer-1', 'account-1', { accountId: 'account-2' } as any),
+        service.update('buyer-1', 'account-1', {
+          accountId: 'account-2',
+        } as any),
       ).rejects.toThrow(BadRequestException);
 
       expect(prisma.buyer.findFirst).not.toHaveBeenCalled();

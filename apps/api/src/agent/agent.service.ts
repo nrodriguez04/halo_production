@@ -212,11 +212,7 @@ export class AgentService {
       });
     }
 
-    if (
-      deal.stage === 'contacted' &&
-      !hasRecentOutbound &&
-      !hasRecentInbound
-    ) {
+    if (deal.stage === 'contacted' && !hasRecentOutbound && !hasRecentInbound) {
       actions.push({
         action: 'draft-seller-sms',
         reason: 'Follow-up needed — no recent activity',
@@ -279,7 +275,9 @@ export class AgentService {
         select: { id: true },
       });
       if (!owned) {
-        throw new NotFoundException(`AutomationRun ${automationRunId} not found`);
+        throw new NotFoundException(
+          `AutomationRun ${automationRunId} not found`,
+        );
       }
     }
     if (!automationRunId) {
@@ -289,8 +287,7 @@ export class AgentService {
           source: 'openclaw',
           agentName: input.agentName || 'unknown',
           workflowName:
-            input.workflowName ||
-            `draft-${recipientType}-${channel}`,
+            input.workflowName || `draft-${recipientType}-${channel}`,
           entityType: 'deal',
           entityId: dealId,
           status: 'RUNNING',

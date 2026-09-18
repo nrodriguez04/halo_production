@@ -104,10 +104,22 @@ export class ControlPlaneService {
     // Bridge legacy ControlPlane caps into the cost-governance budget buckets
     // so callers reading either source see consistent limits.
     if (typeof updates.aiDailyCostCap === 'number') {
-      await this.syncBucketCap(accountId, 'global', 'openai', 'day', updates.aiDailyCostCap);
+      await this.syncBucketCap(
+        accountId,
+        'global',
+        'openai',
+        'day',
+        updates.aiDailyCostCap,
+      );
     }
     if (typeof updates.apiDailyCostCap === 'number') {
-      await this.syncBucketCap(accountId, 'global', 'ALL', 'day', updates.apiDailyCostCap);
+      await this.syncBucketCap(
+        accountId,
+        'global',
+        'ALL',
+        'day',
+        updates.apiDailyCostCap,
+      );
     }
 
     return cp;

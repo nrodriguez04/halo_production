@@ -35,7 +35,11 @@ export class PropertyRadarController {
     @CurrentUserId() userId: string,
     @Param('radarId') radarId: string,
   ) {
-    return this.service.getPropertyDetails(radarId, { accountId, actor: 'user', userId });
+    return this.service.getPropertyDetails(radarId, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 
   @Get('properties/:radarId/owner')
@@ -44,7 +48,11 @@ export class PropertyRadarController {
     @CurrentUserId() userId: string,
     @Param('radarId') radarId: string,
   ) {
-    return this.service.getOwnerDetails(radarId, { accountId, actor: 'user', userId });
+    return this.service.getOwnerDetails(radarId, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 
   @Get('properties/:radarId/contacts')
@@ -53,7 +61,11 @@ export class PropertyRadarController {
     @CurrentUserId() userId: string,
     @Param('radarId') radarId: string,
   ) {
-    return this.service.appendContacts(radarId, { accountId, actor: 'user', userId });
+    return this.service.appendContacts(radarId, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 
   @Get('properties/:radarId/transactions')
@@ -62,7 +74,11 @@ export class PropertyRadarController {
     @CurrentUserId() userId: string,
     @Param('radarId') radarId: string,
   ) {
-    return this.service.getTransactionHistory(radarId, { accountId, actor: 'user', userId });
+    return this.service.getTransactionHistory(radarId, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 
   @Get('properties/:radarId/comparables')
@@ -87,8 +103,20 @@ export class PropertyRadarController {
   async importRecords(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
-    @Body() body: { records: Array<{ Address: string; City?: string; State?: string; Zip?: string }> },
+    @Body()
+    body: {
+      records: Array<{
+        Address: string;
+        City?: string;
+        State?: string;
+        Zip?: string;
+      }>;
+    },
   ) {
-    return this.service.importRecords(body.records, { accountId, actor: 'user', userId });
+    return this.service.importRecords(body.records, {
+      accountId,
+      actor: 'user',
+      userId,
+    });
   }
 }

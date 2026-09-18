@@ -9,7 +9,10 @@ export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Get(':jobId')
-  async getJob(@CurrentAccountId() accountId: string, @Param('jobId') jobId: string) {
+  async getJob(
+    @CurrentAccountId() accountId: string,
+    @Param('jobId') jobId: string,
+  ) {
     return this.jobsService.getJobRun(accountId, jobId);
   }
 }

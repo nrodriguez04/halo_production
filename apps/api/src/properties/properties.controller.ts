@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
@@ -10,10 +18,7 @@ export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) {}
 
   @Post()
-  async create(
-    @Body() data: unknown,
-    @CurrentAccountId() accountId: string,
-  ) {
+  async create(@Body() data: unknown, @CurrentAccountId() accountId: string) {
     const validated = PropertyCreateSchema.parse({
       ...(data as object),
       accountId,

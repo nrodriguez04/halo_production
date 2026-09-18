@@ -12,10 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
-import {
-  PolicyViolationError,
-  assertPolicy,
-} from '@halo/shared';
+import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
 
@@ -28,8 +25,14 @@ export class MarketingService {
     private controlPlaneService: ControlPlaneService,
   ) {}
 
-  async generateFlyer(accountId: string, actorId: string | null, dealId: string) {
-    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, accountId } });
+  async generateFlyer(
+    accountId: string,
+    actorId: string | null,
+    dealId: string,
+  ) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
+    });
     if (!deal) {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
@@ -244,5 +247,3 @@ export class MarketingService {
     return this.controlPlaneService.getStatus(accountId);
   }
 }
-
-

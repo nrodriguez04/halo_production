@@ -30,13 +30,23 @@ const OverrideBody = z.object({
   scopeRef: z.string().min(1),
   reason: z.string().min(1),
   extraBudgetUsd: z.number().positive(),
-  expiresInHours: z.number().int().positive().max(24 * 30).default(72),
+  expiresInHours: z
+    .number()
+    .int()
+    .positive()
+    .max(24 * 30)
+    .default(72),
 });
 const FeatureFlagBody = z.object({
   flag: z.string().min(1),
   enabled: z.boolean(),
   reason: z.string().optional(),
-  expiresInHours: z.number().int().positive().max(24 * 365).optional(),
+  expiresInHours: z
+    .number()
+    .int()
+    .positive()
+    .max(24 * 365)
+    .optional(),
 });
 
 @Controller('cost-governance')
@@ -76,7 +86,10 @@ export class CostControlController {
     if (!event || event.accountId !== accountId) {
       throw new NotFoundException('reservation not found');
     }
-    if (event.decision !== 'REQUIRE_MANUAL_APPROVAL' || event.status !== 'reserved') {
+    if (
+      event.decision !== 'REQUIRE_MANUAL_APPROVAL' ||
+      event.status !== 'reserved'
+    ) {
       throw new BadRequestException('reservation is not awaiting approval');
     }
     // Approving a manual-approval reservation flips the decision so the
@@ -123,7 +136,9 @@ export class CostControlController {
     @Body() raw: unknown,
   ) {
     const body = OverrideBody.parse(raw);
-    const expiresAt = new Date(Date.now() + body.expiresInHours * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + body.expiresInHours * 60 * 60 * 1000,
+    );
     const override = await this.prisma.manualBudgetOverride.create({
       data: {
         accountId,

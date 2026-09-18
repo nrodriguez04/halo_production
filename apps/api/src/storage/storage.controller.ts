@@ -32,7 +32,9 @@ export class StorageController {
   ) {
     const validCategories = ['contracts', 'flyers', 'marketing', 'documents'];
     if (!validCategories.includes(category)) {
-      throw new BadRequestException(`Invalid category. Allowed: ${validCategories.join(', ')}`);
+      throw new BadRequestException(
+        `Invalid category. Allowed: ${validCategories.join(', ')}`,
+      );
     }
 
     if (!file) {
@@ -85,7 +87,10 @@ export class StorageController {
     try {
       const { body, contentType } = await this.storageService.download(key);
       res.setHeader('Content-Type', contentType || 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${key.split('/').pop()}"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${key.split('/').pop()}"`,
+      );
       body.pipe(res);
     } catch (err: any) {
       if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {

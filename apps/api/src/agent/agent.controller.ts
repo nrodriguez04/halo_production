@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
@@ -109,9 +102,7 @@ export class AgentController {
   }
 
   @Get('communications/pending-approvals')
-  async getPendingApprovals(
-    @CurrentAccountId() accountId: string,
-  ) {
+  async getPendingApprovals(@CurrentAccountId() accountId: string) {
     return this.agentService.getPendingApprovals(accountId);
   }
 
