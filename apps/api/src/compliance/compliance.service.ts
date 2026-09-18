@@ -75,15 +75,12 @@ export class ComplianceService {
   ): Promise<boolean> {
     if (!phone) return false;
 
-    const normalized = normalizePhoneNumber(phone);
     const entry = await this.prisma.dNCList.findFirst({
       where: {
         accountId,
-        // Blind index first; the plaintext arm covers rows the backfill has
-        // not reached and goes at cutover.
-        OR: [{ phoneHash: hashPhone(normalized) }, { phone: normalized }],
+        phoneHash: hashPhone(normalizePhoneNumber(phone)),
         // null expiresAt means permanent.
-        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
       select: { id: true },
     });
@@ -99,14 +96,12 @@ export class ComplianceService {
     const identifiers: Record<string, unknown>[] = [];
     if (subject.leadId) identifiers.push({ leadId: subject.leadId });
     if (subject.phone) {
-      const normalized = normalizePhoneNumber(subject.phone);
-      identifiers.push({ phoneHash: hashPhone(normalized) });
-      identifiers.push({ phone: normalized });
+      identifiers.push({
+        phoneHash: hashPhone(normalizePhoneNumber(subject.phone)),
+      });
     }
-    if (subject.email) {
+    if (subject.email)
       identifiers.push({ emailHash: hashEmail(subject.email) });
-      identifiers.push({ email: subject.email });
-    }
 
     if (identifiers.length === 0) {
       return { applicable: false, granted: true };
