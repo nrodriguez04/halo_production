@@ -100,7 +100,7 @@ function estimateTokensIn(messages: { content: string }[]): number {
   return Math.ceil(messages.reduce((s, m) => s + m.content.length, 0) / 4);
 }
 
-// Mirrors the per-1k pricing rules in `seed-providers.ts`. Centralized here
+// Mirrors the per-1k pricing rules in `cost-control/seed-providers.ts`. Centralized here
 // so model rollouts only need a single source-of-truth update (seed +
 // adapter), and the actual cost can be computed without re-querying the
 // pricing table.

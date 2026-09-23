@@ -40,6 +40,15 @@ jobs:
       - name: Build all
         run: npm run build
 
+      - name: Verify runtime entrypoints
+        # The Dockerfiles run `node dist/main`. An import that reaches outside
+        # src/ widens the TypeScript root and silently moves the output to
+        # dist/src/main.js, which builds fine and then fails to start.
+        run: |
+          test -f apps/api/dist/main.js
+          test -f apps/worker/dist/main.js
+          test ! -e apps/api/dist/src
+
       - name: Run tests
         run: npm test
 

@@ -1,5 +1,5 @@
 import { AutomationRunStatus, PrismaClient } from '@prisma/client';
-import { seedCostGovernance } from './seed-providers';
+import { seedCostGovernance } from '../src/cost-control/seed-providers';
 import { protectContact, revealContact } from '../src/leads/lead-pii';
 import { protectPhone } from '../src/pii/contact-crypto';
 

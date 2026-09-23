@@ -4,7 +4,7 @@ import {
   COST_GOVERNANCE_PROVIDER_KEYS,
   seedCostGovernanceBudgetBuckets,
   seedCostGovernanceReferenceData,
-} from '../../prisma/seed-providers';
+} from './seed-providers';
 
 @Injectable()
 export class CostGovernanceBootstrapService implements OnModuleInit {
