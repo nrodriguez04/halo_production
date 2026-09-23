@@ -1,4 +1,4 @@
-jest.mock('../../../prisma/seed-providers', () => ({
+jest.mock('../seed-providers', () => ({
   COST_GOVERNANCE_PROVIDER_KEYS: ['attom', 'openai', 'sendgrid', 'smtp'],
   seedCostGovernanceReferenceData: jest.fn(),
   seedCostGovernanceBudgetBuckets: jest.fn(),
@@ -8,7 +8,7 @@ import { CostGovernanceBootstrapService } from '../cost-governance-bootstrap.ser
 import {
   seedCostGovernanceBudgetBuckets,
   seedCostGovernanceReferenceData,
-} from '../../../prisma/seed-providers';
+} from '../seed-providers';
 
 describe('CostGovernanceBootstrapService', () => {
   let prisma: any;
