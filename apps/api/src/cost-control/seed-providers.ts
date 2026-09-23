@@ -17,7 +17,13 @@ const PROVIDERS = [
     category: 'property_data',
     enabled: true,
     rateLimitPerMin: 60,
-    pricing: [{ action: 'property_expanded_profile', unitCostUsd: 0.1, unit: 'per_call' }],
+    pricing: [
+      {
+        action: 'property_expanded_profile',
+        unitCostUsd: 0.1,
+        unit: 'per_call',
+      },
+    ],
   },
   {
     key: 'rentcast',
@@ -66,12 +72,36 @@ const PROVIDERS = [
     rateLimitPerMin: 200,
     pricing: [
       // Token-based pricing - the tokens-in/tokens-out are read from intent.payload
-      { action: 'chat_completion.gpt-4o-mini', unitCostUsd: 0.00015, unit: 'per_1k_input_tokens' },
-      { action: 'chat_completion.gpt-4o-mini', unitCostUsd: 0.0006, unit: 'per_1k_output_tokens' },
-      { action: 'chat_completion.gpt-4o', unitCostUsd: 0.0025, unit: 'per_1k_input_tokens' },
-      { action: 'chat_completion.gpt-4o', unitCostUsd: 0.01, unit: 'per_1k_output_tokens' },
-      { action: 'chat_completion.gpt-4-turbo', unitCostUsd: 0.01, unit: 'per_1k_input_tokens' },
-      { action: 'chat_completion.gpt-4-turbo', unitCostUsd: 0.03, unit: 'per_1k_output_tokens' },
+      {
+        action: 'chat_completion.gpt-4o-mini',
+        unitCostUsd: 0.00015,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.gpt-4o-mini',
+        unitCostUsd: 0.0006,
+        unit: 'per_1k_output_tokens',
+      },
+      {
+        action: 'chat_completion.gpt-4o',
+        unitCostUsd: 0.0025,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.gpt-4o',
+        unitCostUsd: 0.01,
+        unit: 'per_1k_output_tokens',
+      },
+      {
+        action: 'chat_completion.gpt-4-turbo',
+        unitCostUsd: 0.01,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.gpt-4-turbo',
+        unitCostUsd: 0.03,
+        unit: 'per_1k_output_tokens',
+      },
     ],
   },
 
@@ -83,7 +113,11 @@ const PROVIDERS = [
     enabled: true,
     pricing: [
       { action: 'send_sms.us', unitCostUsd: 0.0083, unit: 'per_segment' },
-      { action: 'send_sms.toll_free', unitCostUsd: 0.0083, unit: 'per_segment' },
+      {
+        action: 'send_sms.toll_free',
+        unitCostUsd: 0.0083,
+        unit: 'per_segment',
+      },
     ],
   },
   {
@@ -115,7 +149,9 @@ const PROVIDERS = [
     displayName: 'BatchSkipTracing',
     category: 'skip_trace',
     enabled: true,
-    pricing: [{ action: 'append_contacts', unitCostUsd: 0.1, unit: 'per_record' }],
+    pricing: [
+      { action: 'append_contacts', unitCostUsd: 0.1, unit: 'per_record' },
+    ],
   },
   {
     key: 'datazapp',
@@ -123,14 +159,18 @@ const PROVIDERS = [
     category: 'skip_trace',
     enabled: false, // future adapter, disabled until keys are wired
     isFallbackFor: 'batch_skiptrace',
-    pricing: [{ action: 'append_contacts', unitCostUsd: 0.05, unit: 'per_record' }],
+    pricing: [
+      { action: 'append_contacts', unitCostUsd: 0.05, unit: 'per_record' },
+    ],
   },
   {
     key: 'stub_skiptrace',
     displayName: 'Stub SkipTrace (CI/local)',
     category: 'skip_trace',
     enabled: false, // selected via SKIP_TRACE_PROVIDER=stub env var only
-    pricing: [{ action: 'append_contacts', unitCostUsd: 0, unit: 'per_record' }],
+    pricing: [
+      { action: 'append_contacts', unitCostUsd: 0, unit: 'per_record' },
+    ],
   },
 ] as const;
 
@@ -139,25 +179,100 @@ const PROVIDERS = [
 // account is created the seed for that account inherits these defaults.
 const BUDGET_TEMPLATES = [
   // Org-wide caps
-  { scope: 'global', scopeRef: 'ALL', period: 'month', hardCapUsd: 1000, softCapUsd: 800 },
-  { scope: 'global', scopeRef: 'ALL', period: 'day', hardCapUsd: 50, softCapUsd: 40 },
+  {
+    scope: 'global',
+    scopeRef: 'ALL',
+    period: 'month',
+    hardCapUsd: 1000,
+    softCapUsd: 800,
+  },
+  {
+    scope: 'global',
+    scopeRef: 'ALL',
+    period: 'day',
+    hardCapUsd: 50,
+    softCapUsd: 40,
+  },
 
   // Per-provider monthly caps (sum to <= the global cap)
-  { scope: 'provider', scopeRef: 'openai', period: 'month', hardCapUsd: 200, softCapUsd: 160 },
-  { scope: 'provider', scopeRef: 'twilio', period: 'month', hardCapUsd: 200, softCapUsd: 160 },
-  { scope: 'provider', scopeRef: 'batch_skiptrace', period: 'month', hardCapUsd: 250, softCapUsd: 200 },
-  { scope: 'provider', scopeRef: 'rentcast', period: 'month', hardCapUsd: 100, softCapUsd: 80 },
-  { scope: 'provider', scopeRef: 'attom', period: 'month', hardCapUsd: 150, softCapUsd: 120 },
-  { scope: 'provider', scopeRef: 'google_geocoding', period: 'month', hardCapUsd: 25, softCapUsd: 20 },
-  { scope: 'provider', scopeRef: 'resend', period: 'month', hardCapUsd: 20, softCapUsd: 16 },
+  {
+    scope: 'provider',
+    scopeRef: 'openai',
+    period: 'month',
+    hardCapUsd: 200,
+    softCapUsd: 160,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'twilio',
+    period: 'month',
+    hardCapUsd: 200,
+    softCapUsd: 160,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'batch_skiptrace',
+    period: 'month',
+    hardCapUsd: 250,
+    softCapUsd: 200,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'rentcast',
+    period: 'month',
+    hardCapUsd: 100,
+    softCapUsd: 80,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'attom',
+    period: 'month',
+    hardCapUsd: 150,
+    softCapUsd: 120,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'google_geocoding',
+    period: 'month',
+    hardCapUsd: 25,
+    softCapUsd: 20,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'resend',
+    period: 'month',
+    hardCapUsd: 20,
+    softCapUsd: 16,
+  },
 
   // Workflow caps
-  { scope: 'workflow', scopeRef: 'skip_trace_pipeline', period: 'day', hardCapUsd: 25, softCapUsd: 20 },
-  { scope: 'workflow', scopeRef: 'ai_underwriting', period: 'day', hardCapUsd: 10, softCapUsd: 8 },
-  { scope: 'workflow', scopeRef: 'lead_enrichment', period: 'day', hardCapUsd: 15, softCapUsd: 12 },
+  {
+    scope: 'workflow',
+    scopeRef: 'skip_trace_pipeline',
+    period: 'day',
+    hardCapUsd: 25,
+    softCapUsd: 20,
+  },
+  {
+    scope: 'workflow',
+    scopeRef: 'ai_underwriting',
+    period: 'day',
+    hardCapUsd: 10,
+    softCapUsd: 8,
+  },
+  {
+    scope: 'workflow',
+    scopeRef: 'lead_enrichment',
+    period: 'day',
+    hardCapUsd: 15,
+    softCapUsd: 12,
+  },
 ];
 
-export async function seedCostGovernance(prisma: PrismaClient, accountId: string) {
+export async function seedCostGovernance(
+  prisma: PrismaClient,
+  accountId: string,
+) {
   console.log('Seeding cost governance...');
 
   await seedCostGovernanceReferenceData(prisma);
@@ -167,17 +282,23 @@ export async function seedCostGovernance(prisma: PrismaClient, accountId: string
   for (const acct of bucketAccounts) {
     await seedCostGovernanceBudgetBuckets(prisma, acct);
   }
-  console.log(`  ${BUDGET_TEMPLATES.length * bucketAccounts.length} budget buckets seeded`);
+  console.log(
+    `  ${BUDGET_TEMPLATES.length * bucketAccounts.length} budget buckets seeded`,
+  );
 }
 
-export const COST_GOVERNANCE_PROVIDER_KEYS: readonly string[] = PROVIDERS.map((p) => p.key);
+export const COST_GOVERNANCE_PROVIDER_KEYS: readonly string[] = PROVIDERS.map(
+  (p) => p.key,
+);
 
 export async function seedCostGovernanceReferenceData(
   prisma: PrismaClient,
   onlyKeys?: readonly string[],
 ) {
   // 1. Providers + pricing rules + rate limits
-  const selected = onlyKeys ? PROVIDERS.filter((p) => onlyKeys.includes(p.key)) : PROVIDERS;
+  const selected = onlyKeys
+    ? PROVIDERS.filter((p) => onlyKeys.includes(p.key))
+    : PROVIDERS;
   for (const p of selected) {
     const provider = await prisma.integrationProvider.upsert({
       where: { key: p.key },
@@ -185,21 +306,35 @@ export async function seedCostGovernanceReferenceData(
         displayName: p.displayName,
         category: p.category,
         enabled: p.enabled,
-        isFallbackFor: 'isFallbackFor' in p ? (p as { isFallbackFor: string }).isFallbackFor : null,
-        rateLimitPerMin: 'rateLimitPerMin' in p ? (p as { rateLimitPerMin: number }).rateLimitPerMin : null,
+        isFallbackFor:
+          'isFallbackFor' in p
+            ? (p as { isFallbackFor: string }).isFallbackFor
+            : null,
+        rateLimitPerMin:
+          'rateLimitPerMin' in p
+            ? (p as { rateLimitPerMin: number }).rateLimitPerMin
+            : null,
       },
       create: {
         key: p.key,
         displayName: p.displayName,
         category: p.category,
         enabled: p.enabled,
-        isFallbackFor: 'isFallbackFor' in p ? (p as { isFallbackFor: string }).isFallbackFor : null,
-        rateLimitPerMin: 'rateLimitPerMin' in p ? (p as { rateLimitPerMin: number }).rateLimitPerMin : null,
+        isFallbackFor:
+          'isFallbackFor' in p
+            ? (p as { isFallbackFor: string }).isFallbackFor
+            : null,
+        rateLimitPerMin:
+          'rateLimitPerMin' in p
+            ? (p as { rateLimitPerMin: number }).rateLimitPerMin
+            : null,
       },
     });
 
     // Wipe and replace pricing rules so seed is the source of truth
-    await prisma.providerPricingRule.deleteMany({ where: { providerId: provider.id } });
+    await prisma.providerPricingRule.deleteMany({
+      where: { providerId: provider.id },
+    });
     await prisma.providerPricingRule.createMany({
       data: p.pricing.map((r) => ({
         providerId: provider.id,
@@ -210,12 +345,21 @@ export async function seedCostGovernanceReferenceData(
       })),
     });
 
-    if ('rateLimitPerMin' in p && (p as { rateLimitPerMin: number }).rateLimitPerMin) {
+    if (
+      'rateLimitPerMin' in p &&
+      (p as { rateLimitPerMin: number }).rateLimitPerMin
+    ) {
       await prisma.providerRateLimit.upsert({
         where: {
-          providerId_scope_windowSec: { providerId: provider.id, scope: 'per_account', windowSec: 60 },
+          providerId_scope_windowSec: {
+            providerId: provider.id,
+            scope: 'per_account',
+            windowSec: 60,
+          },
         },
-        update: { maxRequests: (p as { rateLimitPerMin: number }).rateLimitPerMin },
+        update: {
+          maxRequests: (p as { rateLimitPerMin: number }).rateLimitPerMin,
+        },
         create: {
           providerId: provider.id,
           scope: 'per_account',
