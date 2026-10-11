@@ -75,18 +75,48 @@ export function normalizePhoneNumber(phone: string): string {
 }
 
 /**
- * Check if message content contains STOP/HELP keywords
+ * Standard SMS opt-out keywords: the CTIA set (STOP, STOPALL, UNSUBSCRIBE,
+ * CANCEL, END, QUIT) plus REVOKE and OPTOUT, which carriers and Twilio's
+ * opt-out handling also honour. The previous substring check missed END,
+ * QUIT and REVOKE entirely, and treated "I can't stop by today" as an
+ * opt-out.
  */
-export function containsStopKeywords(content: string): boolean {
-  const stopKeywords = ['stop', 'unsubscribe', 'opt out', 'optout', 'cancel'];
-  const lowerContent = content.toLowerCase();
-  return stopKeywords.some((keyword) => lowerContent.includes(keyword));
+export const OPT_OUT_KEYWORDS = [
+  'STOP',
+  'STOPALL',
+  'UNSUBSCRIBE',
+  'CANCEL',
+  'END',
+  'QUIT',
+  'REVOKE',
+  'OPTOUT',
+] as const;
+
+export const HELP_KEYWORDS = ['HELP', 'INFO'] as const;
+
+/**
+ * The token keyword matching compares: Unicode-normalised, upper-cased,
+ * surrounding punctuation and whitespace dropped, and inner spaces or
+ * hyphens removed so "Opt out" and "OPT-OUT" both read as OPTOUT. Any other
+ * word in the body produces a different token, so matching stays exact.
+ */
+export function normalizeKeyword(body: string | null | undefined): string {
+  if (!body) return '';
+  return body
+    .normalize('NFKC')
+    .toUpperCase()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    .replace(/[\s_-]+/g, '');
 }
 
-export function containsHelpKeywords(content: string): boolean {
-  const helpKeywords = ['help', 'info', 'information'];
-  const lowerContent = content.toLowerCase();
-  return helpKeywords.some((keyword) => lowerContent.includes(keyword));
+/** Exact, case-insensitive match of the whole body against OPT_OUT_KEYWORDS. */
+export function isOptOutKeyword(body: string | null | undefined): boolean {
+  return (OPT_OUT_KEYWORDS as readonly string[]).includes(normalizeKeyword(body));
+}
+
+/** Exact, case-insensitive match of the whole body against HELP_KEYWORDS. */
+export function isHelpKeyword(body: string | null | undefined): boolean {
+  return (HELP_KEYWORDS as readonly string[]).includes(normalizeKeyword(body));
 }
 
 /**

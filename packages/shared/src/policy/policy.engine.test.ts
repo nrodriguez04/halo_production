@@ -6,6 +6,7 @@ import {
   aiCostCapRule,
   escalationRule,
   negotiationBoundsRule,
+  isWithinQuietWindow,
   DEFAULT_POLICY_RULES,
 } from './policy.rules';
 import { PolicyContext } from './types';
@@ -200,6 +201,24 @@ describe('PolicyRules', () => {
       );
       expect(d.allow).toBe(true);
       expect(d.code).toBe('INBOUND_OR_WEBHOOK_ALLOWED');
+    });
+  });
+
+  describe('isWithinQuietWindow', () => {
+    it('wraps midnight for the default 20:00-09:00 window', () => {
+      expect(isWithinQuietWindow(20)).toBe(true);
+      expect(isWithinQuietWindow(3)).toBe(true);
+      expect(isWithinQuietWindow(9)).toBe(false);
+      expect(isWithinQuietWindow(19)).toBe(false);
+    });
+
+    it('does not invert a same-day window', () => {
+      expect(isWithinQuietWindow(3, 1, 6)).toBe(true);
+      expect(isWithinQuietWindow(12, 1, 6)).toBe(false);
+    });
+
+    it('treats a zero-width window as no quiet hours', () => {
+      expect(isWithinQuietWindow(3, 9, 9)).toBe(false);
     });
   });
 
