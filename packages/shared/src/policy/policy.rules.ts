@@ -32,6 +32,28 @@ function isMessagingChannel(channel: PolicyContext['channel']) {
 const DEFAULT_QUIET_START = 20;
 const DEFAULT_QUIET_END = 9;
 
+/**
+ * Whether `localHour` falls inside the quiet window [startHour, endHour).
+ * Exported so callers that weigh several candidate time zones (the
+ * recipient's area code and address can disagree) apply the same rule.
+ */
+export function isWithinQuietWindow(
+  localHour: number,
+  startHour: number = DEFAULT_QUIET_START,
+  endHour: number = DEFAULT_QUIET_END,
+): boolean {
+  // A window that starts and ends on the same hour is treated as "no quiet
+  // hours" rather than "quiet all day", which is the safer reading of a
+  // misconfigured row.
+  if (startHour === endHour) return false;
+
+  // Windows normally wrap midnight (20:00 -> 09:00); same-day windows
+  // (e.g. 01:00 -> 06:00) must not be inverted.
+  return startHour > endHour
+    ? localHour >= startHour || localHour < endHour
+    : localHour >= startHour && localHour < endHour;
+}
+
 function isQuietHour(ctx: PolicyContext): boolean {
   if (typeof ctx.localHour !== 'number') return false;
 
@@ -44,16 +66,7 @@ function isQuietHour(ctx: PolicyContext): boolean {
       ? ctx.quietHoursEnd
       : DEFAULT_QUIET_END;
 
-  // A window that starts and ends on the same hour is treated as "no quiet
-  // hours" rather than "quiet all day", which is the safer reading of a
-  // misconfigured row.
-  if (startHour === endHour) return false;
-
-  // Windows normally wrap midnight (20:00 -> 09:00); same-day windows
-  // (e.g. 01:00 -> 06:00) must not be inverted.
-  return startHour > endHour
-    ? ctx.localHour >= startHour || ctx.localHour < endHour
-    : ctx.localHour >= startHour && ctx.localHour < endHour;
+  return isWithinQuietWindow(ctx.localHour, startHour, endHour);
 }
 
 export const sideEffectsRule: PolicyCheck = (ctx) => {
