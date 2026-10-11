@@ -58,6 +58,15 @@ const envSchema = z.object({
   OPENAI_DAILY_COST_CAP: z.coerce.number().default(2),
   COST_CONTROL_MANUAL_APPROVAL_USD: z.coerce.number().default(5),
   COST_CONTROL_IDEMPOTENCY_WINDOW_SEC: z.coerce.number().default(60),
+  // MLS listings feed (docs/integrations/mls.md). bridge = Bridge Data Output
+  // (one dataset per MLS, access_token), reso = any other RESO Web API with a
+  // bearer token, simplyrets = SimplyRETS (basic auth; public demo feed).
+  MLS_PROVIDER: z.enum(['bridge', 'reso', 'simplyrets']).optional(),
+  MLS_BASE_URL: z.string().optional(),
+  MLS_DATASET: z.string().optional(),
+  MLS_API_TOKEN: z.string().optional(),
+  MLS_USERNAME: z.string().optional(),
+  MLS_PASSWORD: z.string().optional(),
   SKIP_TRACE_PROVIDER: z
     .enum(['batch', 'stub', 'propertyradar'])
     .default('batch'),

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { useDebouncedValue } from '@/lib/use-debounce';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,17 @@ import { toast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/page-header';
 import { SearchFilterBar } from '@/components/search-filter-bar';
 import { LoadingState, EmptyState, ErrorState, SkeletonTable } from '@/components/states';
-import { Upload, Plus, Loader2, Check, X, Users } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Upload, Plus, Loader2, Check, X, Users, Building2 } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -32,6 +42,29 @@ interface Lead {
   tags: string[];
   createdAt: string;
 }
+
+interface MlsImportResult {
+  searched: number;
+  total: number | null;
+  created: number;
+  duplicates: number;
+  errors: string[];
+  dialect: string;
+}
+
+// RESO StandardStatus values; the feed decides which ones it exposes.
+const MLS_STATUSES = ['Active', 'Pending', 'Expired', 'Withdrawn', 'Canceled', 'Closed'];
+
+const emptyMlsForm = {
+  city: '',
+  state: '',
+  postalCode: '',
+  status: 'Active',
+  minDaysOnMarket: '',
+  maxPrice: '',
+  limit: '50',
+};
+type MlsForm = typeof emptyMlsForm;
 
 const statusVariant = (status: string) => {
   switch (status) {
@@ -63,6 +96,11 @@ export default function LeadsPage() {
   const debouncedSearch = useDebouncedValue(search, 250);
   const queryClient = useQueryClient();
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [mlsOpen, setMlsOpen] = useState(false);
+  const [mlsForm, setMlsForm] = useState<MlsForm>(emptyMlsForm);
+  const setMlsField =
+    (field: keyof MlsForm) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setMlsForm((form) => ({ ...form, [field]: e.target.value }));
 
   const {
     data: leads = [],
@@ -103,6 +141,44 @@ export default function LeadsPage() {
     },
   );
 
+  const mlsImportMutation = useApiMutation<MlsForm, MlsImportResult>(
+    (form) => {
+      const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
+      // JSON.stringify drops undefined fields, which the strict API schema wants.
+      return apiJson<MlsImportResult>('/leads/import/mls', {
+        method: 'POST',
+        body: JSON.stringify({
+          city: form.city.trim() || undefined,
+          state: form.state.trim().toUpperCase() || undefined,
+          postalCode: form.postalCode.trim() || undefined,
+          status: [form.status],
+          minDaysOnMarket: num(form.minDaysOnMarket),
+          maxPrice: num(form.maxPrice),
+          limit: num(form.limit) ?? 50,
+        }),
+      });
+    },
+    {
+      onSuccess: (result) => {
+        toast.success(
+          result.created === 1
+            ? '1 new lead from the MLS'
+            : `${result.created} new leads from the MLS`,
+          {
+            description:
+              `${result.searched} listings searched · ${result.duplicates} already in your pipeline` +
+              (result.errors.length ? ` · ${result.errors.length} rows rejected` : ''),
+          },
+        );
+        setMlsOpen(false);
+        queryClient.invalidateQueries({ queryKey: ['/leads'] });
+      },
+      onError: (err) => {
+        toast.error('MLS import failed', { description: err.message });
+      },
+    },
+  );
+
   return (
     <div className="space-y-6 p-6">
       <PageHeader
@@ -110,6 +186,10 @@ export default function LeadsPage() {
         description="Source records, enrichment status, and qualification controls."
         actions={
           <>
+            <Button variant="outline" size="sm" onClick={() => setMlsOpen(true)}>
+              <Building2 size={16} className="mr-2" />
+              Import from MLS
+            </Button>
             <Button variant="outline" size="sm">
               <Upload size={16} className="mr-2" />
               Import CSV
@@ -127,6 +207,100 @@ export default function LeadsPage() {
         onChange={setSearch}
         placeholder="Search address, city, or owner…"
       />
+
+      <Dialog open={mlsOpen} onOpenChange={setMlsOpen}>
+        <DialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              mlsImportMutation.mutate(mlsForm);
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Import from MLS</DialogTitle>
+              <DialogDescription>
+                Pulls listings from your configured MLS feed into leads. Addresses already in
+                your pipeline are skipped, so re-running a search is safe.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 py-4">
+              <label className="col-span-2 space-y-1 text-sm">
+                <span className="text-muted-foreground">City</span>
+                <Input value={mlsForm.city} onChange={setMlsField('city')} placeholder="Houston" />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">State</span>
+                <Input
+                  value={mlsForm.state}
+                  onChange={setMlsField('state')}
+                  placeholder="TX"
+                  maxLength={2}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">ZIP (instead of city)</span>
+                <Input
+                  value={mlsForm.postalCode}
+                  onChange={setMlsField('postalCode')}
+                  placeholder="77008"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Status</span>
+                <Select value={mlsForm.status} onChange={setMlsField('status')}>
+                  {MLS_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Min days on market</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={mlsForm.minDaysOnMarket}
+                  onChange={setMlsField('minDaysOnMarket')}
+                  placeholder="90"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Max list price</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={mlsForm.maxPrice}
+                  onChange={setMlsField('maxPrice')}
+                  placeholder="250000"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Listings to pull (1 to 200)</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={mlsForm.limit}
+                  onChange={setMlsField('limit')}
+                />
+              </label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setMlsOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                loading={mlsImportMutation.isPending}
+                disabled={!mlsForm.city.trim() && !mlsForm.postalCode.trim()}
+              >
+                Import listings
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {isPending ? (
         <LoadingState skeleton>

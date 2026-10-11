@@ -187,10 +187,13 @@ export class LeadsService {
           return {
             idx,
             row,
+            // Same shape as the existing-lead key below (address + zip, no
+            // city/state), so re-importing a file that carries city and state
+            // columns reports duplicates instead of creating second leads.
             normalizedAddr: reconciliationUtils.normalizeAddress(
               row.address,
-              row.city,
-              row.state,
+              undefined,
+              undefined,
               row.zip,
             ),
             zip: (row.zip || '').trim(),

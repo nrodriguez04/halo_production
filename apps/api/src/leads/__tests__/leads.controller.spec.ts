@@ -5,7 +5,7 @@ describe('LeadsController', () => {
     const leadsService = {
       create: jest.fn().mockResolvedValue({ id: 'lead-1' }),
     };
-    const controller = new LeadsController(leadsService as any);
+    const controller = new LeadsController(leadsService as any, {} as any);
 
     await controller.create(
       {

@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma.service';
 import * as crypto from 'crypto';
 import { randomUUID } from 'crypto';
 import Anthropic from '@anthropic-ai/sdk';
+import { MlsClient } from '../integrations/mls/mls.client';
+import { resolveMlsConfig } from '../integrations/mls/mls.config';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -153,6 +155,9 @@ export class IntegrationSecretsService {
           break;
         case 'anthropic':
           result = await this.testAnthropic();
+          break;
+        case 'mls':
+          result = await this.testMls();
           break;
         case 'google_geocoding':
           result = await this.testGoogleGeocoding();
@@ -343,6 +348,22 @@ export class IntegrationSecretsService {
       if (err instanceof Anthropic.AuthenticationError) {
         return { connected: false, error: 'Invalid API key' };
       }
+      return { connected: false, error: (err as Error).message };
+    }
+  }
+
+  private async testMls(): Promise<{ connected: boolean; error?: string }> {
+    try {
+      // Settings saved on this page win over env, like the other providers.
+      const config = await resolveMlsConfig((key) => this.resolve('mls', key));
+      const out = await new MlsClient(config).search({ limit: 1 });
+      return out.listings.length
+        ? { connected: true }
+        : {
+            connected: true,
+            error: 'Connected, but the feed returned no active listings',
+          };
+    } catch (err) {
       return { connected: false, error: (err as Error).message };
     }
   }

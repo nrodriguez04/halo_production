@@ -130,6 +130,22 @@ const INTEGRATIONS: IntegrationDef[] = [
     keys: [{ keyName: 'RENTCAST_API_KEY', label: 'API Key', placeholder: 'Your RentCast API key' }],
   },
   {
+    provider: 'mls',
+    category: 'property',
+    name: 'MLS listings (RESO Web API)',
+    keys: [
+      { keyName: 'MLS_PROVIDER', label: 'Feed type', placeholder: 'bridge | reso | simplyrets' },
+      { keyName: 'MLS_DATASET', label: 'Dataset (Bridge)', placeholder: 'e.g. actris' },
+      {
+        keyName: 'MLS_API_TOKEN',
+        label: 'Server token (Bridge / RESO)',
+        placeholder: 'Your access token',
+      },
+      { keyName: 'MLS_USERNAME', label: 'Username (SimplyRETS)', placeholder: 'simplyrets' },
+      { keyName: 'MLS_PASSWORD', label: 'Password (SimplyRETS)', placeholder: 'password' },
+    ],
+  },
+  {
     provider: 'propertyradar',
     category: 'property',
     name: 'PropertyRadar',

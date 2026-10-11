@@ -166,6 +166,16 @@ const PROVIDERS = [
     ],
   },
 
+  // Listings. $0 per call unless the feed vendor charges; set a rule if so.
+  {
+    key: 'mls',
+    displayName: 'MLS (RESO Web API)',
+    category: 'property',
+    enabled: true,
+    rateLimitPerMin: 60,
+    pricing: [{ action: 'search_listings', unitCostUsd: 0, unit: 'per_call' }],
+  },
+
   // Comms
   {
     key: 'twilio',
