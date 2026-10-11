@@ -1,14 +1,14 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
-import { assertPolicy } from '@halo/shared';
+import { assertPolicy, redactContactDetails } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { getControlPlane } from '../control-plane';
 import {
   ComplianceBlockedError,
   CostBlockedError,
-  sendEmail as sendEmailViaApi,
-  sendSms as sendSmsViaApi,
+  type MessageSendReceipt,
+  sendApprovedMessage,
 } from '../internal-api.client';
 
 @Processor('communications')
@@ -16,7 +16,8 @@ export class CommunicationsProcessor extends WorkerHost {
   // No SDK clients here on purpose: outbound sends go through the api's
   // /internal routes so the cost-control preflight, budget buckets and
   // ledger apply. Re-adding `new Twilio(...)` here would silently restore
-  // uncapped spend.
+  // uncapped spend. And no recipient or body leaves the worker: the api
+  // sends the stored, approved message by id and adds the opt-out text.
 
   async process(job: Job<any>) {
     const { messageId } = job.data;
@@ -76,13 +77,15 @@ export class CommunicationsProcessor extends WorkerHost {
         if (!controlPlane.smsEnabled) {
           throw new Error('SMS is disabled');
         }
-        await this.sendSMS(message);
       } else if (message.channel === 'email') {
         if (!controlPlane.emailEnabled) {
           throw new Error('Email is disabled');
         }
-        await this.sendEmail(message);
+      } else {
+        // Previously fell through to finalizeSent: marked sent, never sent.
+        throw new Error(`Unsupported channel "${message.channel}"`);
       }
+      await this.send(message);
 
       await this.finalizeSent(messageId, message.accountId, message.channel);
 
@@ -107,7 +110,7 @@ export class CommunicationsProcessor extends WorkerHost {
             eventType: 'MESSAGE_SEND_BLOCKED',
             payloadJson: {
               reason: error.reason,
-              message: error.message,
+              message: redactContactDetails(error.message),
               blockedBy: 'compliance',
             },
             actorId: null,
@@ -152,7 +155,7 @@ export class CommunicationsProcessor extends WorkerHost {
             payloadJson: {
               reason: error.reason,
               provider: error.provider,
-              message: error.message,
+              message: redactContactDetails(error.message),
             },
             actorId: null,
             actorType: TimelineActorType.system,
@@ -179,7 +182,11 @@ export class CommunicationsProcessor extends WorkerHost {
             entityType: TimelineEntityType.MESSAGE,
             entityId: messageId,
             eventType: 'MESSAGE_SEND_FAILED',
-            payloadJson: { error: (error as Error).message },
+            // Provider errors can quote the recipient; timeline JSON is
+            // plaintext.
+            payloadJson: {
+              error: redactContactDetails((error as Error).message),
+            },
             actorId: null,
             actorType: TimelineActorType.system,
           },
@@ -226,44 +233,29 @@ export class CommunicationsProcessor extends WorkerHost {
     });
   }
 
-  private async sendSMS(message: any) {
+  /**
+   * Hands the approved message to the api by id and records the provider
+   * receipt, which is what makes a replayed job finalize instead of sending
+   * twice.
+   */
+  private async send(message: any) {
     const metadata = (message.metadata as any) || {};
-    const from = process.env.TWILIO_PHONE_NUMBER;
-    if (!from) throw new Error('TWILIO_PHONE_NUMBER is required');
-
-    // No recipient here on purpose: the api reads it from the message's
-    // encrypted counterparty. The worker holds no PII keys.
-    const result = await sendSmsViaApi(message.accountId, {
-      from,
-      body: message.content,
-      // Idempotency key on the api side, so a BullMQ retry cannot double-send.
-      messageId: message.id,
-      dealId: message.dealId ?? undefined,
-      leadId: message.leadId ?? undefined,
-    });
+    const receipt = await sendApprovedMessage(message.accountId, message.id);
 
     await prisma.message.update({
       where: { id: message.id },
-      data: {
-        metadata: {
-          ...metadata,
-          twilioMessageSid: result?.sid,
-          numSegments: result?.numSegments,
-        },
-      },
+      data: { metadata: { ...metadata, ...receiptMetadata(receipt) } },
     });
   }
+}
 
-  private async sendEmail(message: any) {
-    const metadata = (message.metadata as any) || {};
-
-    await sendEmailViaApi(message.accountId, {
-      subject: metadata.subject || 'Message from Hālo',
-      text: message.content,
-      html: message.content.replace(/\n/g, '<br>'),
-      messageId: message.id,
-      dealId: message.dealId ?? undefined,
-      leadId: message.leadId ?? undefined,
-    });
-  }
+function receiptMetadata(
+  receipt: MessageSendReceipt,
+): Record<string, string | number | null> {
+  return receipt.channel === 'sms'
+    ? { twilioMessageSid: receipt.sid, numSegments: receipt.numSegments }
+    : {
+        providerMessageId: receipt.providerMessageId,
+        emailProvider: receipt.provider,
+      };
 }

@@ -12,12 +12,14 @@ jest.mock('../../prisma-client', () => ({ prisma: mockPrisma }));
 
 const mockGeocode = jest.fn();
 const mockPropertyLookup = jest.fn();
+const mockSkipTrace = jest.fn();
 jest.mock('../../internal-api.client', () => {
   const actual = jest.requireActual('../../internal-api.client');
   return {
     ...actual,
     geocode: (...args: unknown[]) => mockGeocode(...args),
     propertyLookup: (...args: unknown[]) => mockPropertyLookup(...args),
+    skipTrace: (...args: unknown[]) => mockSkipTrace(...args),
   };
 });
 
@@ -43,14 +45,28 @@ describe('LeadEnrichmentProcessor', () => {
     const progress = processor().readProgress({
       geocode: { sourceRecordId: 'geo-1', cost: 0.005 },
       attom: { sourceRecordId: 'attom-1', cost: 0.1 },
-      skipTrace: { phone: '+15551234567', email: null, costUsd: 0.25 },
+      skipTrace: { status: 'matched', costUsd: 0.25, phoneFound: true, emailFound: false },
     });
 
     expect(progress).toEqual({
       geocode: { sourceRecordId: 'geo-1', cost: 0.005 },
       attom: { sourceRecordId: 'attom-1', cost: 0.1 },
+      skipTrace: { status: 'matched', costUsd: 0.25, phoneFound: true, emailFound: false },
+    });
+  });
+
+  it('readProgress drops plaintext contacts left in old metadata, keeping only whether they were found', () => {
+    const progress = processor().readProgress({
       skipTrace: { phone: '+15551234567', email: null, costUsd: 0.25 },
     });
+
+    expect(progress.skipTrace).toEqual({
+      status: 'matched',
+      costUsd: 0.25,
+      phoneFound: true,
+      emailFound: false,
+    });
+    expect(JSON.stringify(progress)).not.toContain('5551234567');
   });
 
   it('recoverCompletedSourceStep reuses worker output written before a stalled replay', async () => {
@@ -171,6 +187,63 @@ describe('LeadEnrichmentProcessor', () => {
       await expect(
         processor().geocodeAddress('acct-1', addr.address, addr.city, addr.state, addr.zip, 'lead-1'),
       ).rejects.toThrow(InternalApiError);
+    });
+
+    it('skip-traces through the internal route and keeps only counts, never contacts', async () => {
+      mockSkipTrace.mockResolvedValue({
+        provider: 'batch_skiptrace',
+        status: 'matched',
+        costUsd: 0.1,
+        phonesFound: 2,
+        emailsFound: 0,
+        stored: { phone: true, email: false },
+      });
+
+      const out = await processor().skipTraceStep('acct-1', 'lead-1');
+
+      expect(mockSkipTrace).toHaveBeenCalledWith('acct-1', 'lead-1');
+      expect(out).toEqual({
+        status: 'matched',
+        costUsd: 0.1,
+        phoneFound: true,
+        emailFound: false,
+      });
+    });
+
+    it('records a cost-control block (e.g. lead score below the threshold) as a skipped step', async () => {
+      mockSkipTrace.mockRejectedValue(
+        new CostBlockedError('BLOCK_LOW_LEAD_SCORE', 'batch_skiptrace', 'score too low'),
+      );
+
+      const out = await processor().skipTraceStep('acct-1', 'lead-1');
+
+      expect(out).toEqual({
+        status: 'blocked',
+        reason: 'BLOCK_LOW_LEAD_SCORE',
+        costUsd: 0,
+        phoneFound: false,
+        emailFound: false,
+      });
+    });
+
+    it('records an unconfigured provider as unavailable', async () => {
+      mockSkipTrace.mockRejectedValue(
+        new IntegrationUnavailableError('batch_skiptrace', 'NOT_CONFIGURED', 'no key'),
+      );
+
+      const out = await processor().skipTraceStep('acct-1', 'lead-1');
+
+      expect(out.status).toBe('unavailable');
+    });
+
+    it('fails loudly on an auth error instead of silently skipping', async () => {
+      // The old path called the Descope-guarded route with the internal
+      // token, got 401 and carried on as if nothing had been found.
+      mockSkipTrace.mockRejectedValue(new InternalApiError(401, 'Invalid internal token'));
+
+      await expect(processor().skipTraceStep('acct-1', 'lead-1')).rejects.toThrow(
+        InternalApiError,
+      );
     });
 
     it('hashes the request the way the api stores SourceRecords, so replay recovery finds them', () => {
