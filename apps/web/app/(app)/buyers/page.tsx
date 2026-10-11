@@ -28,11 +28,13 @@ import { SearchFilterBar } from '@/components/search-filter-bar';
 import { LoadingState, EmptyState, ErrorState, SkeletonTable } from '@/components/states';
 import { Plus, UserCheck } from 'lucide-react';
 
+// email / phone arrive masked (e.g. "d•••@acme.com") unless the user has
+// pii:read; either may be null.
 interface Buyer {
   id: string;
   name: string;
-  email: string;
-  phone?: string;
+  email: string | null;
+  phone?: string | null;
   preferences?: {
     locations?: string[];
     priceRange?: { min: number; max: number };
@@ -81,7 +83,7 @@ export default function BuyersPage() {
     (b) =>
       !search ||
       b.name.toLowerCase().includes(search.toLowerCase()) ||
-      b.email.toLowerCase().includes(search.toLowerCase()),
+      (b.email ?? '').toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
