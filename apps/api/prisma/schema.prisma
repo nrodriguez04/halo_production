@@ -361,8 +361,12 @@ model Buyer {
   id          String   @id @default(cuid())
   accountId   String
   name        String
-  email       String?
-  phone       String?
+  // Contact PII: envelope ciphertext + blind index, no plaintext column, as
+  // on leads. Reads go through buyers/buyer-pii.ts (mask) or PIIService.
+  emailEnc    String?
+  emailHash   String?
+  phoneEnc    String?
+  phoneHash   String?
   preferences Json?
   engagementScore Float @default(0.0)
   lastContacted DateTime?
@@ -370,6 +374,8 @@ model Buyer {
   updatedAt   DateTime @updatedAt
 
   @@index([accountId, engagementScore])
+  @@index([accountId, emailHash])
+  @@index([accountId, phoneHash])
   @@map("buyers")
 }
 
@@ -414,25 +420,26 @@ model IntegrationSecret {
   @@map("integration_secrets")
 }
 
-// AI cost tracking
-// Compliance: DNC (Do Not Call) list
+// Compliance: DNC (do not contact) list. An entry names a phone, an email or
+// both, and suppresses every channel to that contact. accountId is the
+// tenant, or "GLOBAL" for an opt-out no tenant could be matched to (read by
+// every tenant's check). Contacts are ciphertext + blind index only; the
+// migration adds CHECK ("phoneHash" IS NOT NULL OR "emailHash" IS NOT NULL).
 model DNCList {
   id          String   @id @default(cuid())
   accountId   String
-  phone       String
-  // Dual-write phase (docs/pii-encryption-design.md, phase 2): ciphertext
-  // and blind index beside the plaintext; the plaintext goes at cutover.
   phoneEnc    String?
   phoneHash   String?
-  source      String   // manual, stop_keyword, help_keyword, external
+  emailEnc    String?
+  emailHash   String?
+  source      String   // manual, stop_keyword, unsubscribe_link, external
   reason      String?
   createdAt   DateTime @default(now())
   expiresAt   DateTime? // null = permanent
 
-  @@unique([accountId, phone])
-  @@index([phone])
+  @@unique([accountId, phoneHash])
+  @@unique([accountId, emailHash])
   @@index([accountId])
-  @@index([accountId, phoneHash])
   @@map("dnc_list")
 }
 
@@ -441,9 +448,7 @@ model Consent {
   id          String   @id @default(cuid())
   accountId   String
   leadId      String?
-  phone       String?
-  email       String?
-  // Dual-write phase: see DNCList.
+  // Contact PII: ciphertext + blind index only (see DNCList).
   phoneEnc    String?
   phoneHash   String?
   emailEnc    String?
@@ -459,8 +464,6 @@ model Consent {
 
   @@index([accountId])
   @@index([leadId])
-  @@index([phone])
-  @@index([email])
   @@index([accountId, phoneHash])
   @@index([accountId, emailHash])
   @@map("consents")

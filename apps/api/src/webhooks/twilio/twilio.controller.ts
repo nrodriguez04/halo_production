@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Header,
   Headers,
   Req,
   HttpCode,
@@ -13,6 +14,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { TwilioService } from './twilio.service';
+import { twiml } from './keyword-replies';
 
 @SkipThrottle()
 @Controller('webhooks/twilio')
@@ -21,19 +23,26 @@ export class TwilioController {
 
   constructor(private readonly twilioService: TwilioService) {}
 
+  /**
+   * Answers with TwiML: the STOP confirmation or HELP text when the message
+   * was a keyword, an empty <Response/> otherwise. Twilio sends the reply
+   * on the number the contact wrote to.
+   */
   @Post('inbound')
   @HttpCode(200)
+  @Header('Content-Type', 'text/xml; charset=utf-8')
   async handleInbound(
     @Body() body: any,
     @Headers('x-twilio-signature') signature: string | undefined,
     @Req() req: Request,
-  ) {
+  ): Promise<string> {
     this.verifyTwilioSignature(req, signature);
 
     if (!body || typeof body !== 'object' || !body.From || !body.To) {
       throw new BadRequestException('Missing required Twilio fields: From, To');
     }
-    return this.twilioService.handleInbound(body);
+    const result = await this.twilioService.handleInbound(body);
+    return twiml(result.reply);
   }
 
   @Post('status')

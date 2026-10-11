@@ -9,6 +9,8 @@ import { LeadCreate, LeadUpdate, CSVImportRow } from '@halo/shared';
 import * as reconciliationUtils from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
 import { LeadPiiService } from './lead-pii.service';
+import { PIIService } from '../pii/pii.service';
+import type { PiiViewer } from '../auth/pii-access';
 
 @Injectable()
 export class LeadsService {
@@ -16,12 +18,13 @@ export class LeadsService {
     private prisma: PrismaService,
     private timelineService: TimelineService,
     private pii: LeadPiiService,
+    private piiService: PIIService,
   ) {}
 
   async create(
     data: LeadCreate,
     actorId: string | null = null,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     // canonicalPhone / canonicalEmail are the write-side field names on the
     // DTO; the row stores only the protected columns.
@@ -47,7 +50,7 @@ export class LeadsService {
       actorType: actorId ? TimelineActorType.user : TimelineActorType.system,
     });
 
-    return this.pii.present(lead, opts.revealPii ?? false);
+    return this.piiService.presentLead(lead, opts.viewer);
   }
 
   async findAll(
@@ -102,7 +105,7 @@ export class LeadsService {
   async findOne(
     id: string,
     accountId: string,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     const lead = await this.prisma.lead.findFirst({
       where: { id, accountId },
@@ -119,14 +122,14 @@ export class LeadsService {
       throw new NotFoundException(`Lead with ID ${id} not found`);
     }
 
-    return this.pii.present(lead, opts.revealPii ?? false);
+    return this.piiService.presentLead(lead, opts.viewer);
   }
 
   async update(
     id: string,
     accountId: string,
     data: LeadUpdate,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     // LeadUpdateSchema is LeadCreateSchema.partial(), so it admits the two
     // fields the generic path must never write: accountId would move the row
@@ -158,7 +161,7 @@ export class LeadsService {
       where: { id: lead.id },
       data: { ...rest, ...this.pii.protect(contact) },
     });
-    return this.pii.present(updated, opts.revealPii ?? false);
+    return this.piiService.presentLead(updated, opts.viewer);
   }
 
   async remove(id: string, accountId: string) {
@@ -322,7 +325,7 @@ export class LeadsService {
   async findPotentialDuplicates(
     accountId: string,
     threshold = 0.8,
-    revealPii = false,
+    viewer: PiiViewer | null = null,
   ) {
     // Pull only the fields the comparison needs and bucket by (state, zip) so we run an
     // O(n²) similarity check inside small groups instead of across the whole account.
@@ -357,8 +360,8 @@ export class LeadsService {
     }
 
     const duplicates: Array<{
-      lead1: any;
-      lead2: any;
+      lead1: (typeof leads)[number];
+      lead2: (typeof leads)[number];
       similarity: number;
       reasons: string[];
     }> = [];
@@ -430,12 +433,7 @@ export class LeadsService {
           }
 
           if (similarity >= threshold) {
-            duplicates.push({
-              lead1: this.pii.present(lead1, revealPii),
-              lead2: this.pii.present(lead2, revealPii),
-              similarity,
-              reasons,
-            });
+            duplicates.push({ lead1, lead2, similarity, reasons });
           }
         }
       }
@@ -443,7 +441,19 @@ export class LeadsService {
 
     duplicates.sort((a, b) => b.similarity - a.similarity);
 
-    return duplicates;
+    // Present every lead in the result once, so a reveal is one audit row.
+    const involved = Array.from(
+      new Map(
+        duplicates.flatMap((d) => [d.lead1, d.lead2]).map((l) => [l.id, l]),
+      ).values(),
+    );
+    const presented = await this.piiService.presentLeads(involved, viewer);
+    const byId = new Map(presented.map((l) => [l.id, l]));
+    return duplicates.map((d) => ({
+      ...d,
+      lead1: byId.get(d.lead1.id),
+      lead2: byId.get(d.lead2.id),
+    }));
   }
 
   /** Raw row with the protected columns; findOne returns the presented shape. */

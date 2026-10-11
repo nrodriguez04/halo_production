@@ -130,4 +130,59 @@ describe('CommunicationsService recipients', () => {
       expect.objectContaining({ phone: '+15125550100', channel: 'sms' }),
     );
   });
+
+  it('refuses to approve an inbound message (approval authorises a send)', async () => {
+    prisma.message.findFirst.mockResolvedValue({
+      id: 'msg-in',
+      accountId: 'tenant-1',
+      channel: 'sms',
+      direction: 'inbound',
+      status: 'pending_approval',
+      metadata: {},
+    });
+
+    await expect(
+      service.approve('msg-in', 'tenant-1', 'user-1'),
+    ).rejects.toThrow('Only outbound messages can be approved');
+    expect(prisma.message.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to re-approve an email that already has a provider receipt', async () => {
+    prisma.message.findFirst.mockResolvedValue({
+      id: 'msg-em',
+      accountId: 'tenant-1',
+      channel: 'email',
+      direction: 'outbound',
+      status: 'pending_approval',
+      metadata: { providerMessageId: 'sg-1' },
+    });
+
+    await expect(
+      service.approve('msg-em', 'tenant-1', 'user-1'),
+    ).rejects.toThrow('already dispatched');
+  });
+
+  it('never returns a recipient: no counterparty columns, no legacy address keys', async () => {
+    const cols = (await import('../message-counterparty')).counterpartyColumns(
+      'sms',
+      '+15125550100',
+    );
+    prisma.message.findFirst.mockResolvedValue({
+      id: 'msg-1',
+      accountId: 'tenant-1',
+      channel: 'sms',
+      direction: 'outbound',
+      status: 'sent',
+      // A row the backfill has not reached yet.
+      metadata: { to: '+15125550100', subject: 'x' },
+      ...cols,
+    });
+
+    const out = await service.findOne('msg-1', 'tenant-1');
+
+    expect(out).not.toHaveProperty('counterpartyEnc');
+    expect(out).not.toHaveProperty('counterpartyHash');
+    expect(out.metadata).toEqual({ subject: 'x' });
+    expect(JSON.stringify(out)).not.toContain('5550100');
+  });
 });

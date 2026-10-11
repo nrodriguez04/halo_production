@@ -7,6 +7,7 @@ import { PropertyRadarSkipTraceAdapter } from './adapters/propertyradar-skip-tra
 import { StubSkipTraceAdapter } from './adapters/stub-skip-trace.adapter';
 import { SkipTraceController } from './skip-trace.controller';
 import { SkipTraceService } from './skip-trace.service';
+import { LeadSkipTraceService } from './lead-skip-trace.service';
 
 @Global()
 @Module({
@@ -18,7 +19,8 @@ import { SkipTraceService } from './skip-trace.service';
     StubSkipTraceAdapter,
     PropertyRadarSkipTraceAdapter,
     SkipTraceService,
+    LeadSkipTraceService,
   ],
-  exports: [SkipTraceService],
+  exports: [SkipTraceService, LeadSkipTraceService],
 })
 export class SkipTraceModule {}

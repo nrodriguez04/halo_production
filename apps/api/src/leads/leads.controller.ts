@@ -16,7 +16,7 @@ import {
   CurrentUser,
   CurrentUserId,
 } from '../auth/decorators';
-import { canRevealContactPii } from '../auth/pii-access';
+import { piiViewer } from '../auth/pii-access';
 import {
   LeadCreateSchema,
   LeadUpdateSchema,
@@ -51,7 +51,7 @@ export class LeadsController {
         tags: validated.tags ?? [],
       },
       userId ?? null,
-      { revealPii: canRevealContactPii(user) },
+      { viewer: piiViewer(user) },
     );
   }
 
@@ -81,7 +81,7 @@ export class LeadsController {
     return this.leadsService.findPotentialDuplicates(
       accountId,
       thresholdNum,
-      canRevealContactPii(user),
+      piiViewer(user),
     );
   }
 
@@ -92,7 +92,7 @@ export class LeadsController {
     @CurrentUser() user: unknown,
   ) {
     return this.leadsService.findOne(id, accountId, {
-      revealPii: canRevealContactPii(user),
+      viewer: piiViewer(user),
     });
   }
 
@@ -105,7 +105,7 @@ export class LeadsController {
   ) {
     const validated = LeadUpdateSchema.parse(data);
     return this.leadsService.update(id, accountId, validated, {
-      revealPii: canRevealContactPii(user),
+      viewer: piiViewer(user),
     });
   }
 

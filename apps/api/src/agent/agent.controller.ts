@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUser } from '../auth/decorators';
-import { canRevealContactPii } from '../auth/pii-access';
+import { piiViewer } from '../auth/pii-access';
 import {
   DraftMessageDto,
   LogAgentNoteDto,
@@ -24,7 +24,7 @@ export class AgentController {
     @CurrentUser() user: unknown,
   ) {
     return this.agentService.getDealSummary(dealId, accountId, {
-      revealPii: canRevealContactPii(user),
+      viewer: piiViewer(user),
     });
   }
 
@@ -35,7 +35,7 @@ export class AgentController {
     @CurrentUser() user: unknown,
   ) {
     return this.agentService.getDealContext(dealId, accountId, {
-      revealPii: canRevealContactPii(user),
+      viewer: piiViewer(user),
     });
   }
 

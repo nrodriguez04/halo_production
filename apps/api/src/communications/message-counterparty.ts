@@ -64,6 +64,35 @@ export function openCounterparty(row: {
   return row.counterpartyEnc ? openValue(row.counterpartyEnc) : null;
 }
 
+/**
+ * A message row for an API response. The counterparty columns are dropped
+ * (no caller needs the ciphertext) and any recipient key still sitting in
+ * metadata on a row the backfill has not reached is stripped, so no address
+ * leaves the api in plaintext. Inbound `to` stays: it is our own sending
+ * number, not the contact's.
+ */
+export function presentMessage<
+  T extends {
+    direction?: string;
+    metadata?: unknown;
+    counterpartyEnc?: string | null;
+    counterpartyHash?: string | null;
+  },
+>(row: T): Omit<T, 'counterpartyEnc' | 'counterpartyHash'> {
+  const { counterpartyEnc: _enc, counterpartyHash: _hash, ...rest } = row;
+  const metadata = row.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return rest;
+  }
+  const out: Record<string, unknown> = { ...(metadata as Meta) };
+  const keys =
+    row.direction === 'inbound'
+      ? ['from', 'phone', 'email']
+      : RECIPIENT_METADATA_KEYS;
+  for (const key of keys) delete out[key];
+  return { ...rest, metadata: out };
+}
+
 /** Column first; metadata only for rows the backfill has not reached. */
 export function messageCounterparty(row: {
   channel: string;

@@ -39,14 +39,36 @@ export class ControlPlaneService {
    * rather than an invisible in-memory assumption. Read failures are NOT
    * swallowed: callers must not proceed as if everything were enabled when
    * the switch state is unknown.
+   *
+   * `provision: false` is for the send path, which must not switch a tenant
+   * on by reading its switches: there a missing row reads as everything
+   * off, as it does in the worker.
    */
-  async getStatus(accountId: string): Promise<ControlPlaneStatus> {
+  async getStatus(
+    accountId: string,
+    opts: { provision?: boolean } = {},
+  ): Promise<ControlPlaneStatus> {
     const [tenantRow, globalRow] = await Promise.all([
       this.prisma.controlPlane.findUnique({ where: { accountId } }),
       this.prisma.controlPlane.findUnique({
         where: { accountId: GLOBAL_ACCOUNT_ID },
       }),
     ]);
+
+    if (!tenantRow && opts.provision === false) {
+      return {
+        accountId,
+        enabled: false,
+        smsEnabled: false,
+        emailEnabled: false,
+        docusignEnabled: false,
+        externalDataEnabled: false,
+        aiEnabled: false,
+        aiDailyCostCap: 0,
+        apiDailyCostCap: 0,
+        globallyConstrained: !!globalRow,
+      };
+    }
 
     const tenant = tenantRow ?? (await this.provision(accountId));
 

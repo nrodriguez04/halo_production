@@ -2,6 +2,7 @@ import { AutomationRunStatus, PrismaClient } from '@prisma/client';
 import { seedCostGovernance } from '../src/cost-control/seed-providers';
 import { protectContact, revealContact } from '../src/leads/lead-pii';
 import { protectPhone } from '../src/pii/contact-crypto';
+import { protectBuyerContact } from '../src/buyers/buyer-pii';
 
 const prisma = new PrismaClient();
 
@@ -158,8 +159,7 @@ async function main() {
       data: {
         accountId: ACCOUNT_ID,
         name: buyer.name,
-        email: buyer.email,
-        phone: buyer.phone,
+        ...protectBuyerContact({ email: buyer.email, phone: buyer.phone }),
         preferences: buyer.prefs,
         engagementScore: Math.round(Math.random() * 100) / 10,
       },
@@ -201,7 +201,6 @@ async function main() {
         data: {
           accountId: ACCOUNT_ID,
           leadId: lead.id,
-          phone: contact.phone,
           ...protectPhone(contact.phone),
           channel: 'sms',
           source: 'form',

@@ -1,31 +1,20 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentAccountId } from '../auth/decorators';
 import { InternalAuthGuard } from './internal-auth.guard';
 import { OpenAIService } from '../integrations/openai/openai.service';
-import { TwilioSendService } from '../integrations/twilio-send/twilio-send.service';
-import { EmailSendService } from '../integrations/email/email-send.service';
 import { GeocodingService } from '../integrations/geocoding/geocoding.service';
 import { AttomService } from '../integrations/attom/attom.service';
 import { PrismaService } from '../prisma.service';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
-import { ComplianceService } from '../compliance/compliance.service';
-import { ComplianceBlockedException } from '../compliance/compliance-blocked.exception';
-import { assertPolicy, PolicyViolationError } from '@halo/shared';
 import {
   ChatCompletionDto,
   CostAttributionDto,
   EnrichmentAddressDto,
-  SendEmailDto,
-  SendSmsDto,
+  SkipTraceLeadDto,
 } from './dto/internal.dto';
-import { messageCounterparty } from '../communications/message-counterparty';
+import { MessageDispatchService } from '../communications/message-dispatch.service';
+import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
 
 /**
  * Service-to-service surface for the worker.
@@ -39,6 +28,11 @@ import { messageCounterparty } from '../communications/message-counterparty';
  * Blocked calls surface as HTTP 429 `COST_BLOCKED` (see
  * CostBlockedException) rather than an empty success.
  *
+ * Nothing here takes a recipient or message text: the only send is
+ * `messages/:id/send`, which sends a stored, approved Message. The token
+ * holder can name a tenant, so a route that accepted a raw `to` let it
+ * message anyone outside the approval flow; those routes are gone.
+ *
  * NOT for public consumption — see InternalAuthGuard.
  */
 @SkipThrottle()
@@ -47,65 +41,12 @@ import { messageCounterparty } from '../communications/message-counterparty';
 export class InternalController {
   constructor(
     private readonly openai: OpenAIService,
-    private readonly twilio: TwilioSendService,
-    private readonly email: EmailSendService,
-    private readonly compliance: ComplianceService,
+    private readonly dispatch: MessageDispatchService,
+    private readonly leadSkipTrace: LeadSkipTraceService,
     private readonly geocoding: GeocodingService,
     private readonly attom: AttomService,
     private readonly prisma: PrismaService,
   ) {}
-
-  /**
-   * Re-evaluates DNC / consent / quiet hours immediately before the provider
-   * call. The same rules run when a message is drafted, but approval and
-   * delivery are separated by a queue: a message approved at 16:00 can be
-   * delivered at 23:00 after a retry or backlog, and a contact can reply STOP
-   * in between. Only the check at this point reflects the state at send time.
-   */
-  private async assertSendable(params: {
-    accountId: string;
-    channel: 'sms' | 'email';
-    phone?: string;
-    email?: string;
-    leadId?: string;
-    dealId?: string;
-    messageId?: string;
-  }) {
-    const facts = await this.compliance.getFacts({
-      accountId: params.accountId,
-      channel: params.channel,
-      phone: params.phone,
-      email: params.email,
-      leadId: params.leadId,
-    });
-
-    try {
-      assertPolicy({
-        tenantId: params.accountId,
-        actorId: null,
-        actorType: 'system',
-        now: new Date(),
-        requestedAction:
-          params.channel === 'sms' ? 'comms.send_sms' : 'comms.send_email',
-        channel: params.channel,
-        leadId: params.leadId,
-        dealId: params.dealId,
-        messageId: params.messageId,
-        ...facts,
-      });
-    } catch (err) {
-      if (err instanceof PolicyViolationError) {
-        throw new ComplianceBlockedException(err.code, err.reason, {
-          channel: params.channel,
-          ...(facts.timezone ? { timezone: facts.timezone } : {}),
-          ...(typeof facts.localHour === 'number'
-            ? { localHour: facts.localHour }
-            : {}),
-        });
-      }
-      throw err;
-    }
-  }
 
   private context(accountId: string, dto: CostAttributionDto): CostContext {
     return {
@@ -147,88 +88,45 @@ export class InternalController {
   }
 
   /**
-   * The worker sends by messageId and never sees the recipient: it is read
-   * from the message's encrypted counterparty here (metadata only for rows
-   * the backfill has not reached). An explicit `to` is still accepted for
-   * sends that have no message row.
+   * Sends an approved message of this tenant. The recipient, body and
+   * sender all come from the stored message and server config; see
+   * MessageDispatchService for the checks (approved, outbound, DNC,
+   * consent, quiet hours, control plane) and the opt-out text it adds.
    */
-  private async recipientFor(
-    accountId: string,
-    channel: 'sms' | 'email',
-    dto: { to?: string; messageId?: string },
-  ): Promise<string> {
-    if (dto.to) return dto.to;
-    if (dto.messageId) {
-      const message = await this.prisma.message.findFirst({
-        where: { id: dto.messageId, accountId },
-        select: {
-          channel: true,
-          direction: true,
-          metadata: true,
-          counterpartyEnc: true,
-        },
-      });
-      const recipient = message ? messageCounterparty(message) : null;
-      if (recipient) return recipient;
-    }
-    throw new BadRequestException(
-      `No ${channel} recipient: pass \`to\` or a messageId with a stored counterparty`,
-    );
+  @Post('messages/:messageId/send')
+  async sendMessage(
+    @CurrentAccountId() accountId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.dispatch.sendApproved(accountId, messageId);
   }
 
-  @Post('sms/send')
-  async sendSms(
+  /**
+   * Skip trace for the worker's enrichment funnel. The api finds and stores
+   * the contacts (encrypted, on the lead); the worker gets counts only. The
+   * worker used to call the Descope-guarded /skip-trace route with this
+   * token, got a 401 and silently skipped the step.
+   */
+  @Post('enrichment/skip-trace')
+  async skipTrace(
     @CurrentAccountId() accountId: string,
-    @Body() dto: SendSmsDto,
+    @Body() dto: SkipTraceLeadDto,
   ) {
-    const to = await this.recipientFor(accountId, 'sms', dto);
-    await this.assertSendable({
+    const summary = await this.leadSkipTrace.traceLead({
       accountId,
-      channel: 'sms',
-      phone: to,
       leadId: dto.leadId,
-      dealId: dto.dealId,
-      messageId: dto.messageId,
+      actor: 'system',
+      automated: true,
     });
-
-    return this.twilio.sendSms(
-      {
-        to,
-        from: dto.from,
-        body: dto.body,
-        variant: dto.variant,
-        messageId: dto.messageId,
-      },
-      this.context(accountId, dto),
-    );
-  }
-
-  @Post('email/send')
-  async sendEmail(
-    @CurrentAccountId() accountId: string,
-    @Body() dto: SendEmailDto,
-  ) {
-    const to = await this.recipientFor(accountId, 'email', dto);
-    await this.assertSendable({
-      accountId,
-      channel: 'email',
-      email: to,
-      leadId: dto.leadId,
-      dealId: dto.dealId,
-      messageId: dto.messageId,
-    });
-
-    return this.email.sendEmail(
-      {
-        to,
-        subject: dto.subject,
-        text: dto.text,
-        html: dto.html,
-        from: dto.from,
-        messageId: dto.messageId,
-      } as any,
-      this.context(accountId, dto),
-    );
+    return {
+      provider: summary.provider,
+      status: summary.status,
+      reason: summary.reason,
+      costUsd: summary.costUsd,
+      phonesFound: summary.phones.length,
+      emailsFound: summary.emails.length,
+      stored: summary.stored,
+    };
   }
 
   /**

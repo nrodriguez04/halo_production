@@ -16,3 +16,22 @@ export function canRevealContactPii(user: unknown): boolean {
     permissions.includes('pii:read')
   );
 }
+
+/**
+ * Who is asking for contact PII, for PIIService: whether they may see it
+ * unmasked, and who to record in the audit log when they do.
+ */
+export interface PiiViewer {
+  accountId: string;
+  userId: string | null;
+  canReveal: boolean;
+}
+
+export function piiViewer(user: unknown): PiiViewer {
+  const u = (user ?? {}) as { accountId?: unknown; userId?: unknown };
+  return {
+    accountId: typeof u.accountId === 'string' ? u.accountId : '',
+    userId: typeof u.userId === 'string' ? u.userId : null,
+    canReveal: canRevealContactPii(user),
+  };
+}

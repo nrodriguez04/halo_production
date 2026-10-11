@@ -46,7 +46,7 @@ describe('LeadPiiService', () => {
     expect(service.emailHash('A@B.co')).toBe(service.emailHash('a@b.co '));
   });
 
-  describe('present', () => {
+  describe('mask', () => {
     // Built per test: encryption needs the keys set in beforeEach.
     const row = () => ({
       id: 'lead-1',
@@ -57,26 +57,25 @@ describe('LeadPiiService', () => {
       }),
     });
 
-    it('strips the protected columns and reveals for permitted callers', () => {
-      const out = service.present(row(), true);
+    it('strips the protected columns and masks the contacts', () => {
+      const out = service.mask(row());
       expect(out).toEqual({
         id: 'lead-1',
         canonicalOwner: 'Jane Seller',
-        canonicalPhone: '+15125550100',
-        canonicalEmail: 'seller@example.com',
+        canonicalPhone: '••• ••• 0100',
+        canonicalEmail: 's•••@example.com',
       });
       expect(out).not.toHaveProperty('canonicalPhoneEnc');
       expect(out).not.toHaveProperty('canonicalPhoneHash');
     });
 
-    it('masks for everyone else', () => {
-      const out = service.present(row(), false);
-      expect(out.canonicalPhone).toBe('••• ••• 0100');
-      expect(out.canonicalEmail).toBe('s•••@example.com');
+    it('has no unmasked mode: reveals go through the audited PIIService', () => {
+      expect((service as any).present).toBeUndefined();
+      expect(service.mask.length).toBe(1);
     });
 
-    it('leaves absent fields null either way', () => {
-      expect(service.present({ id: 'x' } as any, false)).toEqual({
+    it('leaves absent fields null', () => {
+      expect(service.mask({ id: 'x' } as any)).toEqual({
         id: 'x',
         canonicalPhone: null,
         canonicalEmail: null,

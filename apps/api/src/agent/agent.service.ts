@@ -10,8 +10,11 @@ import { TimelineService } from '../timeline/timeline.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { LeadPiiService } from '../leads/lead-pii.service';
+import { PIIService } from '../pii/pii.service';
+import type { PiiViewer } from '../auth/pii-access';
 import {
   counterpartyColumns,
+  presentMessage,
   recipientFromMetadata,
   stripRecipientKeys,
 } from '../communications/message-counterparty';
@@ -24,12 +27,13 @@ export class AgentService {
     private timelineService: TimelineService,
     private controlPlaneService: ControlPlaneService,
     private pii: LeadPiiService,
+    private piiService: PIIService,
   ) {}
 
   async getDealSummary(
     dealId: string,
     accountId: string,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
@@ -58,6 +62,10 @@ export class AgentService {
       10,
     );
 
+    const leadContact = deal.lead
+      ? await this.piiService.presentLead(deal.lead, opts.viewer)
+      : null;
+
     return {
       deal: {
         id: deal.id,
@@ -74,10 +82,8 @@ export class AgentService {
             id: deal.lead.id,
             status: deal.lead.status,
             owner: deal.lead.canonicalOwner,
-            ...(() => {
-              const c = this.pii.present(deal.lead, opts.revealPii ?? false);
-              return { phone: c.canonicalPhone, email: c.canonicalEmail };
-            })(),
+            phone: leadContact.canonicalPhone,
+            email: leadContact.canonicalEmail,
           }
         : null,
       property: deal.property
@@ -119,7 +125,7 @@ export class AgentService {
   async getDealContext(
     dealId: string,
     accountId: string,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
@@ -165,10 +171,10 @@ export class AgentService {
       deal: {
         ...deal,
         lead: deal.lead
-          ? this.pii.present(deal.lead, opts.revealPii ?? false)
+          ? await this.piiService.presentLead(deal.lead, opts.viewer)
           : null,
       },
-      communications: allMessages,
+      communications: allMessages.map(presentMessage),
       timeline,
       automationRuns,
       controlPlane: {
@@ -384,20 +390,21 @@ export class AgentService {
     });
 
     return {
-      message,
+      message: presentMessage(message),
       automationRunId,
       nextStep: 'Message created as draft. Submit to approval queue to send.',
     };
   }
 
   async getPendingApprovals(accountId: string) {
-    return this.prisma.message.findMany({
+    const messages = await this.prisma.message.findMany({
       where: {
         accountId,
         status: 'pending_approval',
       },
       orderBy: { createdAt: 'desc' },
     });
+    return messages.map(presentMessage);
   }
 
   async requestSend(
@@ -463,7 +470,7 @@ export class AgentService {
     }
 
     return {
-      message: updated,
+      message: presentMessage(updated),
       status: 'pending_approval',
       info: 'Message submitted for human approval. It will be sent after approval.',
     };

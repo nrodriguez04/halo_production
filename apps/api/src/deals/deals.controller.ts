@@ -15,7 +15,7 @@ import {
   CurrentUser,
   CurrentUserId,
 } from '../auth/decorators';
-import { canRevealContactPii } from '../auth/pii-access';
+import { piiViewer } from '../auth/pii-access';
 import { DealCreateSchema, DealStage, DealUpdateSchema } from '@halo/shared';
 
 const DealCreateInputSchema = DealCreateSchema.omit({ stage: true });
@@ -45,7 +45,7 @@ export class DealsController {
         stage: 'new',
       },
       userId,
-      { revealPii: canRevealContactPii(user) },
+      { viewer: piiViewer(user) },
     );
   }
 
@@ -64,7 +64,7 @@ export class DealsController {
         skip: skip ? parseInt(skip, 10) : 0,
         take: take ? parseInt(take, 10) : 50,
       },
-      canRevealContactPii(user),
+      piiViewer(user),
     );
   }
 
@@ -75,7 +75,7 @@ export class DealsController {
     @CurrentUser() user: unknown,
   ) {
     return this.dealsService.findOne(id, accountId, {
-      revealPii: canRevealContactPii(user),
+      viewer: piiViewer(user),
     });
   }
 
@@ -88,7 +88,7 @@ export class DealsController {
   ) {
     const validated = DealUpdateSchema.parse(data);
     return this.dealsService.update(id, accountId, validated, {
-      revealPii: canRevealContactPii(user),
+      viewer: piiViewer(user),
     });
   }
 

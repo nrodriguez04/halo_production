@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma.service';
+import { openJson, sealJson } from '../../pii/contact-crypto';
 
 // Provider response cache — keyed by sha256(provider + action +
 // canonical(payload)). Backed by `cached_provider_responses`. Cache hits
 // still write a row in `integration_cost_events` (status='cache_hit',
 // actualCostUsd=0) so the dashboard can surface "cost saved by caching".
+//
+// Responses that carry contact data (skip-trace `append_contacts`, cached
+// for 90 days) are written sealed (pii/contact-crypto sealJson) and opened
+// on lookup; they used to sit in plaintext JSON.
 
 export interface CacheLookupResult {
   payload: unknown;
@@ -41,7 +46,7 @@ export class ResponseCacheService {
       if (!row) return null;
       if (row.expiresAt.getTime() <= Date.now()) return null;
       return {
-        payload: row.payload,
+        payload: openJson(row.payload),
         fetchedAt: row.fetchedAt,
         expiresAt: row.expiresAt,
       };
@@ -58,9 +63,14 @@ export class ResponseCacheService {
     payload: unknown;
     ttlSec: number;
     responseCode?: number;
+    /** Seal the payload at rest: it contains contact PII. */
+    sensitive?: boolean;
   }): Promise<void> {
     if (params.ttlSec <= 0) return;
     const expiresAt = new Date(Date.now() + params.ttlSec * 1000);
+    const payload = (
+      params.sensitive ? sealJson(params.payload) : params.payload
+    ) as object;
     try {
       await this.prisma.cachedProviderResponse.upsert({
         where: {
@@ -74,12 +84,12 @@ export class ResponseCacheService {
           accountId: params.accountId,
           providerKey: params.providerKey,
           cacheKey: params.cacheKey,
-          payload: params.payload as object,
+          payload,
           responseCode: params.responseCode,
           expiresAt,
         },
         update: {
-          payload: params.payload as object,
+          payload,
           responseCode: params.responseCode,
           fetchedAt: new Date(),
           expiresAt,

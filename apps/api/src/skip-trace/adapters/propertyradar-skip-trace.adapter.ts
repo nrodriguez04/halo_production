@@ -3,6 +3,7 @@ import { PropertyRadarService } from '../../integrations/propertyradar/propertyr
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import type {
   SkipTraceAdapter,
+  SkipTraceHints,
   SkipTraceInput,
   SkipTraceResult,
 } from '../dto/skip-trace.dto';
@@ -23,6 +24,7 @@ export class PropertyRadarSkipTraceAdapter implements SkipTraceAdapter {
   async appendContacts(
     input: SkipTraceInput,
     ctx?: CostContext,
+    hints?: SkipTraceHints,
   ): Promise<SkipTraceResult> {
     if (!ctx) {
       throw new Error('PropertyRadarSkipTraceAdapter requires a CostContext');
@@ -41,6 +43,7 @@ export class PropertyRadarSkipTraceAdapter implements SkipTraceAdapter {
         },
       ],
       ctx,
+      hints,
     );
     const importData = importResult?.data as {
       Results?: Array<{ RadarID?: string }>;
@@ -55,7 +58,11 @@ export class PropertyRadarSkipTraceAdapter implements SkipTraceAdapter {
       };
     }
 
-    const contactResult = await this.propertyRadar.appendContacts(radarId, ctx);
+    const contactResult = await this.propertyRadar.appendContacts(
+      radarId,
+      ctx,
+      hints,
+    );
     const contactData = contactResult?.data;
     if (!contactData) {
       return {

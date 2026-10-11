@@ -3,6 +3,7 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import type {
   SkipTraceAdapter,
+  SkipTraceHints,
   SkipTraceInput,
   SkipTraceResult,
 } from '../dto/skip-trace.dto';
@@ -34,6 +35,7 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
   async appendContacts(
     input: SkipTraceInput,
     ctx?: CostContext,
+    hints?: SkipTraceHints,
   ): Promise<SkipTraceResult> {
     if (!this.apiKey) {
       this.logger.warn('BATCH_SKIPTRACE_API_KEY missing — returning no_match');
@@ -56,7 +58,7 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
       action: 'append_contacts',
       payload: input,
       context: ctx,
-      hints: { idempotencyKey: `skip:batch:${input.leadId}` },
+      hints: { ...hints, idempotencyKey: `skip:batch:${input.leadId}` },
       execute: async () => {
         const res = await fetch(`${this.baseUrl}/skip-tracing`, {
           method: 'POST',

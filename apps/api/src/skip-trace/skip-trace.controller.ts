@@ -2,9 +2,10 @@ import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
-import { SkipTraceService } from './skip-trace.service';
-import { PrismaService } from '../prisma.service';
-import { LeadPiiService } from '../leads/lead-pii.service';
+import {
+  LeadSkipTraceService,
+  type SkipTraceSummary,
+} from './lead-skip-trace.service';
 
 const SkipTraceBody = z.object({
   leadId: z.string(),
@@ -19,24 +20,26 @@ const SkipTraceBody = z.object({
 @Controller('skip-trace')
 @UseGuards(AuthGuard)
 export class SkipTraceController {
-  constructor(
-    private readonly service: SkipTraceService,
-    private readonly prisma: PrismaService,
-    private readonly pii: LeadPiiService,
-  ) {}
+  constructor(private readonly leadSkipTrace: LeadSkipTraceService) {}
 
+  /**
+   * Traces a lead of the caller's tenant. Found contacts are stored on the
+   * lead encrypted; the response carries only masked previews and counts,
+   * never the raw contacts or provider payload.
+   */
   @Post('append-contacts')
   async appendContacts(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
     @Body() raw: unknown,
-  ) {
+  ): Promise<SkipTraceSummary> {
     const body = SkipTraceBody.parse(raw);
-    // Re-shape into SkipTraceInput so optional fields stay optional and
-    // the required `leadId` is preserved.
-    const result = await this.service.appendContacts(
-      {
-        leadId: body.leadId,
+    return this.leadSkipTrace.traceLead({
+      accountId,
+      leadId: body.leadId,
+      actor: 'user',
+      userId,
+      input: {
         propertyAddress: body.propertyAddress,
         ownerName: body.ownerName,
         ownerMailingAddress: body.ownerMailingAddress,
@@ -44,28 +47,6 @@ export class SkipTraceController {
         state: body.state,
         zip: body.zip,
       },
-      { accountId, actor: 'user', userId, leadId: body.leadId },
-    );
-
-    // Persist here, encrypted, rather than handing plaintext back for the
-    // caller to write: the worker holds no PII keys. Only fills empty
-    // fields, tenant-scoped, and never fails the trace.
-    const phone = result.phones[0]?.number ?? null;
-    const email = result.emails[0]?.email ?? null;
-    if (result.status !== 'error' && (phone || email)) {
-      if (phone) {
-        await this.prisma.lead.updateMany({
-          where: { id: body.leadId, accountId, canonicalPhoneEnc: null },
-          data: this.pii.protect({ phone }),
-        });
-      }
-      if (email) {
-        await this.prisma.lead.updateMany({
-          where: { id: body.leadId, accountId, canonicalEmailEnc: null },
-          data: this.pii.protect({ email }),
-        });
-      }
-    }
-    return result;
+    });
   }
 }

@@ -13,7 +13,11 @@ import {
   RecordActualParams,
 } from './dto/cost-intent.dto';
 import { hasFallback, nextFallback } from './policy/fallback-chain';
-import { defaultCacheTtlSec } from './policy/cache-ttl';
+import {
+  defaultCacheTtlSec,
+  responseContainsContacts,
+} from './policy/cache-ttl';
+import { redactContactDetails } from '@halo/shared';
 import { thresholdFor } from './policy/lead-score-thresholds';
 import { PricingService } from './pricing/pricing.service';
 import { RateLimitService } from './rate-limit/rate-limit.service';
@@ -428,6 +432,10 @@ export class IntegrationCostControlService {
           payload: p.cachePayload,
           ttlSec: ttl,
           responseCode: p.responseCode,
+          sensitive: responseContainsContacts(
+            updated.providerKey,
+            updated.action,
+          ),
         });
       }
     }
@@ -487,7 +495,9 @@ export class IntegrationCostControlService {
         actualCostUsd: 0,
         durationMs: Date.now() - startedAt,
         status: 'error',
-        metadata: { error: (err as Error).message },
+        // Provider errors quote the recipient (Twilio: "The 'To' number
+        // +1... is not a valid phone number"); the ledger is plaintext JSON.
+        metadata: { error: redactContactDetails((err as Error).message) },
       });
       throw err;
     }
