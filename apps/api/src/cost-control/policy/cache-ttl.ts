@@ -45,6 +45,9 @@ export function responseContainsContacts(
 }
 
 export function defaultCacheTtlSec(provider: string, action: string): number {
+  // Model completions are non-deterministic and provider-agnostic here, so
+  // the rule is by action prefix rather than one entry per model.
+  if (action.startsWith('chat_completion.')) return 0;
   const key = `${provider}.${action}`;
   return CACHE_TTL[key] ?? DEFAULT_TTL_SEC;
 }

@@ -1,7 +1,9 @@
 import type { PrismaService } from '../prisma.service';
+import { AI_PROVIDER_KEYS } from '@halo/shared';
 
 /**
- * Sum of completed OpenAI spend recorded in the ledger since `since`, for one
+ * Sum of completed AI spend (every provider behind /internal/ai) recorded in
+ * the ledger since `since`, for one
  * account or, when `accountId` is omitted, across every account (the global
  * daily cap). This replaces the per-service reads of the retired
  * ai_cost_logs table, so every cap check sees the same number the ledger
@@ -14,7 +16,7 @@ export async function aiSpendSince(
 ): Promise<number> {
   const agg = await prisma.integrationCostEvent.aggregate({
     where: {
-      providerKey: 'openai',
+      providerKey: { in: [...AI_PROVIDER_KEYS] },
       status: 'completed',
       createdAt: { gte: since },
       ...(accountId ? { accountId } : {}),

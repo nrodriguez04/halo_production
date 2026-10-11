@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { AI_PROVIDER_KEYS } from '@halo/shared';
 
 /** Reserved accountId for the platform-wide master switch. */
 export const GLOBAL_ACCOUNT_ID = 'GLOBAL';
@@ -126,13 +127,15 @@ export class ControlPlaneService {
     // Bridge legacy ControlPlane caps into the cost-governance budget buckets
     // so callers reading either source see consistent limits.
     if (typeof updates.aiDailyCostCap === 'number') {
-      await this.syncBucketCap(
-        accountId,
-        'global',
-        'openai',
-        'day',
-        updates.aiDailyCostCap,
-      );
+      for (const providerKey of AI_PROVIDER_KEYS) {
+        await this.syncBucketCap(
+          accountId,
+          'global',
+          providerKey,
+          'day',
+          updates.aiDailyCostCap,
+        );
+      }
     }
     if (typeof updates.apiDailyCostCap === 'number') {
       await this.syncBucketCap(

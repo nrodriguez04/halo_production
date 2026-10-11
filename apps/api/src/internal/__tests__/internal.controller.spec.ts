@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { PATH_METADATA } from '@nestjs/common/constants';
 import { InternalController } from '../internal.controller';
 import { OpenAIService } from '../../integrations/openai/openai.service';
+import { AnthropicService } from '../../integrations/anthropic/anthropic.service';
 import { GeocodingService } from '../../integrations/geocoding/geocoding.service';
 import { AttomService } from '../../integrations/attom/attom.service';
 import { PrismaService } from '../../prisma.service';
@@ -17,6 +18,8 @@ describe('InternalController', () => {
   let dispatch: { sendApproved: jest.Mock };
   let leadSkipTrace: { traceLead: jest.Mock };
   let prisma: { sourceRecord: { updateMany: jest.Mock } };
+  let openai: { chatCompletion: jest.Mock };
+  let anthropic: { chatCompletion: jest.Mock };
 
   beforeEach(async () => {
     geocoding = { geocodeDetailed: jest.fn() };
@@ -30,6 +33,25 @@ describe('InternalController', () => {
       }),
     };
     leadSkipTrace = { traceLead: jest.fn() };
+    openai = {
+      chatCompletion: jest.fn().mockResolvedValue({
+        content: 'o',
+        tokensIn: 1,
+        tokensOut: 1,
+        model: 'gpt-4o',
+        raw: {},
+      }),
+    };
+    anthropic = {
+      chatCompletion: jest.fn().mockResolvedValue({
+        content: 'a',
+        tokensIn: 2,
+        tokensOut: 2,
+        model: 'claude-opus-5-5',
+        stopReason: 'end_turn',
+        raw: {},
+      }),
+    };
     prisma = {
       sourceRecord: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
@@ -37,7 +59,8 @@ describe('InternalController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InternalController],
       providers: [
-        { provide: OpenAIService, useValue: {} },
+        { provide: OpenAIService, useValue: openai },
+        { provide: AnthropicService, useValue: anthropic },
         { provide: MessageDispatchService, useValue: dispatch },
         { provide: LeadSkipTraceService, useValue: leadSkipTrace },
         { provide: GeocodingService, useValue: geocoding },
@@ -198,6 +221,36 @@ describe('InternalController', () => {
       await expect(
         pipe.transform({ leadId: 'lead-1' }, metadata),
       ).resolves.toEqual(expect.objectContaining({ leadId: 'lead-1' }));
+    });
+  });
+
+  describe('ai/chat-completion routes by model name', () => {
+    const body = (model: string) =>
+      ({ model, messages: [{ role: 'user', content: 'hi' }] }) as any;
+
+    it('sends claude-* models to the Anthropic adapter', async () => {
+      const out = await controller.chatCompletion(
+        'tenant-1',
+        body('claude-opus-5-5'),
+      );
+      expect(anthropic.chatCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'claude-opus-5-5' }),
+        expect.objectContaining({ accountId: 'tenant-1', actor: 'system' }),
+      );
+      expect(openai.chatCompletion).not.toHaveBeenCalled();
+      // The worker only needs content and counts; raw never leaves the api.
+      expect(out).toEqual({
+        content: 'a',
+        tokensIn: 2,
+        tokensOut: 2,
+        model: 'claude-opus-5-5',
+      });
+    });
+
+    it('sends everything else to the OpenAI adapter', async () => {
+      await controller.chatCompletion('tenant-1', body('gpt-4o'));
+      expect(openai.chatCompletion).toHaveBeenCalledTimes(1);
+      expect(anthropic.chatCompletion).not.toHaveBeenCalled();
     });
   });
 });
