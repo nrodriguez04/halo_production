@@ -15,6 +15,8 @@ import {
 } from './dto/internal.dto';
 import { MessageDispatchService } from '../communications/message-dispatch.service';
 import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
+import { AnthropicService } from '../integrations/anthropic/anthropic.service';
+import { aiProviderForModel } from '@halo/shared';
 
 /**
  * Service-to-service surface for the worker.
@@ -41,6 +43,7 @@ import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
 export class InternalController {
   constructor(
     private readonly openai: OpenAIService,
+    private readonly anthropic: AnthropicService,
     private readonly dispatch: MessageDispatchService,
     private readonly leadSkipTrace: LeadSkipTraceService,
     private readonly geocoding: GeocodingService,
@@ -65,15 +68,25 @@ export class InternalController {
     @CurrentAccountId() accountId: string,
     @Body() dto: ChatCompletionDto,
   ) {
-    const result = await this.openai.chatCompletion(
-      {
-        model: dto.model,
-        messages: dto.messages,
-        temperature: dto.temperature,
-        maxTokens: dto.maxTokens,
-      },
-      this.context(accountId, dto),
-    );
+    // The model name picks the adapter (claude-* -> Anthropic). Both run the
+    // same cost-control preflight and write the same ledger, so callers are
+    // provider-agnostic.
+    const request = {
+      model: dto.model,
+      messages: dto.messages,
+      temperature: dto.temperature,
+      maxTokens: dto.maxTokens,
+    };
+    const result =
+      aiProviderForModel(dto.model) === 'anthropic'
+        ? await this.anthropic.chatCompletion(
+            request,
+            this.context(accountId, dto),
+          )
+        : await this.openai.chatCompletion(
+            request,
+            this.context(accountId, dto),
+          );
 
     // `raw` carries the full provider response; the worker only needs the
     // content and token counts, and shipping it doubles the payload.

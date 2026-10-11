@@ -120,6 +120,8 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
 
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-gpt-4o}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-5}
 
@@ -225,6 +227,7 @@ services:
 
       # Model choice only. The api holds the OpenAI key and does the spending,
       # so every token is preflighted and lands on the cost ledger.
+      AI_MODEL: ${AI_MODEL:-gpt-4o}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-5}
 

@@ -36,6 +36,7 @@ import { IntegrationSecretsModule } from './integration-secrets/integration-secr
 import { ApiCostModule } from './api-cost/api-cost.module';
 import { CostControlModule } from './cost-control/cost-control.module';
 import { OpenAIModule } from './integrations/openai/openai.module';
+import { AnthropicModule } from './integrations/anthropic/anthropic.module';
 import { TwilioSendModule } from './integrations/twilio-send/twilio-send.module';
 import { EmailSendModule } from './integrations/email/email-send.module';
 import { SkipTraceModule } from './skip-trace/skip-trace.module';
@@ -94,6 +95,7 @@ import { AuditModule } from './audit/audit.module';
     ApiCostModule,
     CostControlModule,
     OpenAIModule,
+    AnthropicModule,
     TwilioSendModule,
     EmailSendModule,
     SkipTraceModule,

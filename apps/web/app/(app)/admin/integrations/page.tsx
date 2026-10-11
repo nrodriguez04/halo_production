@@ -22,15 +22,50 @@ interface StoredSecret {
   updatedAt: string;
 }
 
+type IntegrationCategory = 'ai' | 'property' | 'messaging' | 'contracts';
+
 interface IntegrationDef {
   provider: string;
   name: string;
+  category: IntegrationCategory;
   keys: { keyName: string; label: string; placeholder: string }[];
 }
+
+// Grouped by what the integration does for the business, not by vendor.
+const INTEGRATION_CATEGORIES: {
+  id: IntegrationCategory;
+  title: string;
+  description: string;
+}[] = [
+  {
+    id: 'ai',
+    title: 'LLMs & Agents',
+    description:
+      'Model providers behind every AI feature. The api routes by model name (gpt-* to OpenAI, claude-* to Anthropic); both are budget-capped and ledgered. The CrewAI agent runtime (apps/agents) uses the same route and holds no keys of its own.',
+  },
+  {
+    id: 'property',
+    title: 'Real-estate & property data',
+    description:
+      'Listings, property records, valuations, owner contacts and geocoding that feed lead enrichment and underwriting.',
+  },
+  {
+    id: 'messaging',
+    title: 'Marketing & messaging',
+    description:
+      'Outbound SMS and email. Every send goes through approval, DNC, consent and quiet-hours checks.',
+  },
+  {
+    id: 'contracts',
+    title: 'Contracts & e-signature',
+    description: 'Assignment and purchase agreements sent for signature.',
+  },
+];
 
 const INTEGRATIONS: IntegrationDef[] = [
   {
     provider: 'twilio',
+    category: 'messaging',
     name: 'Twilio',
     keys: [
       {
@@ -43,6 +78,7 @@ const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     provider: 'docusign',
+    category: 'contracts',
     name: 'DocuSign',
     keys: [
       {
@@ -59,31 +95,43 @@ const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     provider: 'attom',
+    category: 'property',
     name: 'ATTOM Property API',
     keys: [{ keyName: 'ATTOM_API_KEY', label: 'API Key', placeholder: 'Your ATTOM API key' }],
   },
   {
     provider: 'google_geocoding',
+    category: 'property',
     name: 'Google Geocoding',
     keys: [{ keyName: 'GOOGLE_GEOCODING_API_KEY', label: 'API Key', placeholder: 'AIzaSy...' }],
   },
   {
     provider: 'openai',
+    category: 'ai',
     name: 'OpenAI',
     keys: [{ keyName: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-...' }],
   },
   {
+    provider: 'anthropic',
+    category: 'ai',
+    name: 'Anthropic',
+    keys: [{ keyName: 'ANTHROPIC_API_KEY', label: 'API Key', placeholder: 'sk-ant-...' }],
+  },
+  {
     provider: 'sendgrid',
+    category: 'messaging',
     name: 'SendGrid',
     keys: [{ keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' }],
   },
   {
     provider: 'rentcast',
+    category: 'property',
     name: 'RentCast',
     keys: [{ keyName: 'RENTCAST_API_KEY', label: 'API Key', placeholder: 'Your RentCast API key' }],
   },
   {
     provider: 'propertyradar',
+    category: 'property',
     name: 'PropertyRadar',
     keys: [
       {
@@ -229,8 +277,17 @@ export default function IntegrationsPage() {
         }
       />
 
+      {INTEGRATION_CATEGORIES.map((category) => {
+        const members = INTEGRATIONS.filter((i) => i.category === category.id);
+        if (members.length === 0) return null;
+        return (
+      <section key={category.id} className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">{category.title}</h2>
+          <p className="text-sm text-muted-foreground">{category.description}</p>
+        </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {INTEGRATIONS.map((integration, i) => (
+        {members.map((integration, i) => (
           <Card
             key={integration.provider}
             variant="interactive"
@@ -374,6 +431,9 @@ export default function IntegrationsPage() {
           </Card>
         ))}
       </div>
+      </section>
+        );
+      })}
 
       <Card>
         <CardHeader>

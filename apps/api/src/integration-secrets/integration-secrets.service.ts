@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as crypto from 'crypto';
 import { randomUUID } from 'crypto';
+import Anthropic from '@anthropic-ai/sdk';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -149,6 +150,9 @@ export class IntegrationSecretsService {
           break;
         case 'openai':
           result = await this.testOpenAI();
+          break;
+        case 'anthropic':
+          result = await this.testAnthropic();
           break;
         case 'google_geocoding':
           result = await this.testGoogleGeocoding();
@@ -322,6 +326,25 @@ export class IntegrationSecretsService {
     if (res.status === 401)
       return { connected: false, error: 'Invalid API key' };
     return { connected: false, error: `HTTP ${res.status}` };
+  }
+
+  private async testAnthropic(): Promise<{
+    connected: boolean;
+    error?: string;
+  }> {
+    const key = await this.resolve('anthropic', 'ANTHROPIC_API_KEY');
+    if (!key) return { connected: false, error: 'Missing API key' };
+
+    try {
+      // Listing models is free and exercises the key without a completion.
+      await new Anthropic({ apiKey: key }).models.list({ limit: 1 });
+      return { connected: true };
+    } catch (err) {
+      if (err instanceof Anthropic.AuthenticationError) {
+        return { connected: false, error: 'Invalid API key' };
+      }
+      return { connected: false, error: (err as Error).message };
+    }
   }
 
   private async testGoogleGeocoding(): Promise<{

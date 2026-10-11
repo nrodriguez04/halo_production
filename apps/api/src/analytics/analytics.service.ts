@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AutomationRunStatus } from '@prisma/client';
+import { AI_PROVIDER_KEYS } from '@halo/shared';
 
 @Injectable()
 export class AnalyticsService {
@@ -50,7 +51,7 @@ export class AnalyticsService {
       this.prisma.integrationCostEvent.aggregate({
         where: {
           accountId,
-          providerKey: 'openai',
+          providerKey: { in: [...AI_PROVIDER_KEYS] },
           status: 'completed',
           createdAt: inRange,
         },
@@ -134,7 +135,7 @@ export class AnalyticsService {
         SELECT date_trunc('day', "createdAt") AS day, COALESCE(SUM("actualCostUsd"), 0)::float AS cost
         FROM integration_cost_events
         WHERE "accountId" = ${accountId}
-          AND "providerKey" = 'openai'
+          AND "providerKey" = ANY(${[...AI_PROVIDER_KEYS]})
           AND "status" = 'completed'
           AND "createdAt" >= ${start}
         GROUP BY 1

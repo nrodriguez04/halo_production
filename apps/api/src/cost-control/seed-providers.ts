@@ -105,6 +105,67 @@ const PROVIDERS = [
     ],
   },
 
+  {
+    key: 'anthropic',
+    displayName: 'Anthropic',
+    category: 'ai',
+    enabled: true,
+    rateLimitPerMin: 100,
+    pricing: [
+      // Per 1k tokens; mirrors ANTHROPIC_TOKEN_PRICING in the adapter.
+      {
+        action: 'chat_completion.claude-opus-5-5',
+        unitCostUsd: 0.004,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.claude-opus-5-5',
+        unitCostUsd: 0.02,
+        unit: 'per_1k_output_tokens',
+      },
+      {
+        action: 'chat_completion.claude-sonnet-5-5',
+        unitCostUsd: 0.002,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.claude-sonnet-5-5',
+        unitCostUsd: 0.01,
+        unit: 'per_1k_output_tokens',
+      },
+      {
+        action: 'chat_completion.claude-haiku-4-5',
+        unitCostUsd: 0.001,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.claude-haiku-4-5',
+        unitCostUsd: 0.005,
+        unit: 'per_1k_output_tokens',
+      },
+      {
+        action: 'chat_completion.claude-opus-5',
+        unitCostUsd: 0.005,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.claude-opus-5',
+        unitCostUsd: 0.025,
+        unit: 'per_1k_output_tokens',
+      },
+      {
+        action: 'chat_completion.claude-fable-5-1',
+        unitCostUsd: 0.01,
+        unit: 'per_1k_input_tokens',
+      },
+      {
+        action: 'chat_completion.claude-fable-5-1',
+        unitCostUsd: 0.05,
+        unit: 'per_1k_output_tokens',
+      },
+    ],
+  },
+
   // Comms
   {
     key: 'twilio',
@@ -198,6 +259,13 @@ const BUDGET_TEMPLATES = [
   {
     scope: 'provider',
     scopeRef: 'openai',
+    period: 'month',
+    hardCapUsd: 200,
+    softCapUsd: 160,
+  },
+  {
+    scope: 'provider',
+    scopeRef: 'anthropic',
     period: 'month',
     hardCapUsd: 200,
     softCapUsd: 160,

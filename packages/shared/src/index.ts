@@ -10,6 +10,7 @@ export * from './utils/reconciliation';
 export * from './utils/compliance';
 export * from './utils/redact';
 export * from './utils/budget-period';
+export * from './utils/ai-providers';
 
 // Policy and state machine
 export * from './policy';
