@@ -10,6 +10,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
+import { MlsImportService } from './mls-import.service';
+import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import {
   CurrentAccountId,
@@ -25,10 +27,31 @@ import {
 
 const LeadCreateInputSchema = LeadCreateSchema.omit({ status: true });
 
+const MlsImportSchema = z
+  .object({
+    city: z.string().trim().min(1).optional(),
+    state: z.string().trim().length(2).optional(),
+    postalCode: z.string().trim().min(3).optional(),
+    status: z.array(z.string().trim().min(1)).max(5).optional(),
+    minPrice: z.number().nonnegative().optional(),
+    maxPrice: z.number().nonnegative().optional(),
+    minDaysOnMarket: z.number().int().nonnegative().optional(),
+    propertyType: z.string().trim().min(1).optional(),
+    limit: z.number().int().min(1).max(200).default(50),
+    offset: z.number().int().nonnegative().default(0),
+  })
+  .strict()
+  .refine((c) => c.city || c.postalCode, {
+    message: 'city or postalCode is required',
+  });
+
 @Controller('leads')
 @UseGuards(AuthGuard)
 export class LeadsController {
-  constructor(private readonly leadsService: LeadsService) {}
+  constructor(
+    private readonly leadsService: LeadsService,
+    private readonly mlsImport: MlsImportService,
+  ) {}
 
   @Post()
   async create(
@@ -122,6 +145,20 @@ export class LeadsController {
   ) {
     const validatedRows = body.rows.map((row) => CSVImportRowSchema.parse(row));
     return this.leadsService.importCSV(validatedRows, accountId, userId);
+  }
+
+  /**
+   * Pull listings from the configured MLS feed into leads. Dedupes against
+   * existing leads; safe to re-run with the same criteria.
+   */
+  @Post('import/mls')
+  async importMls(
+    @Body() body: unknown,
+    @CurrentAccountId() accountId: string,
+    @CurrentUserId() userId: string,
+  ) {
+    const criteria = MlsImportSchema.parse(body);
+    return this.mlsImport.importListings(criteria, accountId, userId);
   }
 
   @Post('merge')
