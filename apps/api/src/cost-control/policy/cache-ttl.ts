@@ -21,6 +21,7 @@ const CACHE_TTL: Record<string, number> = {
   'datazapp.append_contacts': 60 * 60 * 24 * 90,
   'propertyradar.append_contacts': 60 * 60 * 24 * 90,
   'propertyradar.property_lookup': 60 * 60 * 24 * 30,
+  'mls.search_listings': 60 * 15, // 15m: a page refresh must not re-query the feed
 
   // Side effects + non-deterministic — never cache
   'twilio.send_sms': 0,
@@ -38,10 +39,10 @@ const CACHE_TTL: Record<string, number> = {
  * responses for them are sealed at rest.
  */
 export function responseContainsContacts(
-  _provider: string,
+  provider: string,
   action: string,
 ): boolean {
-  return action === 'append_contacts';
+  return action === 'append_contacts' || provider === 'mls';
 }
 
 export function defaultCacheTtlSec(provider: string, action: string): number {

@@ -265,6 +265,23 @@ describe('LeadsService', () => {
       expect(out.duplicates).toBe(1);
       expect(out.errors).toEqual([expect.stringContaining('3 Bad St')]);
     });
+
+    it('treats an address already in the account as a duplicate even when the row carries city and state', async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([
+        { canonicalAddress: '1 GOOD ST.', canonicalZip: '78701' },
+      ]);
+      prisma.lead.createMany = jest.fn().mockResolvedValue({ count: 2 });
+
+      const out = await service.importCSV(rows, 'tenant-1', 'user-1');
+
+      expect(out.duplicates).toBe(1);
+      expect(out.created).toBe(2);
+      expect(
+        prisma.lead.createMany.mock.calls[0][0].data.map(
+          (d: { canonicalAddress: string }) => d.canonicalAddress,
+        ),
+      ).toEqual(['2 Dupe St', '3 Bad St']);
+    });
   });
 
   describe('contact PII at rest', () => {
