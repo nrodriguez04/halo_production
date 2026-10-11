@@ -23,9 +23,9 @@ const envSchema = z.object({
   // liveness/readiness checks). Default matches apps/worker/src/main.ts.
   WORKER_HEALTH_PORT: z.coerce.number().default(3003),
 
-  // The worker calls /skip-trace on the api over HTTP. Both vars are
-  // required for skip-trace to be enabled in the worker; missing values
-  // cause the lead-enrichment processor to skip skip-trace gracefully.
+  // Every paid call (AI, sends by message id, enrichment, skip trace) goes
+  // through the api's /internal routes; without both, those calls fail
+  // with InternalApiNotConfiguredError.
   INTERNAL_API_BASE_URL: z.string().optional(),
   INTERNAL_API_TOKEN: z.string().optional(),
 

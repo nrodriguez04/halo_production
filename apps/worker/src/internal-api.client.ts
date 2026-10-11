@@ -164,31 +164,56 @@ export function chatCompletion(
   });
 }
 
-export function sendSms(
+export type MessageSendReceipt =
+  | {
+      channel: 'sms';
+      sid: string | null;
+      numSegments: number | null;
+      status: string | null;
+    }
+  | {
+      channel: 'email';
+      providerMessageId: string | null;
+      provider: string | null;
+    };
+
+/**
+ * Sends an approved message by id. Nothing else is sent: the api reads the
+ * recipient, body and sender from the stored message and its own config,
+ * and refuses anything that is not an approved outbound message.
+ */
+export function sendApprovedMessage(
   accountId: string,
-  input: {
-    to?: string;
-    from: string;
-    body: string;
-    variant?: 'us' | 'toll_free';
-    messageId?: string;
-  } & CostAttribution,
-): Promise<{ sid: string; numSegments: number; status: string }> {
-  return postInternal('sms/send', accountId, { ...input });
+  messageId: string,
+): Promise<MessageSendReceipt> {
+  return postInternal(
+    `messages/${encodeURIComponent(messageId)}/send`,
+    accountId,
+    {},
+  );
 }
 
-export function sendEmail(
+export interface SkipTraceStepResponse {
+  provider: string;
+  status: 'matched' | 'no_match' | 'error' | 'skipped';
+  reason?: string;
+  costUsd: number;
+  phonesFound: number;
+  emailsFound: number;
+  /** Whether a found phone / email was stored on the lead (encrypted, by the api). */
+  stored: { phone: boolean; email: boolean };
+}
+
+/** Skip-traces a lead; the api stores what it finds and returns counts only. */
+export function skipTrace(
   accountId: string,
-  input: {
-    to?: string;
-    subject: string;
-    text?: string;
-    html?: string;
-    from?: string;
-    messageId?: string;
-  } & CostAttribution,
-): Promise<{ id?: string; provider?: string } | null> {
-  return postInternal('email/send', accountId, { ...input });
+  leadId: string,
+): Promise<SkipTraceStepResponse> {
+  return postInternal<SkipTraceStepResponse>(
+    'enrichment/skip-trace',
+    accountId,
+    { leadId },
+  );
 }
 
 export interface EnrichmentStepResponse {

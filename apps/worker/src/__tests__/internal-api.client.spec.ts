@@ -3,7 +3,8 @@ import {
   InternalApiError,
   InternalApiNotConfiguredError,
   chatCompletion,
-  sendSms,
+  sendApprovedMessage,
+  skipTrace,
 } from '../internal-api.client';
 
 const ORIGINAL_ENV = process.env;
@@ -35,9 +36,9 @@ describe('worker internal-api client', () => {
 
   it('refuses to make paid calls when the internal API is not configured', async () => {
     delete process.env.INTERNAL_API_TOKEN;
-    await expect(
-      sendSms('halo-hq', { to: '+15555550100', from: '+18333622597', body: 'hi' }),
-    ).rejects.toBeInstanceOf(InternalApiNotConfiguredError);
+    await expect(sendApprovedMessage('halo-hq', 'msg_1')).rejects.toBeInstanceOf(
+      InternalApiNotConfiguredError,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -82,11 +83,7 @@ describe('worker internal-api client', () => {
 
   it('treats a non-cost 429 as an ordinary error', async () => {
     fetchMock.mockResolvedValue(jsonResponse(429, { message: 'slow down' }));
-    const err = await sendSms('halo-hq', {
-      to: '+15555550100',
-      from: '+18333622597',
-      body: 'hi',
-    }).catch((e) => e);
+    const err = await sendApprovedMessage('halo-hq', 'msg_1').catch((e) => e);
 
     expect(err).toBeInstanceOf(InternalApiError);
     expect(err).not.toBeInstanceOf(CostBlockedError);
@@ -94,19 +91,44 @@ describe('worker internal-api client', () => {
 
   it('propagates upstream failures', async () => {
     fetchMock.mockResolvedValue(jsonResponse(500, { message: 'boom' }));
-    await expect(
-      sendSms('halo-hq', { to: '+15555550100', from: '+18333622597', body: 'hi' }),
-    ).rejects.toBeInstanceOf(InternalApiError);
+    await expect(sendApprovedMessage('halo-hq', 'msg_1')).rejects.toBeInstanceOf(
+      InternalApiError,
+    );
   });
 
-  it('passes messageId through as the idempotency key for sends', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { sid: 'SM1', numSegments: 1, status: 'queued' }));
-    await sendSms('halo-hq', {
-      to: '+15555550100',
-      from: '+18333622597',
-      body: 'hi',
-      messageId: 'msg_1',
-    });
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).messageId).toBe('msg_1');
+  it('sends a message by id only: no recipient, body or sender leaves the worker', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { channel: 'sms', sid: 'SM1', numSegments: 1, status: 'queued' }),
+    );
+
+    const receipt = await sendApprovedMessage('halo-hq', 'msg_1');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://api.test/api/internal/messages/msg_1/send');
+    expect(init.headers['x-halo-account-id']).toBe('halo-hq');
+    expect(JSON.parse(init.body)).toEqual({});
+    expect(receipt).toEqual(expect.objectContaining({ channel: 'sms', sid: 'SM1' }));
+  });
+
+  it('asks the api to skip-trace a lead by id and gets counts back', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        provider: 'batch_skiptrace',
+        status: 'matched',
+        costUsd: 0.1,
+        phonesFound: 1,
+        emailsFound: 0,
+        stored: { phone: true, email: false },
+      }),
+    );
+
+    const out = await skipTrace('halo-hq', 'lead_1');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://api.test/api/internal/enrichment/skip-trace');
+    expect(init.headers.Authorization).toBe(`Bearer ${'x'.repeat(64)}`);
+    expect(init.headers['x-halo-account-id']).toBe('halo-hq');
+    expect(JSON.parse(init.body)).toEqual({ leadId: 'lead_1' });
+    expect(out.phonesFound).toBe(1);
   });
 });

@@ -9,6 +9,7 @@ import {
   IntegrationUnavailableError,
   geocode as geocodeViaApi,
   propertyLookup as propertyLookupViaApi,
+  skipTrace as skipTraceViaApi,
 } from '../internal-api.client';
 
 // Lead enrichment processor. Performs the staged enrichment funnel:
@@ -23,18 +24,24 @@ import {
 // skipped (recorded as no source record, zero cost) rather than failing the
 // whole job, matching the old hard-cap short-circuit. PropertyRadar lives
 // behind the SkipTraceService adapter and is disabled by default.
-
-interface ContactResult {
-  phone: string | null;
-  email: string | null;
-}
+//
+// The worker never sees a traced phone or email: the api stores them on the
+// lead, encrypted, and returns counts. The job metadata used to keep them in
+// plaintext.
 
 interface EnrichmentStepResult {
   sourceRecordId: string | null;
   cost: number;
 }
 
-type SkipTraceResult = ContactResult & { costUsd: number };
+/** Outcome of the skip-trace step, as persisted in the job metadata. */
+interface SkipTraceResult {
+  status: string;
+  reason?: string;
+  costUsd: number;
+  phoneFound: boolean;
+  emailFound: boolean;
+}
 
 interface LeadEnrichmentProgress {
   geocode?: EnrichmentStepResult;
@@ -146,18 +153,11 @@ export class LeadEnrichmentProcessor extends WorkerHost {
       }
 
       // Skip trace via api so cost-control's decision tree runs.
-      let contacts = progress.skipTrace;
-      if (!contacts) {
-        contacts = await this.skipTraceViaApi(
-          accountId,
-          leadId,
-          address,
-          city,
-          state,
-          zip,
-        );
-        if (this.shouldPersistSkipTrace(contacts)) {
-          progress.skipTrace = contacts;
+      let skipTrace = progress.skipTrace;
+      if (!skipTrace) {
+        skipTrace = await this.skipTraceStep(accountId, leadId);
+        if (this.shouldPersistSkipTrace(skipTrace)) {
+          progress.skipTrace = skipTrace;
           await this.persistProgress(enrichmentJob.id, 'skip_trace', progress);
         }
       }
@@ -166,9 +166,8 @@ export class LeadEnrichmentProcessor extends WorkerHost {
         leadId,
         accountId,
         enrichmentJobId: enrichmentJob.id,
-        contacts,
         totalCostUsd:
-          (geocodeResult.cost ?? 0) + (attomResult.cost ?? 0) + (contacts.costUsd ?? 0),
+          (geocodeResult.cost ?? 0) + (attomResult.cost ?? 0) + (skipTrace.costUsd ?? 0),
         progress,
       });
       if (!finalized) {
@@ -270,7 +269,6 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     leadId: string;
     accountId: string;
     enrichmentJobId: string;
-    contacts: ContactResult & { costUsd: number };
     totalCostUsd: number;
     progress: LeadEnrichmentProgress;
   }): Promise<boolean> {
@@ -367,6 +365,11 @@ export class LeadEnrichmentProcessor extends WorkerHost {
     };
   }
 
+  /**
+   * Also reads the old shape, which held the traced phone and email in
+   * plaintext: only whether they were found is carried forward, so the next
+   * write of the metadata drops them.
+   */
   private readStoredSkipTrace(value: unknown): SkipTraceResult | null {
     if (!value || Array.isArray(value) || typeof value !== 'object') {
       return null;
@@ -374,9 +377,11 @@ export class LeadEnrichmentProcessor extends WorkerHost {
 
     const raw = value as Record<string, unknown>;
     return {
-      phone: typeof raw.phone === 'string' ? raw.phone : null,
-      email: typeof raw.email === 'string' ? raw.email : null,
+      status: typeof raw.status === 'string' ? raw.status : 'matched',
+      ...(typeof raw.reason === 'string' ? { reason: raw.reason } : {}),
       costUsd: typeof raw.costUsd === 'number' ? raw.costUsd : 0,
+      phoneFound: raw.phoneFound === true || typeof raw.phone === 'string',
+      emailFound: raw.emailFound === true || typeof raw.email === 'string',
     };
   }
 
@@ -436,7 +441,7 @@ export class LeadEnrichmentProcessor extends WorkerHost {
   }
 
   private shouldPersistSkipTrace(result: SkipTraceResult): boolean {
-    return Boolean(result.phone || result.email || result.costUsd > 0);
+    return Boolean(result.phoneFound || result.emailFound || result.costUsd > 0);
   }
 
   private buildAddressQuery(
@@ -520,67 +525,41 @@ export class LeadEnrichmentProcessor extends WorkerHost {
   }
 
   /**
-   * Calls the api's `/skip-trace/append-contacts` endpoint with a service
-   * token so the cost-control decision tree (rate limit, lead score,
-   * manual approval) runs before any paid skip-trace call. The api also
-   * writes the unified IntegrationCostEvent row for the call.
-   *
-   * If the api isn't reachable or no token is configured, returns empty
-   * contacts and continues — skip-trace is best-effort.
+   * Skip trace through the api's internal route, which runs cost control
+   * (including the lead-score gate for skip trace), stores what it finds on
+   * the lead encrypted, and returns counts. A budget or score block and an
+   * unavailable provider skip the step; anything else, an auth failure
+   * included, propagates so the job fails visibly and BullMQ retries it.
+   * (This used to call the Descope-guarded /skip-trace route with the
+   * internal token, get a 401 and quietly carry on without contacts.)
    */
-  private async skipTraceViaApi(
+  private async skipTraceStep(
     accountId: string,
     leadId: string,
-    propertyAddress: string,
-    city: string | undefined,
-    state: string | undefined,
-    zip: string | undefined,
   ): Promise<SkipTraceResult> {
-    const apiBase = process.env.INTERNAL_API_BASE_URL;
-    const token = process.env.INTERNAL_API_TOKEN;
-    if (!apiBase || !token) {
-      // Skip trace stays best-effort: log and return empty so the rest of
-      // enrichment continues.
-      console.warn(
-        '[lead-enrichment] INTERNAL_API_BASE_URL / INTERNAL_API_TOKEN not configured; skipping skip-trace step',
-      );
-      return { phone: null, email: null, costUsd: 0 };
-    }
-
     try {
-      const res = await fetch(`${apiBase}/skip-trace/append-contacts`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          leadId,
-          propertyAddress,
-          city,
-          state,
-          zip,
-        }),
-      });
-      if (!res.ok) {
-        console.warn(`[lead-enrichment] skip-trace returned ${res.status}`);
-        return { phone: null, email: null, costUsd: 0 };
-      }
-      const result = (await res.json()) as {
-        provider: string;
-        status: string;
-        phones: { number: string }[];
-        emails: { email: string }[];
-        costUsd?: number;
+      const out = await skipTraceViaApi(accountId, leadId);
+      return {
+        status: out.status,
+        ...(out.reason ? { reason: out.reason } : {}),
+        costUsd: out.costUsd ?? 0,
+        phoneFound: out.phonesFound > 0,
+        emailFound: out.emailsFound > 0,
       };
-      const phone = result.phones[0]?.number ?? null;
-      const email = result.emails[0]?.email ?? null;
-      return { phone, email, costUsd: result.costUsd ?? 0 };
-    } catch (err) {
-      console.warn('[lead-enrichment] skip-trace call failed:', err);
-      // We deliberately swallow — accountId is the unused-vars dodge
-      void accountId;
-      return { phone: null, email: null, costUsd: 0 };
+    } catch (error) {
+      if (error instanceof CostBlockedError) {
+        console.warn(
+          `[lead-enrichment] skip trace skipped: ${error.reason} (cost control)`,
+        );
+        return { status: 'blocked', reason: error.reason, costUsd: 0, phoneFound: false, emailFound: false };
+      }
+      if (error instanceof IntegrationUnavailableError) {
+        console.warn(
+          `[lead-enrichment] skip trace skipped: ${error.reason} (${error.message})`,
+        );
+        return { status: 'unavailable', reason: error.reason, costUsd: 0, phoneFound: false, emailFound: false };
+      }
+      throw error;
     }
   }
 }
