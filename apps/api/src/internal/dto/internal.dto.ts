@@ -54,25 +54,6 @@ export class ChatCompletionDto extends CostAttributionDto {
   maxTokens?: number;
 }
 
-export class SendSmsDto extends CostAttributionDto {
-  /** Optional: resolved from the message's encrypted counterparty when omitted. */
-  @IsOptional() @IsString() to?: string;
-  @IsString() from!: string;
-
-  @IsString()
-  @MaxLength(1600)
-  body!: string;
-
-  @IsOptional()
-  @IsIn(['us', 'toll_free'])
-  variant?: 'us' | 'toll_free';
-
-  /** Doubles as the idempotency key so a retried job cannot double-send. */
-  @IsOptional()
-  @IsString()
-  messageId?: string;
-}
-
 /** Address parts for the enrichment lookups; the worker passes leadId in the attribution. */
 export class EnrichmentAddressDto extends CostAttributionDto {
   @IsString() @MaxLength(500) address!: string;
@@ -81,16 +62,7 @@ export class EnrichmentAddressDto extends CostAttributionDto {
   @IsOptional() @IsString() @MaxLength(20) zip?: string;
 }
 
-export class SendEmailDto extends CostAttributionDto {
-  /** Optional: resolved from the message's encrypted counterparty when omitted. */
-  @IsOptional() @IsString() to?: string;
-  @IsString() @MaxLength(500) subject!: string;
-
-  @IsOptional() @IsString() @MaxLength(200_000) text?: string;
-  @IsOptional() @IsString() @MaxLength(200_000) html?: string;
-  @IsOptional() @IsString() from?: string;
-
-  @IsOptional()
-  @IsString()
-  messageId?: string;
+/** The worker names the lead; the api reads its address and owner itself. */
+export class SkipTraceLeadDto {
+  @IsString() @MaxLength(64) leadId!: string;
 }

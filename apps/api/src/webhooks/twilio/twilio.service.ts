@@ -1,10 +1,34 @@
 import { Injectable, Logger } from '@nestjs/common';
+import {
+  isHelpKeyword,
+  isOptOutKeyword,
+  normalizeKeyword,
+  normalizePhoneNumber,
+} from '@halo/shared';
 import { PrismaService } from '../../prisma.service';
 import { AutomationService } from '../../automation/automation.service';
-import * as complianceUtils from '@halo/shared';
 import { LeadPiiService } from '../../leads/lead-pii.service';
-import { protectPhone } from '../../pii/contact-crypto';
+import { OptOutService } from '../../compliance/opt-out.service';
+import { GLOBAL_ACCOUNT_ID } from '../../control-plane/control-plane.service';
 import { counterpartyColumns } from '../../communications/message-counterparty';
+import {
+  helpReply,
+  keywordRepliesEnabled,
+  optOutConfirmation,
+} from './keyword-replies';
+
+/**
+ * Inbound replies that cannot be matched to exactly one tenant are stored
+ * here, where no tenant sees them, rather than leaking into the wrong one.
+ * Opt-outs are never only stored here: see handleOptOut.
+ */
+export const UNATTRIBUTED_ACCOUNT_ID = 'unknown';
+
+export interface InboundResult {
+  handled: 'opt_out' | 'help' | 'message';
+  /** Text to send back on the same number as TwiML, or null for none. */
+  reply: string | null;
+}
 
 @Injectable()
 export class TwilioService {
@@ -14,94 +38,46 @@ export class TwilioService {
     private prisma: PrismaService,
     private automationService: AutomationService,
     private pii: LeadPiiService,
+    private optOut: OptOutService,
   ) {}
 
-  async handleInbound(body: any) {
-    const from = body.From;
+  async handleInbound(body: any): Promise<InboundResult> {
+    const from = String(body.From ?? '');
     const to = body.To;
-    const messageBody = body.Body;
+    const messageBody = typeof body.Body === 'string' ? body.Body : '';
+
+    // Whole-message, case-insensitive keyword matches only; "I can't stop
+    // by today" is an ordinary reply, END / QUIT / REVOKE are opt-outs.
+    if (isOptOutKeyword(messageBody)) {
+      return this.handleOptOut(from, to, messageBody, body.MessageSid);
+    }
 
     const accountId = await this.resolveAccountId(to, from);
 
-    if (complianceUtils.containsStopKeywords(messageBody)) {
-      const normalizedPhone = complianceUtils.normalizePhoneNumber(from);
-
-      const protectedPhone = protectPhone(normalizedPhone);
-      const existing = await this.prisma.dNCList.findFirst({
-        where: {
-          accountId,
-          OR: [
-            { phoneHash: protectedPhone.phoneHash },
-            { phone: normalizedPhone },
-          ],
-        },
-      });
-
-      if (!existing) {
-        await this.prisma.dNCList.create({
-          data: {
-            accountId,
-            phone: normalizedPhone,
-            ...protectedPhone,
-            source: 'stop_keyword',
-            reason: 'User sent STOP keyword',
-          },
-        });
-      }
-
-      await this.prisma.message.create({
-        data: {
-          accountId,
-          channel: 'sms',
-          direction: 'inbound',
-          status: 'delivered',
-          content: messageBody,
-          ...counterpartyColumns('sms', from),
-          metadata: {
-            to,
-            twilioMessageSid: body.MessageSid,
-            handledStop: true,
-          },
-        },
-      });
-
-      return { message: 'STOP processed' };
-    }
-
-    if (complianceUtils.containsHelpKeywords(messageBody)) {
-      await this.prisma.message.create({
-        data: {
-          accountId,
-          channel: 'sms',
-          direction: 'inbound',
-          status: 'delivered',
-          content: messageBody,
-          ...counterpartyColumns('sms', from),
-          metadata: {
-            to,
-            twilioMessageSid: body.MessageSid,
-            handledHelp: true,
-          },
-        },
-      });
-
-      return { message: 'HELP processed' };
-    }
-
-    const inboundMsg = await this.prisma.message.create({
-      data: {
+    if (isHelpKeyword(messageBody)) {
+      await this.recordInbound(
         accountId,
-        channel: 'sms',
-        direction: 'inbound',
-        status: 'delivered',
-        content: messageBody,
-        ...counterpartyColumns('sms', from),
-        metadata: {
-          to,
-          twilioMessageSid: body.MessageSid,
+        from,
+        to,
+        messageBody,
+        body.MessageSid,
+        {
+          handledHelp: true,
         },
-      },
-    });
+      );
+      return {
+        handled: 'help',
+        reply: keywordRepliesEnabled() ? helpReply() : null,
+      };
+    }
+
+    const inboundMsg = await this.recordInbound(
+      accountId,
+      from,
+      to,
+      messageBody,
+      body.MessageSid,
+    );
 
     try {
       await this.automationService.attributeReply(inboundMsg.id, accountId);
@@ -111,7 +87,75 @@ export class TwilioService {
       );
     }
 
-    return { message: 'Received' };
+    return { handled: 'message', reply: null };
+  }
+
+  /**
+   * The sender number is shared by every tenant, so a STOP cannot be tied
+   * to one tenant's message. It is recorded for every tenant that has
+   * messaged this number or holds it on a lead, buyer or consent, and in
+   * the GLOBAL scope (which every tenant's DNC check reads) when none does.
+   * It used to be filed under the 'unknown' tenant, which suppressed nobody.
+   */
+  private async handleOptOut(
+    from: string,
+    to: string,
+    text: string,
+    messageSid: string,
+  ): Promise<InboundResult> {
+    const tenants = await this.findMatchingAccountIds(from, {
+      exhaustive: true,
+    });
+    const keyword = normalizeKeyword(text);
+    const recorded = await this.optOut.recordPhoneOptOut({
+      accountIds: tenants,
+      phone: from,
+      source: 'stop_keyword',
+      reason: `Replied ${keyword}`,
+    });
+
+    await this.recordInbound(
+      tenants.length === 1 ? tenants[0] : UNATTRIBUTED_ACCOUNT_ID,
+      from,
+      to,
+      text,
+      messageSid,
+      {
+        handledStop: true,
+        keyword,
+        optOutScopes: recorded.accountIds.length,
+      },
+    );
+
+    return {
+      handled: 'opt_out',
+      reply: keywordRepliesEnabled() ? optOutConfirmation() : null,
+    };
+  }
+
+  private recordInbound(
+    accountId: string,
+    from: string,
+    to: string,
+    content: string,
+    messageSid: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    return this.prisma.message.create({
+      data: {
+        accountId,
+        channel: 'sms',
+        direction: 'inbound',
+        status: 'delivered',
+        content,
+        ...counterpartyColumns('sms', from),
+        metadata: {
+          to,
+          twilioMessageSid: messageSid,
+          ...extra,
+        },
+      },
+    });
   }
 
   async handleStatus(body: any) {
@@ -148,8 +192,10 @@ export class TwilioService {
   }
 
   /**
-   * Resolve accountId by looking up the 'To' number (our Twilio number) or
-   * falling back to the most recent outbound message to the sender.
+   * The tenant an ordinary reply belongs to: the single tenant that has
+   * messaged this sender or holds it on a lead. We use a shared Twilio
+   * sender number, so a sender that matches several tenants fails closed
+   * instead of leaking the reply to whichever tenant wrote most recently.
    */
   private async resolveAccountId(
     toPhone: string,
@@ -162,36 +208,43 @@ export class TwilioService {
     }
 
     if (accountIds.length > 1) {
-      // We currently use a shared Twilio sender number, so a sender phone that
-      // matches multiple tenants must fail closed instead of leaking the reply
-      // to whichever tenant happened to write most recently.
       this.logger.warn(
-        `Ambiguous accountId for inbound Twilio message from=${fromPhone} to=${toPhone}; matched ${accountIds.length} tenants, defaulting to 'unknown'`,
+        `Ambiguous accountId for inbound Twilio message to=${toPhone}; matched ${accountIds.length} tenants, defaulting to '${UNATTRIBUTED_ACCOUNT_ID}'`,
       );
-      return 'unknown';
+      return UNATTRIBUTED_ACCOUNT_ID;
     }
 
     this.logger.warn(
-      `Could not resolve accountId for from=${fromPhone} to=${toPhone}, defaulting to 'unknown'`,
+      `Could not resolve accountId for inbound Twilio message to=${toPhone}, defaulting to '${UNATTRIBUTED_ACCOUNT_ID}'`,
     );
-    return 'unknown';
+    return UNATTRIBUTED_ACCOUNT_ID;
   }
 
-  private async findMatchingAccountIds(fromPhone: string): Promise<string[]> {
+  /**
+   * Tenants with a relationship to the sender. Attribution only needs to
+   * know whether there is exactly one (outbound messages and leads, two
+   * rows each). An opt-out needs all of them, so `exhaustive` drops the
+   * limit and adds buyers and consents.
+   */
+  private async findMatchingAccountIds(
+    fromPhone: string,
+    opts: { exhaustive?: boolean } = {},
+  ): Promise<string[]> {
     const phoneCandidates = this.buildPhoneCandidates(fromPhone);
+    if (phoneCandidates.length === 0) return [];
+    const hashes = Array.from(
+      new Set(phoneCandidates.map((phone) => this.pii.phoneHash(phone))),
+    );
+    const take = opts.exhaustive ? undefined : 2;
 
-    const [outboundMatches, leadMatches] = await Promise.all([
+    const lookups: Promise<{ accountId: string }[]>[] = [
       this.prisma.message.findMany({
         where: {
           direction: 'outbound',
           OR: [
             // Indexed blind-index match on the recipient; the JSON arm covers
             // rows the backfill has not reached and goes once it has run.
-            {
-              counterpartyHash: {
-                in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
-              },
-            },
+            { counterpartyHash: { in: hashes } },
             ...phoneCandidates.map((phone) => ({
               metadata: {
                 path: ['to'],
@@ -202,32 +255,49 @@ export class TwilioService {
         },
         select: { accountId: true },
         distinct: ['accountId'],
-        take: 2,
+        take,
       }),
       this.prisma.lead.findMany({
-        where: {
-          canonicalPhoneHash: {
-            in: phoneCandidates.map((phone) => this.pii.phoneHash(phone)),
-          },
-        },
+        where: { canonicalPhoneHash: { in: hashes } },
         select: { accountId: true },
         distinct: ['accountId'],
-        take: 2,
+        take,
       }),
-    ]);
+    ];
+    if (opts.exhaustive) {
+      lookups.push(
+        this.prisma.buyer.findMany({
+          where: { phoneHash: { in: hashes } },
+          select: { accountId: true },
+          distinct: ['accountId'],
+        }),
+        this.prisma.consent.findMany({
+          where: { phoneHash: { in: hashes } },
+          select: { accountId: true },
+          distinct: ['accountId'],
+        }),
+      );
+    }
 
+    const matches = (await Promise.all(lookups)).flat();
     return Array.from(
       new Set(
-        [...outboundMatches, ...leadMatches]
+        matches
           .map((match) => match.accountId)
-          .filter((accountId): accountId is string => !!accountId),
+          .filter(
+            (accountId): accountId is string =>
+              !!accountId &&
+              accountId !== UNATTRIBUTED_ACCOUNT_ID &&
+              accountId !== GLOBAL_ACCOUNT_ID,
+          ),
       ),
     );
   }
 
   private buildPhoneCandidates(phone: string): string[] {
     const trimmed = phone.trim();
-    const normalized = complianceUtils.normalizePhoneNumber(trimmed);
+    if (!trimmed) return [];
+    const normalized = normalizePhoneNumber(trimmed);
     return Array.from(new Set([trimmed, normalized].filter(Boolean)));
   }
 

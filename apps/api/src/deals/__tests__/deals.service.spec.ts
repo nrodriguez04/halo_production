@@ -4,7 +4,7 @@ import { DealsService } from '../deals.service';
 import { PrismaService } from '../../prisma.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { AutomationService } from '../../automation/automation.service';
-import { LeadPiiService } from '../../leads/lead-pii.service';
+import { PIIService } from '../../pii/pii.service';
 
 describe('DealsService', () => {
   let service: DealsService;
@@ -48,7 +48,7 @@ describe('DealsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: TimelineService, useValue: timelineService },
         { provide: AutomationService, useValue: automationService },
-        LeadPiiService,
+        PIIService,
       ],
     }).compile();
 

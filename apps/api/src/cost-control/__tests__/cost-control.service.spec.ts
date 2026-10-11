@@ -582,6 +582,46 @@ describe('IntegrationCostControlService', () => {
     expect(prisma.integrationCostEvent.update).toHaveBeenCalled();
   });
 
+  it('keeps a recipient quoted in a provider error out of the ledger', async () => {
+    const exec = jest.fn(async () => {
+      throw new Error(
+        "The 'To' number +15125550100 is not a valid phone number (seller@example.com)",
+      );
+    });
+
+    await expect(
+      service.checkAndCall(baseIntent({ execute: exec })),
+    ).rejects.toThrow(/not a valid phone number/);
+
+    const metadata =
+      prisma.integrationCostEvent.update.mock.calls[0][0].data.metadata;
+    expect(metadata.error).toBe(
+      "The 'To' number [phone] is not a valid phone number ([email])",
+    );
+  });
+
+  it('asks the cache to seal append_contacts responses', async () => {
+    prisma.integrationCostEvent.update.mockImplementationOnce(
+      async (args: any) => ({
+        ...args.data,
+        accountId: 'acc_1',
+        providerKey: 'batch_skiptrace',
+        action: 'append_contacts',
+        completedAt: new Date(),
+        bucketIds: [],
+      }),
+    );
+
+    await service.checkAndCall(baseIntent());
+
+    expect(cache.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerKey: 'batch_skiptrace',
+        sensitive: true,
+      }),
+    );
+  });
+
   it('checkAndCall returns cached payload without invoking adapter', async () => {
     cache.lookup.mockResolvedValueOnce({
       payload: { cachedOk: true },

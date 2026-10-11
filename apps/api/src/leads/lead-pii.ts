@@ -1,5 +1,13 @@
 import { hashEmail, hashPhone } from '@halo/shared';
-import { cleanValue, openValue, sealValue } from '../pii/contact-crypto';
+import {
+  cleanValue,
+  maskEmail,
+  maskPhone,
+  openValue,
+  sealValue,
+} from '../pii/contact-crypto';
+
+export { maskEmail, maskPhone };
 
 /**
  * Contact PII on a lead lives only as envelope ciphertext plus a blind-index
@@ -57,24 +65,14 @@ export function revealContact(row: ContactRow): Contact {
   };
 }
 
-/** `+1 512 555 0100` -> `••• ••• 0100`; anything shorter than 4 digits is fully masked. */
-export function maskPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : '•••';
-}
-
-/** `seller@example.com` -> `s•••@example.com`. */
-export function maskEmail(email: string): string {
-  const at = email.indexOf('@');
-  if (at <= 0) return '•••';
-  return `${email[0]}•••${email.slice(at)}`;
-}
-
 /**
  * Shape a lead row for an API response: the ciphertext and hash columns are
  * never sent, and `canonicalPhone` / `canonicalEmail` are populated with the
- * real values when the caller may see PII, masked otherwise. Keeps the
- * response contract the web app already uses.
+ * real values when `reveal` is set, masked otherwise. Keeps the response
+ * contract the web app already uses.
+ *
+ * Only PIIService passes `reveal: true`, after writing the audit row for
+ * the caller; everything else masks via LeadPiiService.mask.
  */
 export function presentContact<T extends ContactRow>(
   row: T,

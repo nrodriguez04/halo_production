@@ -5,33 +5,51 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { BuyerCreate, BuyerUpdate } from '@halo/shared';
+import { PIIService } from '../pii/pii.service';
+import type { PiiViewer } from '../auth/pii-access';
+import { protectBuyerContact } from './buyer-pii';
 
 @Injectable()
 export class BuyersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pii: PIIService,
+  ) {}
 
-  async create(data: BuyerCreate) {
-    return this.prisma.buyer.create({
-      data,
+  // Buyer email / phone are stored only as ciphertext + blind index. Every
+  // method that returns buyers presents them through PIIService: masked, or
+  // revealed and audited for a viewer with pii:read.
+
+  async create(data: BuyerCreate, viewer?: PiiViewer | null) {
+    const { email, phone, ...rest } = data;
+    const buyer = await this.prisma.buyer.create({
+      data: { ...rest, ...protectBuyerContact({ email, phone }) },
     });
+    return this.pii.presentBuyer(buyer, viewer);
   }
 
   async findAll(
     accountId: string,
     pagination?: { skip?: number; take?: number },
+    viewer?: PiiViewer | null,
   ) {
     const skip = pagination?.skip ?? 0;
     const take = pagination?.take ?? 50;
 
-    return this.prisma.buyer.findMany({
+    const buyers = await this.prisma.buyer.findMany({
       where: { accountId },
       skip,
       take,
       orderBy: { createdAt: 'desc' },
     });
+    return this.pii.presentBuyers(buyers, viewer);
   }
 
-  async findOne(id: string, accountId: string) {
+  async findOne(id: string, accountId: string, viewer?: PiiViewer | null) {
+    return this.pii.presentBuyer(await this.loadOwned(id, accountId), viewer);
+  }
+
+  private async loadOwned(id: string, accountId: string) {
     const buyer = await this.prisma.buyer.findFirst({
       where: { id, accountId },
     });
@@ -43,26 +61,45 @@ export class BuyersService {
     return buyer;
   }
 
-  async update(id: string, accountId: string, data: BuyerUpdate) {
+  async update(
+    id: string,
+    accountId: string,
+    data: BuyerUpdate,
+    viewer?: PiiViewer | null,
+  ) {
     if (Object.prototype.hasOwnProperty.call(data, 'accountId')) {
       throw new BadRequestException('accountId cannot be updated');
     }
 
-    await this.findOne(id, accountId);
-    return this.prisma.buyer.update({
+    await this.loadOwned(id, accountId);
+    const { email, phone, ...rest } = data;
+    const updated = await this.prisma.buyer.update({
       where: { id },
-      data,
+      data: {
+        ...rest,
+        // Only the contact fields present in the request are touched.
+        ...protectBuyerContact({
+          ...('email' in data ? { email: email ?? null } : {}),
+          ...('phone' in data ? { phone: phone ?? null } : {}),
+        }),
+      },
     });
+    return this.pii.presentBuyer(updated, viewer);
   }
 
   async remove(id: string, accountId: string) {
-    await this.findOne(id, accountId);
-    return this.prisma.buyer.delete({
+    await this.loadOwned(id, accountId);
+    const removed = await this.prisma.buyer.delete({
       where: { id },
     });
+    return this.pii.presentBuyer(removed);
   }
 
-  async matchBuyers(dealId: string, accountId: string) {
+  async matchBuyers(
+    dealId: string,
+    accountId: string,
+    viewer?: PiiViewer | null,
+  ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
       include: {
@@ -115,6 +152,6 @@ export class BuyersService {
       return true;
     });
 
-    return matches;
+    return this.pii.presentBuyers(matches, viewer);
   }
 }

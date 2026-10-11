@@ -29,6 +29,18 @@ const envSchema = z.object({
   SENDGRID_API_KEY: z.string().optional(),
   SENDGRID_FROM_EMAIL: z.string().optional(),
   USE_SENDGRID: z.enum(['true', 'false']).optional(),
+
+  // Messaging compliance. Email refuses to send without a postal address,
+  // a public URL for the unsubscribe link and a sender (CAN-SPAM); SMS
+  // keyword replies use the brand name and help contact (CTIA).
+  // SMS_KEYWORD_REPLIES=provider leaves STOP/HELP confirmations to Twilio
+  // Advanced Opt-Out; the opt-out is recorded either way.
+  PUBLIC_API_URL: z.string().url().optional(),
+  EMAIL_FROM: z.string().optional(),
+  EMAIL_POSTAL_ADDRESS: z.string().optional(),
+  MESSAGING_BRAND_NAME: z.string().optional(),
+  MESSAGING_HELP_CONTACT: z.string().optional(),
+  SMS_KEYWORD_REPLIES: z.enum(['app', 'provider']).default('app'),
   DOCUSIGN_CONNECT_SECRET: z.string().optional(),
 
   ATTOM_API_KEY: z.string().optional(),

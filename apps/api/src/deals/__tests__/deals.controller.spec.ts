@@ -25,7 +25,7 @@ describe('DealsController', () => {
         stage: 'new',
       }),
       'user-1',
-      { revealPii: false },
+      { viewer: { accountId: '', userId: null, canReveal: false } },
     );
   });
 });

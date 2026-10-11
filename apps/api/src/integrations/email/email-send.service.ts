@@ -20,6 +20,8 @@ export interface SendEmailInput {
   subject: string;
   text?: string;
   html?: string;
+  /** Extra headers, e.g. List-Unsubscribe / List-Unsubscribe-Post. */
+  headers?: Record<string, string>;
   messageId?: string;
 }
 
@@ -114,6 +116,7 @@ export class EmailSendService {
         from: { email: from },
         subject: input.subject,
         content,
+        ...(input.headers ? { headers: input.headers } : {}),
         ...(input.messageId
           ? { custom_args: { halo_message_id: input.messageId } }
           : {}),
@@ -152,6 +155,7 @@ export class EmailSendService {
         subject: input.subject,
         text: input.text,
         html: input.html,
+        ...(input.headers ? { headers: input.headers } : {}),
       }),
     });
     if (!res.ok) {
@@ -168,6 +172,7 @@ export class EmailSendService {
       subject: input.subject,
       text: input.text,
       html: input.html,
+      headers: input.headers,
     });
     return { messageId: result.messageId, provider: 'smtp' };
   }

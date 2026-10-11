@@ -13,7 +13,8 @@ import {
 } from '@halo/shared';
 import { TimelineService } from '../timeline/timeline.service';
 import { AutomationService } from '../automation/automation.service';
-import { LeadPiiService } from '../leads/lead-pii.service';
+import { PIIService } from '../pii/pii.service';
+import type { PiiViewer } from '../auth/pii-access';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 
 @Injectable()
@@ -24,22 +25,34 @@ export class DealsService {
     private prisma: PrismaService,
     private timelineService: TimelineService,
     private automationService: AutomationService,
-    private pii: LeadPiiService,
+    private pii: PIIService,
   ) {}
 
-  /** Deal rows carry the lead relation; shape its contact fields for the caller. */
-  private presentDeal<T extends { lead?: Record<string, unknown> | null }>(
-    deal: T,
-    revealPii: boolean,
-  ) {
-    if (!deal.lead) return deal;
-    return { ...deal, lead: this.pii.present(deal.lead as any, revealPii) };
+  /**
+   * Deal rows carry the lead relation; shape its contact fields for the
+   * caller (masked, or revealed and audited via PIIService). One call per
+   * response so a list reveal is a single audit row.
+   */
+  private async presentDeals<
+    T extends { lead?: Record<string, unknown> | null },
+  >(deals: T[], viewer?: PiiViewer | null) {
+    const leads = deals.map((d) => d.lead).filter((l) => !!l);
+    const presented = await this.pii.presentLeads(leads as any[], viewer);
+    const byLead = new Map(leads.map((l, i) => [l, presented[i]]));
+    return deals.map((d) => (d.lead ? { ...d, lead: byLead.get(d.lead) } : d));
+  }
+
+  private async presentDeal<
+    T extends { lead?: Record<string, unknown> | null },
+  >(deal: T, viewer?: PiiViewer | null) {
+    const [out] = await this.presentDeals([deal], viewer);
+    return out;
   }
 
   async create(
     data: DealCreate,
     actorId: string | null = null,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     if (data.leadId) {
       const lead = await this.prisma.lead.findFirst({
@@ -90,14 +103,14 @@ export class DealsService {
       actorType: actorId ? TimelineActorType.user : TimelineActorType.system,
     });
 
-    return this.presentDeal(deal, opts.revealPii ?? false);
+    return this.presentDeal(deal, opts.viewer);
   }
 
   async findAll(
     accountId: string,
     stage?: string,
     pagination?: { skip?: number; take?: number },
-    revealPii = false,
+    viewer: PiiViewer | null = null,
   ) {
     const where: any = { accountId };
     if (stage) {
@@ -119,13 +132,13 @@ export class DealsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return deals.map((d) => this.presentDeal(d, revealPii));
+    return this.presentDeals(deals, viewer);
   }
 
   async findOne(
     id: string,
     accountId: string,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id, accountId },
@@ -142,14 +155,14 @@ export class DealsService {
       throw new NotFoundException(`Deal with ID ${id} not found`);
     }
 
-    return this.presentDeal(deal, opts.revealPii ?? false);
+    return this.presentDeal(deal, opts.viewer);
   }
 
   async update(
     id: string,
     accountId: string,
     data: DealUpdate,
-    opts: { revealPii?: boolean } = {},
+    opts: { viewer?: PiiViewer | null } = {},
   ) {
     if (data.accountId !== undefined) {
       throw new BadRequestException(
@@ -204,7 +217,7 @@ export class DealsService {
         contracts: true,
       },
     });
-    return this.presentDeal(updated, opts.revealPii ?? false);
+    return this.presentDeal(updated, opts.viewer);
   }
 
   async updateStage(

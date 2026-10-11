@@ -101,6 +101,23 @@ describe('EmailSendService', () => {
         provider: 'smtp',
       });
     });
+
+    it('passes extra headers to SMTP and Resend', async () => {
+      const headers = { 'List-Unsubscribe': '<https://api.example/u/t>' };
+
+      await service.sendEmail({ ...input, headers }, ctx);
+      expect(sendMail.mock.calls[0][0].headers).toEqual(headers);
+
+      process.env.RESEND_API_KEY = 're_x';
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: 're-2' }),
+      });
+      await service.sendEmail({ ...input, headers }, ctx);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).headers).toEqual(
+        headers,
+      );
+    });
   });
 
   describe('SendGrid adapter', () => {
@@ -138,6 +155,25 @@ describe('EmailSendService', () => {
         ],
         custom_args: { halo_message_id: 'msg-1' },
       });
+    });
+
+    it('passes List-Unsubscribe headers through to SendGrid', async () => {
+      secrets.resolve.mockResolvedValue('SG.key');
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 202,
+        headers: { get: () => 'sg-2' },
+      });
+      const headers = {
+        'List-Unsubscribe': '<https://api.example/api/unsubscribe/t>',
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      };
+
+      await service.sendEmail({ ...input, headers }, ctx);
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).headers).toEqual(
+        headers,
+      );
     });
 
     it('fails closed as not-configured when no key resolves', async () => {

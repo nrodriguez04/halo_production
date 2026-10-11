@@ -7,7 +7,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { PropertyRadarService } from './propertyradar.service';
+import {
+  PropertyRadarService,
+  maskContactsResponse,
+} from './propertyradar.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../../auth/decorators';
 
@@ -55,17 +58,28 @@ export class PropertyRadarController {
     });
   }
 
+  /**
+   * Masked: this route is not tied to a lead, so there is no audited reveal
+   * path for it. Contacts reach a lead (encrypted, revealable with pii:read)
+   * through skip-trace.
+   */
   @Get('properties/:radarId/contacts')
   async appendContacts(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
     @Param('radarId') radarId: string,
   ) {
-    return this.service.appendContacts(radarId, {
+    const out = await this.service.appendContacts(radarId, {
       accountId,
       actor: 'user',
       userId,
     });
+    return out
+      ? {
+          sourceRecordId: out.sourceRecordId,
+          data: maskContactsResponse(out.data),
+        }
+      : null;
   }
 
   @Get('properties/:radarId/transactions')

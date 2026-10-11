@@ -33,6 +33,17 @@ const CACHE_TTL: Record<string, number> = {
   'openai.chat_completion.gpt-4-turbo': 0,
 };
 
+/**
+ * Actions whose responses carry contact PII (phones, emails). Cached
+ * responses for them are sealed at rest.
+ */
+export function responseContainsContacts(
+  _provider: string,
+  action: string,
+): boolean {
+  return action === 'append_contacts';
+}
+
 export function defaultCacheTtlSec(provider: string, action: string): number {
   const key = `${provider}.${action}`;
   return CACHE_TTL[key] ?? DEFAULT_TTL_SEC;

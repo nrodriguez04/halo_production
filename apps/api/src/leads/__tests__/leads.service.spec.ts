@@ -4,6 +4,7 @@ import { LeadsService } from '../leads.service';
 import { PrismaService } from '../../prisma.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { LeadPiiService } from '../lead-pii.service';
+import { PIIService } from '../../pii/pii.service';
 import { hashEmail, hashPhone } from '@halo/shared';
 
 describe('LeadsService', () => {
@@ -48,6 +49,7 @@ describe('LeadsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: TimelineService, useValue: { appendEvent: jest.fn() } },
         LeadPiiService,
+        PIIService,
       ],
     }).compile();
 
@@ -297,6 +299,38 @@ describe('LeadsService', () => {
         }),
       );
       expect(data.canonicalEmailEnc).toEqual(expect.any(String));
+    });
+
+    it('findOne reveals contacts only to a pii:read viewer, and audits it', async () => {
+      const stored = {
+        id: 'lead-1',
+        accountId: 'tenant-1',
+        ...new LeadPiiService().protect({
+          phone: '+15125550100',
+          email: 'seller@example.com',
+        }),
+      };
+      prisma.lead.findFirst.mockResolvedValue(stored);
+      prisma.auditLog.create.mockResolvedValue({});
+
+      const masked = await service.findOne('lead-1', 'tenant-1', {
+        viewer: { accountId: 'tenant-1', userId: 'u1', canReveal: false },
+      });
+      expect(masked.canonicalPhone).toBe('••• ••• 0100');
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
+
+      const revealed = await service.findOne('lead-1', 'tenant-1', {
+        viewer: { accountId: 'tenant-1', userId: 'u2', canReveal: true },
+      });
+      expect(revealed.canonicalPhone).toBe('+15125550100');
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          accountId: 'tenant-1',
+          userId: 'u2',
+          action: 'pii.reveal',
+          resource: 'lead:lead-1',
+        }),
+      });
     });
 
     it('update protects only the contact fields that were sent', async () => {

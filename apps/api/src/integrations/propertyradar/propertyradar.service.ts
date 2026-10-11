@@ -3,7 +3,11 @@ import { PrismaService } from '../../prisma.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
-import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
+import type {
+  CostContext,
+  CostIntentHints,
+} from '../../cost-control/dto/cost-intent.dto';
+import { maskEmail, maskPhone, sealJson } from '../../pii/contact-crypto';
 import * as crypto from 'crypto';
 
 // PropertyRadar adapter. The provider is registered with `enabled=false` by
@@ -132,19 +136,34 @@ export class PropertyRadarService {
     });
   }
 
-  async appendContacts(radarId: string, ctx: CostContext) {
-    return this.run('append_contacts', { radarId }, ctx, async () => {
-      const data = await this.request<PropertyRadarSkipTraceResponse>(
-        'GET',
-        `/properties/${radarId}/contacts`,
-      );
-      const sourceRecord = await this.storeSourceRecord(
-        `/properties/${radarId}/contacts`,
-        { radarId },
-        data,
-      );
-      return { data, sourceRecordId: sourceRecord.id };
-    });
+  /**
+   * The contact payload is returned in memory for the skip-trace adapter to
+   * encrypt onto the lead; the provenance copy in source_records is sealed,
+   * with only counts in the clear. It used to be stored as raw JSON.
+   */
+  async appendContacts(
+    radarId: string,
+    ctx: CostContext,
+    hints?: Pick<CostIntentHints, 'leadScore' | 'workflow'>,
+  ) {
+    return this.run(
+      'append_contacts',
+      { radarId },
+      ctx,
+      async () => {
+        const data = await this.request<PropertyRadarSkipTraceResponse>(
+          'GET',
+          `/properties/${radarId}/contacts`,
+        );
+        const sourceRecord = await this.storeSourceRecord(
+          `/properties/${radarId}/contacts`,
+          { radarId },
+          sealContactsResponse(data, radarId),
+        );
+        return { data, sourceRecordId: sourceRecord.id };
+      },
+      hints,
+    );
   }
 
   async getTransactionHistory(radarId: string, ctx: CostContext) {
@@ -194,6 +213,7 @@ export class PropertyRadarService {
       Zip?: string;
     }>,
     ctx: CostContext,
+    hints?: Pick<CostIntentHints, 'leadScore' | 'workflow'>,
   ) {
     return this.run(
       'import',
@@ -210,6 +230,7 @@ export class PropertyRadarService {
         );
         return { data, sourceRecordId: sourceRecord.id };
       },
+      hints,
     );
   }
 
@@ -220,6 +241,7 @@ export class PropertyRadarService {
     payload: Record<string, unknown>,
     ctx: CostContext,
     exec: () => Promise<T>,
+    hints?: CostIntentHints,
   ): Promise<T | null> {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('propertyradar');
@@ -236,6 +258,7 @@ export class PropertyRadarService {
         action,
         payload,
         context: ctx,
+        hints,
         execute: exec,
       },
     );
@@ -310,6 +333,36 @@ export class PropertyRadarService {
       },
     });
   }
+}
+
+/** Provenance copy of a contacts response: sealed, with counts in the clear. */
+export function sealContactsResponse(
+  data: PropertyRadarSkipTraceResponse | null | undefined,
+  radarId: string,
+): Record<string, unknown> {
+  return sealJson(data ?? null, {
+    RadarID: data?.RadarID ?? radarId,
+    phoneCount: data?.Phones?.length ?? 0,
+    emailCount: data?.Emails?.length ?? 0,
+  });
+}
+
+/** A contacts response as a caller may see it: numbers and addresses masked. */
+export function maskContactsResponse(
+  data: PropertyRadarSkipTraceResponse | null | undefined,
+): PropertyRadarSkipTraceResponse | null {
+  if (!data) return null;
+  return {
+    ...data,
+    Phones: (data.Phones ?? []).map((p) => ({
+      ...p,
+      Number: p.Number ? maskPhone(p.Number) : p.Number,
+    })),
+    Emails: (data.Emails ?? []).map((e) => ({
+      ...e,
+      Address: e.Address ? maskEmail(e.Address) : e.Address,
+    })),
+  };
 }
 
 function sleep(ms: number): Promise<void> {

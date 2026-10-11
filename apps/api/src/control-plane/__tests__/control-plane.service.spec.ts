@@ -71,6 +71,20 @@ describe('ControlPlaneService', () => {
       expect(status.enabled).toBe(true);
     });
 
+    it('on the send path, reads a missing row as everything off and creates nothing', async () => {
+      stub(null);
+      const status = await service.getStatus('brand-new', { provision: false });
+
+      expect(prisma.controlPlane.create).not.toHaveBeenCalled();
+      expect(status).toEqual(
+        expect.objectContaining({
+          enabled: false,
+          smsEnabled: false,
+          emailEnabled: false,
+        }),
+      );
+    });
+
     it('writes updates against the caller tenant only', async () => {
       await service.updateStatus('tenant-a', { smsEnabled: false }, 'user-1');
       expect(prisma.controlPlane.upsert).toHaveBeenCalledWith(

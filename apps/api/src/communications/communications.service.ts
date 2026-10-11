@@ -18,6 +18,7 @@ import { LeadPiiService } from '../leads/lead-pii.service';
 import {
   counterpartyColumns,
   messageCounterparty,
+  presentMessage,
   recipientFromMetadata,
   stripRecipientKeys,
 } from './message-counterparty';
@@ -78,6 +79,8 @@ export class CommunicationsService {
         isDnc: compliance.isDnc,
         timezone: compliance.timezone,
         localHour,
+        quietHoursStart: compliance.quietHoursStart,
+        quietHoursEnd: compliance.quietHoursEnd,
         sideEffectsEnabled: controlPlane.enabled,
         messagingEnabled: channelEnabled,
       });
@@ -111,7 +114,7 @@ export class CommunicationsService {
       actorType: TimelineActorType.user,
     });
 
-    return message;
+    return presentMessage(message);
   }
 
   async findAll(
@@ -127,15 +130,21 @@ export class CommunicationsService {
     const skip = pagination?.skip ?? 0;
     const take = pagination?.take ?? 50;
 
-    return this.prisma.message.findMany({
+    const messages = await this.prisma.message.findMany({
       where,
       skip,
       take,
       orderBy: { createdAt: 'desc' },
     });
+    return messages.map(presentMessage);
   }
 
   async findOne(id: string, accountId: string) {
+    return presentMessage(await this.loadOwned(id, accountId));
+  }
+
+  /** Raw row, counterparty columns included, for internal use only. */
+  private async loadOwned(id: string, accountId: string) {
     const message = await this.prisma.message.findFirst({
       where: { id, accountId },
     });
@@ -153,17 +162,24 @@ export class CommunicationsService {
     userId: string,
     queueService?: any,
   ) {
-    const message = await this.findOne(id, accountId);
+    const message = await this.loadOwned(id, accountId);
 
     if (message.status !== 'pending_approval') {
       throw new BadRequestException('Message is not pending approval');
     }
 
+    // Approval is what authorises a send, and only outbound messages are
+    // ever sent.
+    if (message.direction !== 'outbound') {
+      throw new BadRequestException('Only outbound messages can be approved');
+    }
+
     // A provider receipt means this message was already dispatched once.
     // Whatever put it back into pending_approval, approving it again would
     // send a second copy.
-    const priorReceipt = (message.metadata as Record<string, unknown> | null)
-      ?.twilioMessageSid;
+    const metadata = message.metadata as Record<string, unknown> | null;
+    const priorReceipt =
+      metadata?.twilioMessageSid ?? metadata?.providerMessageId;
     if (typeof priorReceipt === 'string' && priorReceipt.length > 0) {
       throw new BadRequestException(
         'Message was already dispatched to the provider',
@@ -193,6 +209,8 @@ export class CommunicationsService {
         isDnc: compliance.isDnc,
         timezone: compliance.timezone,
         localHour: compliance.localHour,
+        quietHoursStart: compliance.quietHoursStart,
+        quietHoursEnd: compliance.quietHoursEnd,
         sideEffectsEnabled: controlPlane.enabled,
         messagingEnabled:
           message.channel === 'sms'
@@ -234,11 +252,11 @@ export class CommunicationsService {
       actorType: TimelineActorType.user,
     });
 
-    return updated;
+    return presentMessage(updated);
   }
 
   async reject(id: string, accountId: string, userId: string, reason?: string) {
-    const existing = await this.findOne(id, accountId);
+    const existing = await this.loadOwned(id, accountId);
     const rejected = await this.prisma.message.update({
       where: { id },
       data: {
@@ -262,7 +280,7 @@ export class CommunicationsService {
       actorType: TimelineActorType.user,
     });
 
-    return rejected;
+    return presentMessage(rejected);
   }
 
   /**
