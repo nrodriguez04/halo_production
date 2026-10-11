@@ -129,6 +129,13 @@ services:
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Messaging compliance: email is refused until the first three are set.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.haloacquisitions.com/api}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_POSTAL_ADDRESS: ${EMAIL_POSTAL_ADDRESS:-}
+      MESSAGING_BRAND_NAME: ${MESSAGING_BRAND_NAME:-}
+      MESSAGING_HELP_CONTACT: ${MESSAGING_HELP_CONTACT:-}
+      SMS_KEYWORD_REPLIES: ${SMS_KEYWORD_REPLIES:-app}
       USE_SENDGRID: ${USE_SENDGRID:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
@@ -221,9 +228,8 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       OPENAI_DAILY_COST_CAP: ${OPENAI_DAILY_COST_CAP:-5}
 
-      # Used to address outbound SMS; the send itself goes through the api.
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
-
+      # No TWILIO_PHONE_NUMBER: the api sends approved messages by id and
+      # owns the sender number.
 
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3003/ || exit 1"]

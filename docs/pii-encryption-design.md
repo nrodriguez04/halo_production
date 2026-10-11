@@ -16,8 +16,10 @@ Rollout tracker:
 | leads: drop plaintext columns, present/mask on read, hash-based dedupe | #95 |
 | dnc_list + consents: columns, dual-write, backfill | #96 |
 | messages: encrypted counterparty, recipients resolved server-side, worker sends by id | #97 |
-| dnc_list + consents: guarded drop of plaintext, index-only lookups | #98 |
-| payload scrubbing | **verified nothing to scrub** — see below |
+| dnc_list + consents: guarded drop of plaintext, index-only lookups | messaging-compliance PR (2026-10-10) |
+| payload scrubbing | ~~verified nothing to scrub~~ **reopened 2026-10-10**, see below |
+| buyers: encrypted contact columns, guarded drop of plaintext | messaging-compliance PR (2026-10-10) |
+| unmasked reads audited through `PIIService` (`pii.reveal` audit rows) | messaging-compliance PR (2026-10-10) |
 
 ### Payload audit (2026-09-18)
 
@@ -28,6 +30,36 @@ Checked every place a contact value could be persisted outside the tables above:
 - Timeline `payloadJson` and audit `details` — lifecycle `from`/`to` are stage names, not addresses; no writer includes a phone or email.
 
 So the scrubbing step in the original plan is closed with no code change.
+
+### Payload audit, corrected (2026-10-10)
+
+The audit above missed several plaintext copies of contacts. Each is now
+fixed, and `npm run db:backfill-pii` cleans existing rows:
+
+- `cached_provider_responses`: skip-trace (`append_contacts`) responses
+  *are* cached, for 90 days, phones and emails included. They are now
+  written sealed (`sealJson`) and opened on a cache hit.
+- `source_records`: PropertyRadar contact responses were stored raw. They
+  are sealed, with only RadarID and counts in the clear.
+- `lead_enrichment_jobs.metadata.skipTrace`: the worker persisted the
+  traced phone and email. It now stores found / not-found flags only; the
+  backfill seals what was there.
+- `integration_cost_events.metadata.error` and send-failure timeline
+  payloads: provider errors quote the recipient (Twilio: "The 'To' number
+  +1... is not a valid phone number"). Error text is passed through
+  `redactContactDetails` before it is written.
+- API responses: `/skip-trace/append-contacts` returned raw contacts and
+  the provider payload to any tenant user, and PropertyRadar's contacts
+  route returned them too. Both return masked values now; full values are
+  only revealed on the lead, through `PIIService`, which writes a
+  `pii.reveal` audit row (and masks if it cannot).
+
+Deploy order for the 2026-10-10 migrations: `20261010120000_contact_pii_columns`
+(additive), then `npm run db:backfill-pii`, then
+`20261010120100_drop_plaintext_contacts`, which refuses to run while any
+plaintext remains. If `migrate deploy` stops on it, run the backfill,
+`npx prisma migrate resolve --rolled-back 20261010120100_drop_plaintext_contacts`,
+and deploy again.
 
 ## Where we are
 
@@ -103,7 +135,7 @@ addresses). Only worth it if a policy or contract requires it.
    enrichment, `mergeLeads`) sets ciphertext + hash *and* the plaintext column.
    Read path prefers ciphertext when present, falls back to plaintext.
    Ship, run for a release.
-3. **Backfill**: idempotent batch job (`prisma/scripts/backfill-lead-pii.ts`)
+3. **Backfill**: idempotent batch job (`prisma/scripts/backfill-pii.ts`)
    encrypts and hashes rows whose `*Enc` is null. Safe to re-run.
 4. **Cut lookups over**: Twilio inbound, dedupe, CSV matching, DNC and DocuSign
    read via the accessor / hash columns. Tests for each path.
