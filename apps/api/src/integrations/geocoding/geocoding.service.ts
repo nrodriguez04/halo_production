@@ -5,6 +5,7 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import * as crypto from 'crypto';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 
 interface GeocodingResponse {
   /** Present on REQUEST_DENIED / OVER_QUERY_LIMIT; explains why. */
@@ -29,13 +30,18 @@ export interface GeocodingResult {
 @Injectable()
 export class GeocodingService {
   private readonly logger = new Logger(GeocodingService.name);
-  private readonly apiKey = process.env.GOOGLE_GEOCODING_API_KEY || '';
 
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
     private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
   ) {}
+
+  /** Resolved per call: a key saved on the Integrations page wins over env. */
+  private apiKey(): Promise<string | null> {
+    return this.secrets.resolve('google_geocoding', 'GOOGLE_GEOCODING_API_KEY');
+  }
 
   async geocode(
     address: string,
@@ -67,7 +73,7 @@ export class GeocodingService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('google_geocoding');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       throw IntegrationUnavailableException.notConfigured(
         'google_geocoding',
         'GOOGLE_GEOCODING_API_KEY',
@@ -90,7 +96,7 @@ export class GeocodingService {
         const url = 'https://maps.googleapis.com/maps/api/geocode/json';
         const params = new URLSearchParams({
           address: query,
-          key: this.apiKey,
+          key: (await this.apiKey()) ?? '',
         });
         const response = await fetch(`${url}?${params.toString()}`);
         if (!response.ok)
@@ -135,7 +141,7 @@ export class GeocodingService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('google_geocoding');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       throw IntegrationUnavailableException.notConfigured(
         'google_geocoding',
         'GOOGLE_GEOCODING_API_KEY',
@@ -154,7 +160,7 @@ export class GeocodingService {
         const url = 'https://maps.googleapis.com/maps/api/geocode/json';
         const params = new URLSearchParams({
           latlng: `${lat},${lng}`,
-          key: this.apiKey,
+          key: (await this.apiKey()) ?? '',
         });
         const response = await fetch(`${url}?${params.toString()}`);
         const data = (await response.json()) as GeocodingResponse;

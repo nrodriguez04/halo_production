@@ -54,7 +54,13 @@ describe('AnthropicService', () => {
         };
       }),
     };
-    service = new AnthropicService(costControl as any);
+    // Like the real resolver: the store first, then env.
+    const secrets = {
+      resolve: jest.fn(
+        async (_p: string, key: string) => process.env[key] || null,
+      ),
+    };
+    service = new AnthropicService(costControl as any, secrets as any);
   });
 
   it('routes through cost control with the provider and per-model action', async () => {

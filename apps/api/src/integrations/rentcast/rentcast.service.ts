@@ -4,6 +4,7 @@ import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 
 export interface RentCastListing {
   id: string;
@@ -51,13 +52,18 @@ export interface RentCastValueEstimate {
 export class RentCastService {
   private readonly logger = new Logger(RentCastService.name);
   private readonly baseUrl = 'https://api.rentcast.io/v1';
-  private readonly apiKey = process.env.RENTCAST_API_KEY || '';
 
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
     private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
   ) {}
+
+  /** Resolved per call: a key saved on the Integrations page wins over env. */
+  private apiKey(): Promise<string | null> {
+    return this.secrets.resolve('rentcast', 'RENTCAST_API_KEY');
+  }
 
   async getListings(
     city: string,
@@ -67,7 +73,7 @@ export class RentCastService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('rentcast');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       throw IntegrationUnavailableException.notConfigured(
         'rentcast',
         'RENTCAST_API_KEY',
@@ -90,7 +96,10 @@ export class RentCastService {
           limit: '50',
         });
         const res = await fetch(`${this.baseUrl}/listings/sale?${params}`, {
-          headers: { 'X-Api-Key': this.apiKey, Accept: 'application/json' },
+          headers: {
+            'X-Api-Key': (await this.apiKey()) ?? '',
+            Accept: 'application/json',
+          },
         });
         if (!res.ok) {
           this.logger.error(
@@ -111,7 +120,7 @@ export class RentCastService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('rentcast');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       throw IntegrationUnavailableException.notConfigured(
         'rentcast',
         'RENTCAST_API_KEY',
@@ -129,7 +138,10 @@ export class RentCastService {
       execute: async () => {
         const params = new URLSearchParams({ address });
         const res = await fetch(`${this.baseUrl}/properties?${params}`, {
-          headers: { 'X-Api-Key': this.apiKey, Accept: 'application/json' },
+          headers: {
+            'X-Api-Key': (await this.apiKey()) ?? '',
+            Accept: 'application/json',
+          },
         });
         if (!res.ok) return null;
         const data = await res.json();
@@ -147,7 +159,7 @@ export class RentCastService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('rentcast');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       throw IntegrationUnavailableException.notConfigured(
         'rentcast',
         'RENTCAST_API_KEY',
@@ -165,7 +177,10 @@ export class RentCastService {
       execute: async () => {
         const params = new URLSearchParams({ address });
         const res = await fetch(`${this.baseUrl}/avm/value?${params}`, {
-          headers: { 'X-Api-Key': this.apiKey, Accept: 'application/json' },
+          headers: {
+            'X-Api-Key': (await this.apiKey()) ?? '',
+            Accept: 'application/json',
+          },
         });
         if (!res.ok) return null;
         return (await res.json()) as RentCastValueEstimate;

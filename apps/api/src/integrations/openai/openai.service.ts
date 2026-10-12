@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 
 // Cost-aware OpenAI adapter. Both api routes and worker processors call into
 // this single service so every chat completion is recorded in
@@ -35,22 +36,28 @@ export interface ChatCompletionResult {
 @Injectable()
 export class OpenAIService {
   private readonly logger = new Logger(OpenAIService.name);
-  private _client: OpenAI | null = null;
+  /** One SDK client per key value, so a key changed on the Integrations page takes effect at once. */
+  private readonly clients = new Map<string, OpenAI>();
 
-  constructor(private costControl: IntegrationCostControlService) {}
+  constructor(
+    private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
+  ) {}
 
-  private get client(): OpenAI {
-    if (!this._client) {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        throw IntegrationUnavailableException.notConfigured(
-          'openai',
-          'OPENAI_API_KEY',
-        );
-      }
-      this._client = new OpenAI({ apiKey });
+  private async client(): Promise<OpenAI> {
+    const apiKey = await this.secrets.resolve('openai', 'OPENAI_API_KEY');
+    if (!apiKey) {
+      throw IntegrationUnavailableException.notConfigured(
+        'openai',
+        'OPENAI_API_KEY',
+      );
     }
-    return this._client;
+    let client = this.clients.get(apiKey);
+    if (!client) {
+      client = new OpenAI({ apiKey });
+      this.clients.set(apiKey, client);
+    }
+    return client;
   }
 
   async chatCompletion(
@@ -58,6 +65,8 @@ export class OpenAIService {
     ctx: CostContext,
   ): Promise<ChatCompletionResult | null> {
     const action = `chat_completion.${input.model}`;
+    // A missing key fails here, before any budget is reserved.
+    const client = await this.client();
     const out = await this.costControl.checkAndCall<
       ChatCompletionInput & { tokensIn: number; tokensOut: number },
       ChatCompletionResult
@@ -73,25 +82,62 @@ export class OpenAIService {
       },
       context: ctx,
       execute: async () => {
-        const completion = await this.client.chat.completions.create({
-          model: input.model,
-          messages: input.messages,
-          temperature: input.temperature,
-          max_tokens: input.maxTokens,
-        });
-        return {
-          content: completion.choices[0]?.message?.content ?? '',
-          tokensIn: completion.usage?.prompt_tokens ?? 0,
-          tokensOut: completion.usage?.completion_tokens ?? 0,
-          model: completion.model,
-          raw: completion,
-        };
+        try {
+          const completion = await client.chat.completions.create({
+            model: input.model,
+            messages: input.messages,
+            temperature: input.temperature,
+            max_tokens: input.maxTokens,
+          });
+          return {
+            content: completion.choices[0]?.message?.content ?? '',
+            tokensIn: completion.usage?.prompt_tokens ?? 0,
+            tokensOut: completion.usage?.completion_tokens ?? 0,
+            model: completion.model,
+            raw: completion,
+          };
+        } catch (err) {
+          throw mapOpenAIError(err);
+        }
       },
       computeActualCostUsd: (result) =>
         priceFromTokens(input.model, result.tokensIn, result.tokensOut),
     });
     return (out.result as ChatCompletionResult | null) ?? null;
   }
+}
+
+/**
+ * Credentials and quota problems are configuration states, not crashes: a
+ * 503 that names the provider and the reason, never a bare 500.
+ */
+function mapOpenAIError(err: unknown): Error {
+  if (
+    err instanceof OpenAI.AuthenticationError ||
+    err instanceof OpenAI.PermissionDeniedError
+  ) {
+    return new IntegrationUnavailableException(
+      'openai',
+      'REJECTED_CREDENTIALS',
+      (err as Error).message,
+    );
+  }
+  // 429 covers both rate limits and "no credits remaining".
+  if (err instanceof OpenAI.RateLimitError) {
+    return new IntegrationUnavailableException(
+      'openai',
+      'UPSTREAM_ERROR',
+      (err as Error).message,
+    );
+  }
+  if (err instanceof OpenAI.APIError && (err.status ?? 0) >= 500) {
+    return new IntegrationUnavailableException(
+      'openai',
+      'UPSTREAM_ERROR',
+      (err as Error).message,
+    );
+  }
+  return err as Error;
 }
 
 // Cheap heuristic — assumes ~4 characters per token. Good enough for the
