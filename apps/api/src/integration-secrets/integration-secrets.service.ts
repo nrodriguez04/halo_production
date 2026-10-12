@@ -168,8 +168,8 @@ export class IntegrationSecretsService {
         case 'rentcast':
           result = await this.testRentCast();
           break;
-        case 'propertyradar':
-          result = await this.testPropertyRadar();
+        case 'realie':
+          result = await this.testRealie();
           break;
         case 'docusign':
           result = {
@@ -420,21 +420,32 @@ export class IntegrationSecretsService {
     return { connected: false, error: `HTTP ${res.status}` };
   }
 
-  private async testPropertyRadar(): Promise<{
+  private async testRealie(): Promise<{
     connected: boolean;
     error?: string;
   }> {
-    const key = await this.resolve('propertyradar', 'PROPERTYRADAR_API_KEY');
+    const key = await this.resolve('realie', 'REALIE_API_KEY');
     if (!key) return { connected: false, error: 'Missing API key' };
 
-    const baseUrl =
-      process.env.PROPERTYRADAR_BASE_URL || 'https://api.propertyradar.com/v1';
-    const res = await fetch(`${baseUrl}/properties?Limit=1`, {
-      headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
-    });
-    if (res.ok) return { connected: true };
-    if (res.status === 401 || res.status === 403)
+    const base = (
+      process.env.REALIE_BASE_URL || 'https://app.realie.ai/api'
+    ).replace(/\/+$/, '');
+    // An address Realie cannot have: the 404 proves the key without
+    // spending a token (only 200s are billed).
+    const res = await fetch(
+      `${base}/public/property/address/?state=WY&address=${encodeURIComponent('1 Nowhere Loop')}`,
+      { headers: { Authorization: key, Accept: 'application/json' } },
+    );
+    if (res.ok || res.status === 404) return { connected: true };
+    if (res.status === 401)
       return { connected: false, error: 'Invalid API key' };
+    if (res.status === 403) {
+      return {
+        connected: false,
+        error:
+          'Key accepted, but Realie billing blocks calls; add a payment method there',
+      };
+    }
     return { connected: false, error: `HTTP ${res.status}` };
   }
 }

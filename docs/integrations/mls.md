@@ -58,7 +58,7 @@ MLS_USERNAME=simplyrets
 MLS_PASSWORD=simplyrets
 ```
 
-Then **Leads → Import from MLS**, city `Houston`, or:
+Then **Leads → Import listings**, source *MLS feed*, city `Houston`, or:
 
 ```bash
 curl -s -X POST http://localhost:3001/api/leads/import/mls \
@@ -68,8 +68,10 @@ curl -s -X POST http://localhost:3001/api/leads/import/mls \
 
 ## How the import works
 
-`POST /api/leads/import/mls` (tenant-scoped, same auth as the rest of
-`/api/leads`) takes:
+`POST /api/leads/import/mls` is the MLS-only alias of
+`POST /api/leads/import/listings` with `"source": "mls"` (see
+`listing-sources.md` for RentCast and Realie). Tenant-scoped, same
+auth as the rest of `/api/leads`; it takes:
 
 ```json
 {
@@ -105,8 +107,8 @@ and returns `{ searched, total, created, duplicates, errors, dialect }`.
    non-contact facts (status, list price, days on market, beds/baths, size,
    year built, list date) sit in the clear for queries; the full raw record is
    sealed with the PII keys because of the agent contacts in it.
-4. **Tags.** `mls`, `mls:<status>` (e.g. `mls:active`, `mls:expired`) and
-   `stale_listing` when days on market is 90 or more.
+4. **Tags.** `source:mls`, `listing:<status>` (e.g. `listing:active`,
+   `listing:expired`) and `stale_listing` when days on market is 90 or more.
 
 The listing agent's contacts are deliberately **not** copied onto the lead:
 the lead's phone and email are for the owner, and messaging an agent through

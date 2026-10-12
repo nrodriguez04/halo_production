@@ -146,14 +146,14 @@ const INTEGRATIONS: IntegrationDef[] = [
     ],
   },
   {
-    provider: 'propertyradar',
+    provider: 'realie',
     category: 'property',
-    name: 'PropertyRadar',
+    name: 'Realie (county records)',
     keys: [
       {
-        keyName: 'PROPERTYRADAR_API_KEY',
+        keyName: 'REALIE_API_KEY',
         label: 'API Key',
-        placeholder: 'Your PropertyRadar API key',
+        placeholder: 'Your Realie API key',
       },
     ],
   },

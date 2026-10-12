@@ -4,6 +4,7 @@ import {
   COST_GOVERNANCE_PROVIDER_KEYS,
   seedCostGovernanceBudgetBuckets,
   seedCostGovernanceReferenceData,
+  seedMissingPricingRules,
 } from './seed-providers';
 
 @Injectable()
@@ -13,6 +14,18 @@ export class CostGovernanceBootstrapService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
+    await this.seedMissingProviders();
+    // A release can add actions to a provider that already exists in this
+    // database; give them their seed pricing without touching tuned rows.
+    const added = await seedMissingPricingRules(this.prisma);
+    if (added > 0) {
+      this.logger.warn(
+        `added ${added} pricing rule(s) for actions new to existing providers`,
+      );
+    }
+  }
+
+  private async seedMissingProviders(): Promise<void> {
     const present = new Set(
       (
         await this.prisma.integrationProvider.findMany({

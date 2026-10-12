@@ -2,12 +2,14 @@ jest.mock('../seed-providers', () => ({
   COST_GOVERNANCE_PROVIDER_KEYS: ['attom', 'openai', 'sendgrid', 'smtp'],
   seedCostGovernanceReferenceData: jest.fn(),
   seedCostGovernanceBudgetBuckets: jest.fn(),
+  seedMissingPricingRules: jest.fn().mockResolvedValue(0),
 }));
 
 import { CostGovernanceBootstrapService } from '../cost-governance-bootstrap.service';
 import {
   seedCostGovernanceBudgetBuckets,
   seedCostGovernanceReferenceData,
+  seedMissingPricingRules,
 } from '../seed-providers';
 
 describe('CostGovernanceBootstrapService', () => {
@@ -77,5 +79,17 @@ describe('CostGovernanceBootstrapService', () => {
     ]);
     expect(prisma.account.findMany).not.toHaveBeenCalled();
     expect(seedCostGovernanceBudgetBuckets).not.toHaveBeenCalled();
+  });
+
+  it('always gives existing providers the pricing rules for actions added since they were seeded', async () => {
+    // A release can add an action (e.g. search_listings) to a provider that
+    // is already registered; the rule is added without resetting the rest.
+    registry('attom', 'openai', 'sendgrid', 'smtp');
+    (seedMissingPricingRules as jest.Mock).mockResolvedValueOnce(2);
+
+    await service.onModuleInit();
+
+    expect(seedMissingPricingRules).toHaveBeenCalledWith(prisma);
+    expect(seedCostGovernanceReferenceData).not.toHaveBeenCalled();
   });
 });

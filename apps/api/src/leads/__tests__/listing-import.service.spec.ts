@@ -1,8 +1,8 @@
-import { MlsImportService } from '../mls-import.service';
+import { ListingImportService } from '../listing-import.service';
 import { isSealedJson, openJson } from '../../pii/contact-crypto';
-import type { MlsListing } from '../../integrations/mls/mls.types';
+import type { Listing } from '../../integrations/listings/listing-source.types';
 
-const listing = (over: Partial<MlsListing> = {}): MlsListing => ({
+const listing = (over: Partial<Listing> = {}): Listing => ({
   listingKey: 'KEY-1',
   mlsId: 'MLS-1',
   status: 'Active',
@@ -35,15 +35,26 @@ const listing = (over: Partial<MlsListing> = {}): MlsListing => ({
   ...over,
 });
 
-describe('MlsImportService', () => {
+const found = (
+  over: Partial<ReturnType<typeof listing>>[] = [listing()],
+  extra = {},
+) => ({
+  source: 'mls',
+  feed: 'bridge',
+  listings: over,
+  total: over.length,
+  ...extra,
+});
+
+describe('ListingImportService', () => {
   const env = { ...process.env };
   let prisma: {
     lead: { findMany: jest.Mock; update: jest.Mock };
     sourceRecord: { findFirst: jest.Mock; create: jest.Mock };
   };
   let leads: { importCSV: jest.Mock };
-  let mls: { searchListings: jest.Mock };
-  let service: MlsImportService;
+  let sources: { search: jest.Mock };
+  let service: ListingImportService;
 
   beforeAll(() => {
     process.env.PII_ENCRYPTION_KEY_V1 = '11'.repeat(32);
@@ -70,19 +81,17 @@ describe('MlsImportService', () => {
         .fn()
         .mockResolvedValue({ created: 1, duplicates: 0, errors: [] }),
     };
-    mls = {
-      searchListings: jest.fn().mockResolvedValue({
-        listings: [listing()],
-        total: 1,
-        dialect: 'bridge',
-      }),
-    };
-    service = new MlsImportService(prisma as any, leads as any, mls as any);
+    sources = { search: jest.fn().mockResolvedValue(found()) };
+    service = new ListingImportService(
+      prisma as any,
+      leads as any,
+      sources as any,
+    );
   });
 
-  it('searches the feed as the user and imports the usable listings through the CSV path', async () => {
-    mls.searchListings.mockResolvedValueOnce({
-      listings: [
+  it('searches the chosen source as the user and imports the usable listings through the CSV path', async () => {
+    sources.search.mockResolvedValueOnce(
+      found([
         listing(),
         listing({
           listingKey: 'NO-ADDRESS',
@@ -93,18 +102,18 @@ describe('MlsImportService', () => {
             postalCode: '77001',
           },
         }),
-      ],
-      total: 2,
-      dialect: 'bridge',
-    });
+      ]),
+    );
 
     const out = await service.importListings(
+      'mls',
       { city: 'Houston', limit: 5 },
       'tenant-1',
       'user-1',
     );
 
-    expect(mls.searchListings).toHaveBeenCalledWith(
+    expect(sources.search).toHaveBeenCalledWith(
+      'mls',
       { city: 'Houston', limit: 5 },
       { accountId: 'tenant-1', actor: 'user', userId: 'user-1' },
     );
@@ -123,12 +132,13 @@ describe('MlsImportService', () => {
       'user-1',
     );
     expect(out).toEqual({
+      source: 'mls',
+      feed: 'bridge',
       searched: 2,
       total: 2,
       created: 1,
       duplicates: 0,
       errors: [],
-      dialect: 'bridge',
     });
   });
 
@@ -142,7 +152,12 @@ describe('MlsImportService', () => {
       },
     ]);
 
-    await service.importListings({ city: 'Houston' }, 'tenant-1', 'user-1');
+    await service.importListings(
+      'mls',
+      { city: 'Houston' },
+      'tenant-1',
+      'user-1',
+    );
 
     expect(prisma.lead.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -161,6 +176,7 @@ describe('MlsImportService', () => {
     // Non-contact facts stay queryable; the raw record (with the agent's
     // direct phone) is sealed.
     expect(data.response).toMatchObject({
+      source: 'mls',
       listingKey: 'KEY-1',
       mlsId: 'MLS-1',
       status: 'Active',
@@ -175,7 +191,67 @@ describe('MlsImportService', () => {
 
     expect(prisma.lead.update).toHaveBeenCalledWith({
       where: { id: 'lead-1' },
-      data: { tags: ['hot', 'mls', 'mls:active', 'stale_listing'] },
+      data: { tags: ['hot', 'source:mls', 'listing:active', 'stale_listing'] },
+    });
+  });
+
+  it('carries the owner of record, vendor provenance and signal tags for a Realie pull', async () => {
+    prisma.lead.findMany.mockResolvedValueOnce([
+      {
+        id: 'lead-1',
+        canonicalAddress: '123 Main St',
+        canonicalZip: '77001',
+        tags: [],
+      },
+    ]);
+    sources.search.mockResolvedValueOnce(
+      found(
+        [
+          listing({
+            listingKey: 'RP-1',
+            mlsId: null,
+            status: 'Absentee',
+            listPrice: null,
+            daysOnMarket: null,
+            listingAgent: null,
+            ownerName: 'Jane Owner',
+            signals: ['owner:absentee', 'tax:delinquent'],
+            summary:
+              'absentee owner \u00b7 tax delinquent \u00b7 market value $250,000',
+            raw: { realieParcelId: 'RP-1', ownerName: 'Jane Owner' },
+          }),
+        ],
+        { source: 'realie', feed: 'public/property/search' },
+      ),
+    );
+
+    const out = await service.importListings(
+      'realie',
+      { city: 'Houston', state: 'TX' },
+      'tenant-1',
+      'user-1',
+    );
+
+    expect(leads.importCSV.mock.calls[0][0][0]).toMatchObject({
+      address: '123 Main St',
+      owner: 'Jane Owner',
+      notes:
+        'Realie record: absentee owner \u00b7 tax delinquent \u00b7 market value $250,000',
+    });
+    expect(prisma.sourceRecord.create.mock.calls[0][0].data).toMatchObject({
+      provider: 'realie',
+      endpoint: 'public/property/search',
+      requestHash: 'RP-1',
+      trustWeight: 0.85,
+    });
+    // County records are not listings: owner signals instead of a listing:<status> tag.
+    expect(prisma.lead.update).toHaveBeenCalledWith({
+      where: { id: 'lead-1' },
+      data: { tags: ['source:realie', 'owner:absentee', 'tax:delinquent'] },
+    });
+    expect(out).toMatchObject({
+      source: 'realie',
+      feed: 'public/property/search',
     });
   });
 
@@ -188,19 +264,28 @@ describe('MlsImportService', () => {
         tags: [],
       },
     ]);
-    mls.searchListings.mockResolvedValueOnce({
-      listings: [
-        listing({ status: 'Active Under Contract', daysOnMarket: 12 }),
-      ],
-      total: 1,
-      dialect: 'simplyrets',
+    sources.search.mockResolvedValueOnce(
+      found([listing({ status: 'Inactive', daysOnMarket: 12 })], {
+        source: 'rentcast',
+        feed: 'listings/sale',
+      }),
+    );
+
+    await service.importListings(
+      'rentcast',
+      { city: 'Houston' },
+      'tenant-1',
+      'user-1',
+    );
+
+    expect(prisma.sourceRecord.create.mock.calls[0][0].data).toMatchObject({
+      provider: 'rentcast',
+      endpoint: 'listings/sale',
+      trustWeight: 0.8,
     });
-
-    await service.importListings({ city: 'Houston' }, 'tenant-1', 'user-1');
-
     expect(prisma.lead.update).toHaveBeenCalledWith({
       where: { id: 'lead-1' },
-      data: { tags: ['mls', 'mls:active_under_contract'] },
+      data: { tags: ['source:rentcast', 'listing:inactive'] },
     });
   });
 
@@ -210,12 +295,17 @@ describe('MlsImportService', () => {
         id: 'lead-1',
         canonicalAddress: '123 Main St',
         canonicalZip: '77001',
-        tags: ['mls'],
+        tags: ['source:mls'],
       },
     ]);
     prisma.sourceRecord.findFirst.mockResolvedValueOnce({ id: 'sr-existing' });
 
-    await service.importListings({ city: 'Houston' }, 'tenant-1', 'user-1');
+    await service.importListings(
+      'mls',
+      { city: 'Houston' },
+      'tenant-1',
+      'user-1',
+    );
 
     expect(prisma.sourceRecord.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -227,11 +317,7 @@ describe('MlsImportService', () => {
   });
 
   it('leaves the database alone when the search returns nothing', async () => {
-    mls.searchListings.mockResolvedValueOnce({
-      listings: [],
-      total: 0,
-      dialect: 'bridge',
-    });
+    sources.search.mockResolvedValueOnce(found([]));
     leads.importCSV.mockResolvedValueOnce({
       created: 0,
       duplicates: 0,
@@ -239,6 +325,7 @@ describe('MlsImportService', () => {
     });
 
     const out = await service.importListings(
+      'mls',
       { postalCode: '77001' },
       'tenant-1',
       'user-1',

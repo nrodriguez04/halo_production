@@ -48,8 +48,9 @@ const envSchema = z.object({
   ATTOM_BASE_URL: z.string().optional(),
   GOOGLE_GEOCODING_API_KEY: z.string().optional(),
   RENTCAST_API_KEY: z.string().optional(),
-  PROPERTYRADAR_API_KEY: z.string().optional(),
-  PROPERTYRADAR_BASE_URL: z.string().optional(),
+  // Realie (county records): docs/integrations/listing-sources.md
+  REALIE_API_KEY: z.string().optional(),
+  REALIE_BASE_URL: z.string().optional(),
 
   // Cost-governance back-compat: declared so legacy code paths that read
   // process.env.OPENAI_DAILY_COST_CAP via parseFloat(...) get a typed,
@@ -67,9 +68,7 @@ const envSchema = z.object({
   MLS_API_TOKEN: z.string().optional(),
   MLS_USERNAME: z.string().optional(),
   MLS_PASSWORD: z.string().optional(),
-  SKIP_TRACE_PROVIDER: z
-    .enum(['batch', 'stub', 'propertyradar'])
-    .default('batch'),
+  SKIP_TRACE_PROVIDER: z.enum(['batch', 'stub']).default('batch'),
   BATCH_SKIPTRACE_API_KEY: z.string().optional(),
   BATCH_SKIPTRACE_BASE_URL: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),

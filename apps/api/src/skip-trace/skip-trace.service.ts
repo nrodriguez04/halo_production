@@ -1,7 +1,6 @@
 import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
 import { BatchSkipTraceAdapter } from './adapters/batch-skip-trace.adapter';
-import { PropertyRadarSkipTraceAdapter } from './adapters/propertyradar-skip-trace.adapter';
 import { StubSkipTraceAdapter } from './adapters/stub-skip-trace.adapter';
 import type {
   SkipTraceAdapter,
@@ -15,7 +14,7 @@ import type {
 // hit live APIs route through `IntegrationCostControlService.checkAndCall`
 // internally, so this service has no budget logic of its own.
 
-export type SkipTraceProviderKey = 'batch' | 'stub' | 'propertyradar';
+export type SkipTraceProviderKey = 'batch' | 'stub';
 
 @Injectable()
 export class SkipTraceService {
@@ -25,8 +24,6 @@ export class SkipTraceService {
     @Inject(BatchSkipTraceAdapter)
     private readonly batch: BatchSkipTraceAdapter,
     @Inject(StubSkipTraceAdapter) private readonly stub: StubSkipTraceAdapter,
-    @Inject(PropertyRadarSkipTraceAdapter)
-    private readonly propertyRadar: PropertyRadarSkipTraceAdapter,
   ) {}
 
   /**
@@ -64,8 +61,6 @@ export class SkipTraceService {
     switch (requested) {
       case 'stub':
         return this.stub;
-      case 'propertyradar':
-        return this.propertyRadar;
       case 'batch':
       default:
         return this.batch;

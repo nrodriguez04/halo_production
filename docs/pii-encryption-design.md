@@ -40,7 +40,9 @@ fixed, and `npm run db:backfill-pii` cleans existing rows:
   *are* cached, for 90 days, phones and emails included. They are now
   written sealed (`sealJson`) and opened on a cache hit.
 - `source_records`: PropertyRadar contact responses were stored raw. They
-  are sealed, with only RadarID and counts in the clear.
+  are sealed, with only RadarID and counts in the clear. (The PropertyRadar
+  integration has since been removed in favour of Realie; the rule applies
+  to any skip-trace provider's provenance rows.)
 - `lead_enrichment_jobs.metadata.skipTrace`: the worker persisted the
   traced phone and email. It now stores found / not-found flags only; the
   backfill seals what was there.

@@ -43,28 +43,52 @@ interface Lead {
   createdAt: string;
 }
 
-interface MlsImportResult {
+interface ListingImportResult {
+  source: string;
+  feed: string;
   searched: number;
   total: number | null;
   created: number;
   duplicates: number;
   errors: string[];
-  dialect: string;
 }
 
-// RESO StandardStatus values; the feed decides which ones it exposes.
-const MLS_STATUSES = ['Active', 'Pending', 'Expired', 'Withdrawn', 'Canceled', 'Closed'];
+// Each source's own status vocabulary; the first entry is its default.
+const LISTING_SOURCES = [
+  {
+    value: 'mls',
+    label: 'MLS feed',
+    hint: 'Your licensed RESO feed, as configured on the Integrations page.',
+    statuses: ['Active', 'Pending', 'Expired', 'Withdrawn', 'Canceled', 'Closed'],
+  },
+  {
+    value: 'rentcast',
+    label: 'RentCast',
+    hint: 'Nationwide active listings. Inactive means any listing that left the market, sold or not.',
+    statuses: ['Active', 'Inactive'],
+  },
+  {
+    value: 'realie',
+    label: 'Realie county records',
+    hint: 'Owner of record, values, sale history, liens and tax status from county records. No listing status: pick absentee owners or recent transfers. One Realie token per page of up to 100 parcels.',
+    statuses: ['Absentee', 'Owner-occupied', 'Any'],
+  },
+];
+const sourceDef = (value: string) =>
+  LISTING_SOURCES.find((s) => s.value === value) ?? LISTING_SOURCES[0];
 
-const emptyMlsForm = {
+const emptyImportForm = {
+  source: 'mls',
   city: '',
   state: '',
   postalCode: '',
   status: 'Active',
   minDaysOnMarket: '',
   maxPrice: '',
+  transferredWithinDays: '',
   limit: '50',
 };
-type MlsForm = typeof emptyMlsForm;
+type ImportForm = typeof emptyImportForm;
 
 const statusVariant = (status: string) => {
   switch (status) {
@@ -96,11 +120,15 @@ export default function LeadsPage() {
   const debouncedSearch = useDebouncedValue(search, 250);
   const queryClient = useQueryClient();
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [mlsOpen, setMlsOpen] = useState(false);
-  const [mlsForm, setMlsForm] = useState<MlsForm>(emptyMlsForm);
-  const setMlsField =
-    (field: keyof MlsForm) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setMlsForm((form) => ({ ...form, [field]: e.target.value }));
+  const [importOpen, setImportOpen] = useState(false);
+  const [importForm, setImportForm] = useState<ImportForm>(emptyImportForm);
+  const setImportField =
+    (field: keyof ImportForm) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setImportForm((form) => ({ ...form, [field]: e.target.value }));
+  const setImportSource = (e: ChangeEvent<HTMLSelectElement>) => {
+    const next = sourceDef(e.target.value);
+    setImportForm((form) => ({ ...form, source: next.value, status: next.statuses[0] }));
+  };
 
   const {
     data: leads = [],
@@ -141,18 +169,20 @@ export default function LeadsPage() {
     },
   );
 
-  const mlsImportMutation = useApiMutation<MlsForm, MlsImportResult>(
+  const listingImportMutation = useApiMutation<ImportForm, ListingImportResult>(
     (form) => {
       const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
       // JSON.stringify drops undefined fields, which the strict API schema wants.
-      return apiJson<MlsImportResult>('/leads/import/mls', {
+      return apiJson<ListingImportResult>('/leads/import/listings', {
         method: 'POST',
         body: JSON.stringify({
+          source: form.source,
           city: form.city.trim() || undefined,
           state: form.state.trim().toUpperCase() || undefined,
           postalCode: form.postalCode.trim() || undefined,
           status: [form.status],
           minDaysOnMarket: num(form.minDaysOnMarket),
+          transferredWithinDays: num(form.transferredWithinDays),
           maxPrice: num(form.maxPrice),
           limit: num(form.limit) ?? 50,
         }),
@@ -160,21 +190,22 @@ export default function LeadsPage() {
     },
     {
       onSuccess: (result) => {
+        const label = sourceDef(result.source).label;
         toast.success(
           result.created === 1
-            ? '1 new lead from the MLS'
-            : `${result.created} new leads from the MLS`,
+            ? `1 new lead from ${label}`
+            : `${result.created} new leads from ${label}`,
           {
             description:
               `${result.searched} listings searched · ${result.duplicates} already in your pipeline` +
               (result.errors.length ? ` · ${result.errors.length} rows rejected` : ''),
           },
         );
-        setMlsOpen(false);
+        setImportOpen(false);
         queryClient.invalidateQueries({ queryKey: ['/leads'] });
       },
       onError: (err) => {
-        toast.error('MLS import failed', { description: err.message });
+        toast.error('Listing import failed', { description: err.message });
       },
     },
   );
@@ -186,9 +217,9 @@ export default function LeadsPage() {
         description="Source records, enrichment status, and qualification controls."
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setMlsOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Building2 size={16} className="mr-2" />
-              Import from MLS
+              Import listings
             </Button>
             <Button variant="outline" size="sm">
               <Upload size={16} className="mr-2" />
@@ -208,92 +239,126 @@ export default function LeadsPage() {
         placeholder="Search address, city, or owner…"
       />
 
-      <Dialog open={mlsOpen} onOpenChange={setMlsOpen}>
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              mlsImportMutation.mutate(mlsForm);
+              listingImportMutation.mutate(importForm);
             }}
           >
             <DialogHeader>
-              <DialogTitle>Import from MLS</DialogTitle>
+              <DialogTitle>Import listings</DialogTitle>
               <DialogDescription>
-                Pulls listings from your configured MLS feed into leads. Addresses already in
-                your pipeline are skipped, so re-running a search is safe.
+                Pulls listings into leads. Addresses already in your pipeline are skipped, so
+                re-running a search is safe. {sourceDef(importForm.source).hint}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-3 py-4">
               <label className="col-span-2 space-y-1 text-sm">
+                <span className="text-muted-foreground">Source</span>
+                <Select value={importForm.source} onChange={setImportSource}>
+                  {LISTING_SOURCES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="col-span-2 space-y-1 text-sm">
                 <span className="text-muted-foreground">City</span>
-                <Input value={mlsForm.city} onChange={setMlsField('city')} placeholder="Houston" />
+                <Input
+                  value={importForm.city}
+                  onChange={setImportField('city')}
+                  placeholder="Houston"
+                />
               </label>
               <label className="space-y-1 text-sm">
                 <span className="text-muted-foreground">State</span>
                 <Input
-                  value={mlsForm.state}
-                  onChange={setMlsField('state')}
-                  placeholder="TX"
+                  value={importForm.state}
+                  onChange={setImportField('state')}
+                  placeholder={importForm.source === 'realie' ? 'TX (required)' : 'TX'}
                   maxLength={2}
                 />
               </label>
               <label className="space-y-1 text-sm">
                 <span className="text-muted-foreground">ZIP (instead of city)</span>
                 <Input
-                  value={mlsForm.postalCode}
-                  onChange={setMlsField('postalCode')}
+                  value={importForm.postalCode}
+                  onChange={setImportField('postalCode')}
                   placeholder="77008"
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <Select value={mlsForm.status} onChange={setMlsField('status')}>
-                  {MLS_STATUSES.map((s) => (
+                <span className="text-muted-foreground">
+                  {importForm.source === 'realie' ? 'Owner' : 'Status'}
+                </span>
+                <Select value={importForm.status} onChange={setImportField('status')}>
+                  {sourceDef(importForm.source).statuses.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
                   ))}
                 </Select>
               </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-muted-foreground">Min days on market</span>
-                <Input
-                  type="number"
-                  min={0}
-                  value={mlsForm.minDaysOnMarket}
-                  onChange={setMlsField('minDaysOnMarket')}
-                  placeholder="90"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-muted-foreground">Max list price</span>
-                <Input
-                  type="number"
-                  min={0}
-                  value={mlsForm.maxPrice}
-                  onChange={setMlsField('maxPrice')}
-                  placeholder="250000"
-                />
-              </label>
+              {importForm.source === 'realie' ? (
+                <label className="space-y-1 text-sm">
+                  <span className="text-muted-foreground">Transferred within (days)</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={importForm.transferredWithinDays}
+                    onChange={setImportField('transferredWithinDays')}
+                    placeholder="180"
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-muted-foreground">Min days on market</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={importForm.minDaysOnMarket}
+                      onChange={setImportField('minDaysOnMarket')}
+                      placeholder="90"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-muted-foreground">Max list price</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={importForm.maxPrice}
+                      onChange={setImportField('maxPrice')}
+                      placeholder="250000"
+                    />
+                  </label>
+                </>
+              )}
               <label className="space-y-1 text-sm">
                 <span className="text-muted-foreground">Listings to pull (1 to 200)</span>
                 <Input
                   type="number"
                   min={1}
                   max={200}
-                  value={mlsForm.limit}
-                  onChange={setMlsField('limit')}
+                  value={importForm.limit}
+                  onChange={setImportField('limit')}
                 />
               </label>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setMlsOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
                 Cancel
               </Button>
               <Button
                 type="submit"
-                loading={mlsImportMutation.isPending}
-                disabled={!mlsForm.city.trim() && !mlsForm.postalCode.trim()}
+                loading={listingImportMutation.isPending}
+                disabled={
+                  (!importForm.city.trim() && !importForm.postalCode.trim()) ||
+                  (importForm.source === 'realie' && !importForm.state.trim())
+                }
               >
                 Import listings
               </Button>

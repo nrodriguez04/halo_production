@@ -22,8 +22,8 @@ import {
 // window apply before any provider is called, and the ledger row is the
 // api's. A step the api refuses for budget or availability reasons is
 // skipped (recorded as no source record, zero cost) rather than failing the
-// whole job, matching the old hard-cap short-circuit. PropertyRadar lives
-// behind the SkipTraceService adapter and is disabled by default.
+// whole job, matching the old hard-cap short-circuit. Skip-trace providers
+// live behind the SkipTraceService adapter.
 //
 // The worker never sees a traced phone or email: the api stores them on the
 // lead, encrypted, and returns counts. The job metadata used to keep them in

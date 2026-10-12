@@ -140,7 +140,7 @@ describe('SkipTraceService errors', () => {
       providerKey: 'batch_skiptrace',
       appendContacts: jest.fn().mockRejectedValue(blocked),
     };
-    const service = new SkipTraceService(batch as any, {} as any, {} as any);
+    const service = new SkipTraceService(batch as any, {} as any);
 
     await expect(
       service.appendContacts(
@@ -155,7 +155,7 @@ describe('SkipTraceService errors', () => {
       providerKey: 'batch_skiptrace',
       appendContacts: jest.fn().mockRejectedValue(new Error('socket hang up')),
     };
-    const service = new SkipTraceService(batch as any, {} as any, {} as any);
+    const service = new SkipTraceService(batch as any, {} as any);
 
     await expect(
       service.appendContacts(
