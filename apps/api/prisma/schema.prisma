@@ -308,8 +308,10 @@ model Contract {
   id              String   @id @default(cuid())
   dealId          String
   docusignEnvelopeId String? @unique
-  status          String   // draft, sent, signed, completed, declined
+  status          String   // draft, sent, delivered, completed, declined, voided
   pdfUrl          String?
+  /// What was sent and to whom (roles only, never addresses): documents, recipients, subject, signed copy.
+  metadata        Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

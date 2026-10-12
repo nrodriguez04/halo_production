@@ -5,9 +5,17 @@ import { PrismaService } from '../../prisma.service';
 import { ControlPlaneModule } from '../../control-plane/control-plane.module';
 import { TimelineModule } from '../../timeline/timeline.module';
 import { DealsModule } from '../../deals/deals.module';
+import { DocumentsModule } from '../../documents/documents.module';
+import { IntegrationSecretsModule } from '../../integration-secrets/integration-secrets.module';
 
 @Module({
-  imports: [ControlPlaneModule, TimelineModule, DealsModule],
+  imports: [
+    ControlPlaneModule,
+    TimelineModule,
+    DealsModule,
+    DocumentsModule,
+    IntegrationSecretsModule,
+  ],
   controllers: [DocuSignController],
   providers: [DocuSignService, PrismaService],
   exports: [DocuSignService],

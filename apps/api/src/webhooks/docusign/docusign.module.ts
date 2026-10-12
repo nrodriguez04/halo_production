@@ -4,9 +4,16 @@ import { DocuSignService } from './docusign.service';
 import { PrismaService } from '../../prisma.service';
 import { TimelineModule } from '../../timeline/timeline.module';
 import { DealsModule } from '../../deals/deals.module';
+import { DocuSignIntegrationModule } from '../../integrations/docusign/docusign.module';
+import { IntegrationSecretsModule } from '../../integration-secrets/integration-secrets.module';
 
 @Module({
-  imports: [TimelineModule, DealsModule],
+  imports: [
+    TimelineModule,
+    DealsModule,
+    DocuSignIntegrationModule,
+    IntegrationSecretsModule,
+  ],
   controllers: [DocuSignController],
   providers: [DocuSignService, PrismaService],
 })

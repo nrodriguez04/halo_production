@@ -12,13 +12,18 @@ import { Request } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import { DocuSignService } from './docusign.service';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
+import { DOCUSIGN_KEYS } from '../../integrations/docusign/docusign.service';
 
 @SkipThrottle()
 @Controller('webhooks/docusign')
 export class DocuSignController {
   private readonly logger = new Logger(DocuSignController.name);
 
-  constructor(private readonly docuSignService: DocuSignService) {}
+  constructor(
+    private readonly docuSignService: DocuSignService,
+    private readonly secrets: IntegrationSecretsService,
+  ) {}
 
   @Post()
   @HttpCode(200)
@@ -27,20 +32,23 @@ export class DocuSignController {
     @Req() req: Request,
     @Headers('x-docusign-signature-1') signature?: string,
   ) {
-    this.verifyDocuSignHmac(req, body, signature);
+    await this.verifyDocuSignHmac(req, body, signature);
     return this.docuSignService.handleWebhook(body);
   }
 
   /**
-   * DocuSign Connect signs the JSON body using HMAC-SHA256
-   * with the Connect secret from the integration settings.
+   * DocuSign Connect signs the raw JSON body with HMAC-SHA256 using the
+   * Connect secret saved on the Integrations page (or DOCUSIGN_CONNECT_SECRET).
    */
-  private verifyDocuSignHmac(
+  private async verifyDocuSignHmac(
     req: Request,
     body: any,
     signature: string | undefined,
   ) {
-    const secret = process.env.DOCUSIGN_CONNECT_SECRET;
+    const secret = await this.secrets.resolve(
+      'docusign',
+      DOCUSIGN_KEYS.connectSecret,
+    );
     if (!secret) {
       throw new ForbiddenException(
         'Webhook verification not configured — DOCUSIGN_CONNECT_SECRET is required',
@@ -67,6 +75,9 @@ export class DocuSignController {
       sigBuf.length !== expBuf.length ||
       !crypto.timingSafeEqual(sigBuf, expBuf)
     ) {
+      this.logger.warn(
+        'Rejected DocuSign webhook with an invalid HMAC signature',
+      );
       throw new ForbiddenException('Invalid DocuSign HMAC signature');
     }
   }

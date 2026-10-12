@@ -18,6 +18,15 @@ the metadata and the links to a deal, lead or buyer.
   never reachable by URL alone. Removing a document deletes the object and
   the row.
 
+### Contracts and signatures
+
+Any signable document in the library (attached to the deal, or an
+`agreement_template`) can be sent for e-signature from the deal page's
+Contracts tab; the executed copy comes back as a `contract` document on the
+deal tagged `signed` and `docusign`, carrying the source documents'
+`checklist:*` tags so the checklist counts it. See
+[integrations/docusign.md](integrations/docusign.md).
+
 ## Compliance checklist
 
 The checklist is the standard paperwork set, matched by the tag

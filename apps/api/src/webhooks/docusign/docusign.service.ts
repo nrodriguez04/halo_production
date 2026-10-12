@@ -1,47 +1,75 @@
-import { Injectable } from '@nestjs/common';
-import { TimelineActorType, TimelineEntityType } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { DealsService } from '../../deals/deals.service';
+import { DocuSignService as DocuSignIntegrationService } from '../../integrations/docusign/docusign.service';
 
+/** DocuSign Connect event -> contract status. Unlisted events only log. */
+const EVENT_STATUS: Record<string, string> = {
+  'envelope-sent': 'sent',
+  'envelope-delivered': 'delivered',
+  'envelope-completed': 'completed',
+  'envelope-signed': 'completed',
+  'envelope-declined': 'declined',
+  'recipient-declined': 'declined',
+  'envelope-voided': 'voided',
+};
+
+/**
+ * DocuSign Connect (account-level webhook, HMAC-verified by the controller).
+ * Status lands on the contract; a completed envelope is pulled into the
+ * documents library as the executed copy and moves the deal on.
+ */
 @Injectable()
 export class DocuSignService {
+  private readonly logger = new Logger(DocuSignService.name);
+
   constructor(
     private prisma: PrismaService,
     private timelineService: TimelineService,
     private dealsService: DealsService,
+    private docusign: DocuSignIntegrationService,
   ) {}
 
   async handleWebhook(body: any) {
-    // DocuSign Connect webhook format
-    const envelopeId = body.data?.envelopeId;
-    const event = body.event;
+    const envelopeId: string | undefined = body?.data?.envelopeId;
+    const event: string = String(body?.event ?? '');
+    if (!envelopeId) return { message: 'No envelope ID' };
 
-    if (!envelopeId) {
-      return { message: 'No envelope ID' };
-    }
-
-    // Find contract by envelope ID
     const contract = await this.prisma.contract.findUnique({
       where: { docusignEnvelopeId: envelopeId },
       include: { deal: true },
     });
+    if (!contract) return { message: 'Contract not found' };
 
-    if (!contract) {
-      return { message: 'Contract not found' };
-    }
-
-    // Handle different events
-    if (event === 'envelope-completed' || event === 'envelope-signed') {
-      // Update contract status
+    const status = EVENT_STATUS[event];
+    const metadata = (contract.metadata ?? {}) as Record<string, unknown>;
+    if (status) {
       await this.prisma.contract.update({
         where: { id: contract.id },
         data: {
-          status: 'signed',
+          status,
+          metadata: { ...metadata, lastEvent: event } as Prisma.InputJsonObject,
         },
       });
+    }
 
-      // Update deal stage if needed
+    let signedDocumentId: string | null = null;
+    if (status === 'completed') {
+      try {
+        const stored = await this.docusign.storeSignedCopy(
+          contract.id,
+          contract.deal.accountId,
+        );
+        signedDocumentId = stored.documentId;
+      } catch (err) {
+        // The webhook still succeeds: a person can pull the copy from the
+        // deal page, and DocuSign must not keep retrying a processed event.
+        this.logger.warn(
+          `Signed copy for envelope ${envelopeId} not stored: ${(err as Error).message}`,
+        );
+      }
       if (contract.deal.stage === 'under_contract') {
         await this.dealsService.updateStage(
           contract.dealId,
@@ -51,31 +79,20 @@ export class DocuSignService {
           TimelineActorType.webhook,
         );
       }
-
-      // Store PDF URL if provided
-      if (body.data?.pdfUrl) {
-        await this.prisma.contract.update({
-          where: { id: contract.id },
-          data: { pdfUrl: body.data.pdfUrl },
-        });
-      }
-    } else if (event === 'envelope-declined') {
-      await this.prisma.contract.update({
-        where: { id: contract.id },
-        data: { status: 'declined' },
-      });
     }
 
     await this.timelineService.appendEvent({
       tenantId: contract.deal.accountId,
       entityType: TimelineEntityType.DEAL,
       entityId: contract.dealId,
-      eventType: `DOCUSIGN_${event || 'EVENT'}`.toUpperCase(),
-      payload: { envelopeId, event },
+      eventType: `DOCUSIGN_${event || 'EVENT'}`
+        .toUpperCase()
+        .replace(/-/g, '_'),
+      payload: { envelopeId, event, status: status ?? null, signedDocumentId },
       actorId: null,
       actorType: TimelineActorType.webhook,
     });
 
-    return { message: 'Webhook processed' };
+    return { message: 'Webhook processed', status: status ?? contract.status };
   }
 }
