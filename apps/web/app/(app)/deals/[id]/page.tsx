@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { apiFetch } from '@/lib/api-fetch';
@@ -163,9 +164,17 @@ export default function DealDetailPage() {
           deal.property ? `${deal.property.city}, ${deal.property.state}` : undefined
         }
         actions={
-          <Badge variant={stageVariant(deal.stage)} className="px-3 py-1 text-sm">
-            {deal.stage.replace('_', ' ')}
-          </Badge>
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/documents?dealId=${deal.id}`}>
+                <FileText size={16} className="mr-2" />
+                Documents
+              </Link>
+            </Button>
+            <Badge variant={stageVariant(deal.stage)} className="px-3 py-1 text-sm">
+              {deal.stage.replace('_', ' ')}
+            </Badge>
+          </>
         }
       />
 

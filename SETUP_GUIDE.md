@@ -45,6 +45,8 @@ npm install
 
 ## 2. Docker (Local Development)
 
+> Object storage runs as **RustFS** (`rustfs/rustfs`, S3-compatible) on ports 9000/9001 with the `minioadmin` credentials; the old `minio/minio` image is no longer published. The api needs no change (`S3_*` variables).
+
 Docker runs the infrastructure services (Postgres, Redis, MinIO, Mailhog) that the app depends on.
 
 ### Start infrastructure

@@ -940,3 +940,33 @@ model SourcingMarket {
   @@index([accountId, createdAt])
   @@map("sourcing_markets")
 }
+
+/// A file in the tenant's document library: agreement templates, signed
+/// contracts, disclosures, compliance records, closing paperwork. Bytes live
+/// in object storage under `storageKey`; this row carries the metadata and
+/// links to a deal, lead or buyer. See docs/documents-and-compliance.md.
+model Document {
+  id           String   @id @default(cuid())
+  accountId    String
+  category     String   // agreement_template | contract | disclosure | compliance | closing | marketing | other
+  title        String
+  description  String?
+  storageKey   String
+  fileName     String
+  contentType  String
+  sizeBytes    Int
+  dealId       String?
+  leadId       String?
+  buyerId      String?
+  jurisdiction String?  // two-letter state the document is specific to, if any
+  status       String   @default("active") // active | archived
+  tags         String[]
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([accountId, category, createdAt])
+  @@index([accountId, dealId])
+  @@index([accountId, status])
+  @@map("documents")
+}

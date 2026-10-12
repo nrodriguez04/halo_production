@@ -18,6 +18,7 @@ import {
   GitCompare,
   Map as MapIcon,
   MessageSquare,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -67,6 +68,7 @@ const QUICK_ACTIONS = [
   { href: '/leads/triage', label: 'Data Triage', icon: GitCompare },
   { href: '/properties', label: 'Properties', icon: MapIcon },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
+  { href: '/documents', label: 'Documents & compliance', icon: FileText },
 ];
 
 export default function DashboardPage() {

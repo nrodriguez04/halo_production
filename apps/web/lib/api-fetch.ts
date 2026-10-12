@@ -85,3 +85,47 @@ export async function apiJson<T = unknown>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+/**
+ * Multipart upload. Like apiJson, but the browser sets the content type so
+ * the multipart boundary is right.
+ */
+export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
+  const jwt = await getJwt();
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+    method: 'POST',
+    body: form,
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
+  });
+  if (res.status === 401 && typeof window !== 'undefined') {
+    window.location.href = '/sign-in';
+  }
+  if (!res.ok) {
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      body = await res.text().catch(() => undefined);
+    }
+    throw new ApiError(res.status, `${res.status} ${res.statusText}`, body);
+  }
+  return (await res.json()) as T;
+}
+
+/**
+ * Fetches a protected file with the session token and hands it to the browser
+ * as a download; a plain link could not carry the Authorization header.
+ */
+export async function apiDownload(path: string, fileName: string): Promise<void> {
+  const res = await apiFetch(path);
+  if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

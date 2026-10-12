@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Users,
   Globe,
+  FileText,
   GitCompare,
   Handshake,
   MessageSquare,
@@ -62,6 +63,7 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
     { path: '/cost-governance/events', params: { limit: 100 } },
   ],
   '/leads/markets': [{ path: '/sourcing/markets' }, { path: '/sourcing/runs', params: { limit: 20 } }],
+  '/documents': [{ path: '/documents' }, { path: '/documents/checklist', params: { state: 'TX' } }],
   '/admin/integrations': [{ path: '/integration-secrets' }],
   '/admin/chaos': [{ path: '/admin/chaos/status' }, { path: '/admin/dlq' }],
 };
@@ -82,6 +84,7 @@ const navItems: NavItem[] = [
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/buyers', label: 'Buyers', icon: UserCheck },
   { href: '/properties', label: 'Properties', icon: Map },
+  { href: '/documents', label: 'Documents', icon: FileText },
 ];
 
 const adminItems: NavItem[] = [
