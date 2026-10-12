@@ -3,7 +3,9 @@ import {
   agentJobId,
   agentWorkflow,
   decisionNeedsApproval,
+  classifyInboundByRule,
   parseDealUnderwriterOutput,
+  parseOutreachDrafterOutput,
   parseLeadAnalystOutput,
   resolveAgentModel,
 } from './agents';
@@ -102,5 +104,41 @@ describe('agent frame', () => {
     expect(
       parseDealUnderwriterOutput('{"confidence": 1.5, "recommendation": "offer", "rationale": "x"}'),
     ).toBeNull();
+  });
+
+  it('classifies opt-outs and wrong numbers by rule, and leaves the rest to the model', () => {
+    expect(classifyInboundByRule('Please stop texting me')).toMatchObject({ intent: 'opt_out' });
+    expect(classifyInboundByRule("I'm not interested, don't contact me again")).toMatchObject({
+      intent: 'opt_out',
+    });
+    expect(classifyInboundByRule('Take me off your list')).toMatchObject({ intent: 'opt_out' });
+    expect(classifyInboundByRule('You have the wrong number')).toMatchObject({
+      intent: 'wrong_number',
+    });
+    expect(classifyInboundByRule("Sorry, I don't know who this is")).toMatchObject({
+      intent: 'wrong_number',
+    });
+    expect(classifyInboundByRule("I can't stop by today, maybe Friday?")).toBeNull();
+    expect(classifyInboundByRule('How much are you offering?')).toBeNull();
+    expect(classifyInboundByRule('')).toBeNull();
+  });
+
+  it('parses the Outreach Drafter JSON and rejects unknown intents', () => {
+    const out = parseOutreachDrafterOutput(
+      '{"intent": "interested", "confidence": 0.9, "reply": {"body": "Thanks, when works for a call?"}, "rationale": "Asked about the offer."}',
+    );
+    expect(out).toEqual({
+      intent: 'interested',
+      confidence: 0.9,
+      reply: { body: 'Thanks, when works for a call?', subject: null },
+      rationale: 'Asked about the offer.',
+      next_step: null,
+    });
+    expect(
+      parseOutreachDrafterOutput('{"intent": "angry", "confidence": 0.9, "rationale": "x"}'),
+    ).toBeNull();
+    expect(
+      parseOutreachDrafterOutput('{"intent": "opt_out", "confidence": 1, "reply": null, "rationale": "x"}'),
+    ).toMatchObject({ intent: 'opt_out', reply: null });
   });
 });

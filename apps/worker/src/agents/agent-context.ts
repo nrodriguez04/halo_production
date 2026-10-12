@@ -151,7 +151,7 @@ export async function loadLeadContext(
   };
 }
 
-async function onDncList(
+export async function onDncList(
   accountId: string,
   phoneHash: string | null,
   emailHash: string | null,

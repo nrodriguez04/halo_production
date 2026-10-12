@@ -39,7 +39,15 @@ interface AgentAction {
     | 'append_note'
     | 'transition_lead'
     | 'draft_message'
-    | 'set_deal_economics';
+    | 'set_deal_economics'
+    | 'classify_inbound'
+    | 'record_opt_out'
+    | 'flag_contact'
+    | 'transition_deal';
+  intent?: string;
+  confidence?: number;
+  method?: string;
+  messageId?: string;
   arv?: number | null;
   repairEstimate?: number | null;
   mao?: number | null;
@@ -114,7 +122,7 @@ const AGENT_LABEL: Record<AgentName, string> = {
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
 };
-const RELEASED: AgentName[] = ['lead_analyst', 'deal_underwriter'];
+const RELEASED: AgentName[] = ['lead_analyst', 'deal_underwriter', 'outreach_drafter'];
 const DEFAULT_MODELS: Required<AgentModels> = { cheap: 'gpt-4o-mini', mid: 'gpt-4o', strong: 'gpt-4o' };
 const RUNS_PARAMS = { limit: 100 };
 
@@ -144,13 +152,23 @@ const statusConfig: Record<
   AWAITING_APPROVAL: { label: 'Needs approval', variant: 'warning' },
 };
 
-const recommendationVariant: Record<string, 'success' | 'destructive' | 'warning' | 'secondary'> = {
+const recommendationVariant: Record<
+  string,
+  'success' | 'destructive' | 'warning' | 'secondary' | 'info'
+> = {
   qualified: 'success',
   disqualified: 'destructive',
   hold: 'warning',
   blocked: 'secondary',
   offer: 'success',
   pass: 'destructive',
+  interested: 'success',
+  not_interested: 'destructive',
+  opt_out: 'destructive',
+  wrong_number: 'warning',
+  callback: 'info',
+  unclear: 'warning',
+  follow_up: 'info',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -179,6 +197,14 @@ function describeAction(action: AgentAction): string {
       return `Draft a seller ${action.channel === 'sms' ? 'text' : 'email'} for the approval queue`;
     case 'set_deal_economics':
       return `Set ARV ${money(action.arv)}, repairs ${money(action.repairEstimate)}, MAO ${money(action.mao)} on the deal`;
+    case 'classify_inbound':
+      return `Record the reply as "${action.intent}" (${action.method})`;
+    case 'record_opt_out':
+      return 'Record the opt-out: do-not-contact entry, consents revoked';
+    case 'flag_contact':
+      return `Tag the lead ${action.reason} for a new skip trace`;
+    case 'transition_deal':
+      return `Move the deal to ${action.to}`;
     default:
       return action.type;
   }
@@ -339,7 +365,7 @@ export default function AgentsPage() {
   const [models, setModels] = useState<AgentModels>({});
   const [queueLeadId, setQueueLeadId] = useState('');
   const [queueAgent, setQueueAgent] = useState<AgentName>('lead_analyst');
-  const queueEntityType: 'lead' | 'deal' = queueAgent === 'deal_underwriter' ? 'deal' : 'lead';
+  const queueEntityType: 'lead' | 'deal' = queueAgent === 'lead_analyst' ? 'lead' : 'deal';
 
   useEffect(() => {
     if (!controlPlane) return;

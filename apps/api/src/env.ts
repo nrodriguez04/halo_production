@@ -61,6 +61,10 @@ const envSchema = z.object({
   AGENT_SWEEP: z.string().optional(),
   AGENT_SWEEP_HOUR_UTC: z.string().optional(),
   AGENT_SWEEP_STALE_DAYS: z.string().optional(),
+  // Outreach Drafter (docs/agent-design.md s3.3): follow-up cadence and cap
+  AGENT_FOLLOWUP_DAYS: z.string().optional(),
+  AGENT_FOLLOWUP_MAX: z.string().optional(),
+  OUTREACH_STRONG_TIER_MIN_ARV: z.string().optional(),
 
   // Cost-governance back-compat: declared so legacy code paths that read
   // process.env.OPENAI_DAILY_COST_CAP via parseFloat(...) get a typed,

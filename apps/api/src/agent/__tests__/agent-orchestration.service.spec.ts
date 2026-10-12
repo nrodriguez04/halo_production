@@ -11,7 +11,12 @@ const prisma = {
   lead: { updateMany: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
   deal: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
   underwritingResult: { upsert: jest.fn() },
+  message: { findFirst: jest.fn(), update: jest.fn() },
 };
+const optOut = { recordPhoneOptOut: jest.fn(), recordEmailOptOut: jest.fn() };
+jest.mock('../../communications/message-counterparty', () => ({
+  openCounterparty: jest.fn(() => '+15551234567'),
+}));
 const automation = {
   createRun: jest.fn(),
   startRun: jest.fn(),
@@ -21,7 +26,7 @@ const automation = {
   getRun: jest.fn(),
 };
 const controlPlane = { isEnabled: jest.fn(), getStatus: jest.fn() };
-const deals = { create: jest.fn() };
+const deals = { create: jest.fn(), updateStage: jest.fn() };
 const lifecycle = { transition: jest.fn() };
 const queues = { enqueueAgent: jest.fn() };
 const timeline = { appendEvent: jest.fn() };
@@ -37,6 +42,7 @@ const service = () =>
     queues as any,
     timeline as any,
     agentService as any,
+    optOut as any,
   );
 
 const baseRun = {
@@ -124,6 +130,14 @@ describe('AgentOrchestrationService', () => {
     automation.failRun.mockResolvedValue({ id: 'run-1', status: 'FAILED' });
     automation.approveRun.mockResolvedValue({});
     queues.enqueueAgent.mockResolvedValue({});
+    prisma.deal.findMany.mockResolvedValue([]);
+    prisma.message.findFirst.mockResolvedValue(null);
+    prisma.message.update.mockResolvedValue({});
+    deals.updateStage.mockResolvedValue({});
+    optOut.recordPhoneOptOut.mockResolvedValue({
+      accountIds: ['acct'],
+      consentsRevoked: 1,
+    });
   });
 
   describe('enqueue', () => {
@@ -693,6 +707,287 @@ describe('AgentOrchestrationService', () => {
         label: '9 Elm St, Austin, TX',
         status: 'contacted',
         score: null,
+      });
+    });
+  });
+
+  describe('Outreach Drafter actions', () => {
+    const dealRun = { ...baseRun, entityType: 'deal', entityId: 'deal-1' };
+    const inbound = {
+      id: 'msg-1',
+      metadata: { to: '+15550000000' },
+      leadId: 'lead-1',
+      dealId: 'deal-1',
+    };
+
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue({ ...dealRun });
+      prisma.message.findFirst.mockResolvedValue({
+        ...inbound,
+        channel: 'sms',
+        counterpartyEnc: 'enc',
+      });
+    });
+
+    it('records a rule opt-out on its own through the compliance service and classifies the reply', async () => {
+      const decision: AgentDecision = {
+        agent: 'outreach_drafter',
+        promptVersion: 'outreach_drafter.v1',
+        model: null,
+        recommendation: 'opt_out',
+        summary: 's',
+        rationale: 'r',
+        hardRule: 'opt_out_phrase',
+        actions: [
+          {
+            type: 'classify_inbound',
+            messageId: 'msg-1',
+            intent: 'opt_out',
+            confidence: 1,
+            method: 'rule',
+          },
+          {
+            type: 'record_opt_out',
+            messageId: 'msg-1',
+            reason: 'Seller wrote: "stop texting"',
+            gated: false,
+          },
+          { type: 'append_note', note: 'n' },
+        ],
+      };
+
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision,
+      });
+
+      expect(prisma.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: {
+          metadata: {
+            to: '+15550000000',
+            intent: 'opt_out',
+            intentConfidence: 1,
+            intentMethod: 'rule',
+            classifiedByRunId: 'run-1',
+          },
+        },
+      });
+      expect(timeline.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'DEAL',
+          entityId: 'deal-1',
+          eventType: 'INBOUND_CLASSIFIED',
+        }),
+      );
+      expect(optOut.recordPhoneOptOut).toHaveBeenCalledWith({
+        accountIds: ['acct'],
+        phone: '+15551234567',
+        source: 'agent:outreach_drafter:run-1',
+        reason: 'Seller wrote: "stop texting"',
+      });
+      expect(automation.completeRun).toHaveBeenCalledWith(
+        'run-1',
+        'acct',
+        expect.objectContaining({
+          outputJson: expect.objectContaining({ applied: 3 }),
+        }),
+      );
+    });
+
+    it('holds an unsure model opt-out for a person, then records it on approval', async () => {
+      const decision: AgentDecision = {
+        agent: 'outreach_drafter',
+        promptVersion: 'outreach_drafter.v1',
+        model: 'gpt-4o',
+        recommendation: 'opt_out',
+        summary: 's',
+        rationale: 'r',
+        hardRule: null,
+        actions: [
+          {
+            type: 'record_opt_out',
+            messageId: 'msg-1',
+            reason: 'maybe',
+            gated: true,
+          },
+        ],
+      };
+      await service().recordDecision('acct', 'run-1', {
+        status: 'AWAITING_APPROVAL',
+        decision,
+      });
+      expect(optOut.recordPhoneOptOut).not.toHaveBeenCalled();
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.status).toBe('AWAITING_APPROVAL');
+
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...dealRun,
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          ...decision,
+          outcomes: [{ action: decision.actions[0], result: 'pending' }],
+        },
+      });
+      await service().approve('acct', 'run-1', 'user-1');
+      expect(optOut.recordPhoneOptOut).toHaveBeenCalledTimes(1);
+    });
+
+    it('tags the lead on a wrong number', async () => {
+      prisma.deal.findFirst.mockResolvedValue({ leadId: 'lead-1' });
+      prisma.lead.findFirst.mockResolvedValue({
+        id: 'lead-1',
+        tags: ['owner:absentee'],
+      });
+      const decision: AgentDecision = {
+        agent: 'outreach_drafter',
+        promptVersion: 'outreach_drafter.v1',
+        model: null,
+        recommendation: 'wrong_number',
+        summary: 's',
+        rationale: 'r',
+        hardRule: 'wrong_number_phrase',
+        actions: [{ type: 'flag_contact', reason: 'wrong_number', note: 'n' }],
+      };
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision,
+      });
+      expect(prisma.lead.updateMany).toHaveBeenCalledWith({
+        where: { id: 'lead-1', accountId: 'acct' },
+        data: { tags: ['owner:absentee', 'contact:wrong_number'] },
+      });
+      expect(timeline.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'LEAD',
+          entityId: 'lead-1',
+          eventType: 'CONTACT_FLAGGED',
+        }),
+      );
+    });
+
+    it('on approval drafts the reply on the deal and moves it to negotiating as the approver', async () => {
+      const draft = {
+        type: 'draft_message',
+        channel: 'sms',
+        recipientType: 'seller',
+        content: 'Thanks Pat, is a call this week ok?',
+        inReplyToMessageId: 'msg-1',
+        gated: true,
+      };
+      const move = {
+        type: 'transition_deal',
+        to: 'negotiating',
+        reason: 'interest',
+        gated: true,
+      };
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...dealRun,
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          agent: 'outreach_drafter',
+          recommendation: 'interested',
+          summary: 's',
+          actions: [draft, move],
+          outcomes: [
+            { action: draft, result: 'pending' },
+            { action: move, result: 'pending' },
+          ],
+        },
+      });
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        lead: { canonicalPhoneHash: 'ph', canonicalEmailHash: null },
+      });
+      agentService.draftMessage.mockResolvedValue({ message: { id: 'm9' } });
+
+      await service().approve('acct', 'run-1', 'user-1');
+
+      expect(agentService.draftMessage).toHaveBeenCalledWith(
+        'deal-1',
+        'acct',
+        'sms',
+        'seller',
+        {
+          content: 'Thanks Pat, is a call this week ok?',
+          subject: undefined,
+          agentName: 'outreach_drafter',
+          workflowName: 'agent:outreach_drafter',
+          automationRunId: 'run-1',
+          metadata: { inReplyToMessageId: 'msg-1' },
+        },
+      );
+      expect(deals.create).not.toHaveBeenCalled();
+      expect(deals.updateStage).toHaveBeenCalledWith(
+        'deal-1',
+        'acct',
+        'negotiating',
+        'user-1',
+        'user',
+      );
+      expect(automation.completeRun).toHaveBeenCalledWith(
+        'run-1',
+        'acct',
+        expect.objectContaining({
+          outputJson: expect.objectContaining({
+            applied: 2,
+            messageIds: ['m9'],
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('sweepFollowUps', () => {
+    it('queues a follow-up for quiet deals and leaves answered or pending ones alone', async () => {
+      prisma.deal.findMany.mockResolvedValue([
+        { id: 'd-quiet', accountId: 'acct' },
+        { id: 'd-replied', accountId: 'acct' },
+        { id: 'd-pending', accountId: 'acct' },
+        { id: 'd-recent', accountId: 'acct' },
+      ]);
+      const old = new Date('2026-10-05T12:00:00.000Z');
+      prisma.message.findFirst.mockImplementation(async ({ where }: any) => {
+        switch (where.dealId) {
+          case 'd-quiet':
+            return {
+              direction: 'outbound',
+              status: 'delivered',
+              createdAt: old,
+            };
+          case 'd-replied':
+            return {
+              direction: 'inbound',
+              status: 'delivered',
+              createdAt: old,
+            };
+          case 'd-pending':
+            return {
+              direction: 'outbound',
+              status: 'pending_approval',
+              createdAt: old,
+            };
+          default:
+            return {
+              direction: 'outbound',
+              status: 'sent',
+              createdAt: new Date('2026-10-11T12:00:00.000Z'),
+            };
+        }
+      });
+
+      await expect(
+        service().sweepFollowUps(new Date('2026-10-12T07:00:00.000Z'), 3),
+      ).resolves.toBe(1);
+
+      expect(queues.enqueueAgent).toHaveBeenCalledTimes(1);
+      expect(queues.enqueueAgent).toHaveBeenCalledWith({
+        agent: 'outreach_drafter',
+        accountId: 'acct',
+        entityType: 'deal',
+        entityId: 'd-quiet',
+        trigger: 'sweep',
+        triggerEventId: 'sweep:2026-10-12',
       });
     });
   });

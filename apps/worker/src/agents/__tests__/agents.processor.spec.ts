@@ -42,6 +42,15 @@ jest.mock('../deal-underwriter.agent', () => ({
   DealUnderwriterAgent: jest.fn().mockImplementation(() => ({ run: mockUnderwriterRun })),
 }));
 
+const mockLoadOutreachContext = jest.fn();
+jest.mock('../outreach-context', () => ({
+  loadOutreachContext: (...args: unknown[]) => mockLoadOutreachContext(...args),
+}));
+const mockDrafterRun = jest.fn();
+jest.mock('../outreach-drafter.agent', () => ({
+  OutreachDrafterAgent: jest.fn().mockImplementation(() => ({ run: mockDrafterRun })),
+}));
+
 import {
   CostBlockedError,
   IntegrationUnavailableError,
@@ -110,8 +119,8 @@ describe('AgentsProcessor', () => {
   });
 
   it('skips agents that are not released yet', async () => {
-    await expect(processor.process(job({ agent: 'outreach_drafter' }))).resolves.toEqual({
-      skipped: 'agent outreach_drafter is not released yet',
+    await expect(processor.process(job({ agent: 'disposition_matcher' }))).resolves.toEqual({
+      skipped: 'agent disposition_matcher is not released yet',
     });
     expect(mockOpenAgentRun).not.toHaveBeenCalled();
   });
@@ -274,5 +283,44 @@ describe('AgentsProcessor', () => {
       status: 'FAILED',
       error: 'Deal deal-9 not found',
     });
+  });
+
+  it('dispatches inbound runs to the Outreach Drafter and never de-dupes a reply', async () => {
+    mockPrisma.automationRun.findFirst.mockResolvedValue({ id: 'run-0' });
+    const draft = decision([
+      { type: 'append_note', note: 'n' },
+      {
+        type: 'draft_message',
+        channel: 'sms',
+        recipientType: 'seller',
+        content: 'Thanks, when works?',
+        inReplyToMessageId: 'msg-1',
+        gated: true,
+      },
+    ]);
+    mockLoadOutreachContext.mockResolvedValue({ inbound: { id: 'msg-1' } });
+    mockDrafterRun.mockResolvedValue({ decision: draft, costUsd: 0.004 });
+
+    const result = await processor.process(
+      job({
+        agent: 'outreach_drafter',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        trigger: 'inbound',
+        triggerEventId: 'inbound:msg-1',
+        messageId: 'msg-1',
+      }),
+    );
+
+    expect(mockPrisma.automationRun.findFirst).not.toHaveBeenCalled();
+    expect(mockLoadOutreachContext).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'deal', entityId: 'deal-1', messageId: 'msg-1' }),
+    );
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'AWAITING_APPROVAL',
+      decision: draft,
+      costUsd: 0.004,
+    });
+    expect(result.status).toBe('AWAITING_APPROVAL');
   });
 });

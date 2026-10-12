@@ -7,6 +7,7 @@ import {
 } from '@halo/shared';
 import { PrismaService } from '../../prisma.service';
 import { AutomationService } from '../../automation/automation.service';
+import { AgentOrchestrationService } from '../../agent/agent-orchestration.service';
 import { LeadPiiService } from '../../leads/lead-pii.service';
 import { OptOutService } from '../../compliance/opt-out.service';
 import { GLOBAL_ACCOUNT_ID } from '../../control-plane/control-plane.service';
@@ -24,6 +25,11 @@ import {
  */
 export const UNATTRIBUTED_ACCOUNT_ID = 'unknown';
 
+interface InboundLink {
+  leadId: string;
+  dealId: string | null;
+}
+
 export interface InboundResult {
   handled: 'opt_out' | 'help' | 'message';
   /** Text to send back on the same number as TwiML, or null for none. */
@@ -39,6 +45,7 @@ export class TwilioService {
     private automationService: AutomationService,
     private pii: LeadPiiService,
     private optOut: OptOutService,
+    private agents: AgentOrchestrationService,
   ) {}
 
   async handleInbound(body: any): Promise<InboundResult> {
@@ -71,12 +78,17 @@ export class TwilioService {
       };
     }
 
+    // The reply joins its lead and open deal, so the thread, attribution
+    // and the Outreach Drafter all see it.
+    const link = await this.linkToLead(accountId, from);
     const inboundMsg = await this.recordInbound(
       accountId,
       from,
       to,
       messageBody,
       body.MessageSid,
+      {},
+      link,
     );
 
     try {
@@ -86,6 +98,8 @@ export class TwilioService {
         `Attribution failed for message ${inboundMsg.id}: ${err}`,
       );
     }
+
+    await this.queueDrafter(accountId, inboundMsg.id, link);
 
     return { handled: 'message', reply: null };
   }
@@ -133,6 +147,69 @@ export class TwilioService {
     };
   }
 
+  /**
+   * The lead this sender is on in the tenant, and its open deal. Null when
+   * the tenant is unknown or no lead carries the number.
+   */
+  private async linkToLead(
+    accountId: string,
+    fromPhone: string,
+  ): Promise<InboundLink | null> {
+    if (accountId === UNATTRIBUTED_ACCOUNT_ID) return null;
+    const hashes = Array.from(
+      new Set(
+        this.buildPhoneCandidates(fromPhone).map((phone) =>
+          this.pii.phoneHash(phone),
+        ),
+      ),
+    );
+    if (hashes.length === 0) return null;
+    try {
+      const lead = await this.prisma.lead.findFirst({
+        where: { accountId, canonicalPhoneHash: { in: hashes } },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          deals: {
+            where: { stage: { not: 'lost' } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      });
+      if (!lead) return null;
+      return { leadId: lead.id, dealId: lead.deals[0]?.id ?? null };
+    } catch (err) {
+      this.logger.warn(`Could not link inbound reply to a lead: ${err}`);
+      return null;
+    }
+  }
+
+  /** Design doc s3.3: every linked reply gets the Outreach Drafter's read. */
+  private async queueDrafter(
+    accountId: string,
+    messageId: string,
+    link: InboundLink | null,
+  ) {
+    if (!link) return;
+    try {
+      await this.agents.enqueue({
+        agent: 'outreach_drafter',
+        accountId,
+        entityType: link.dealId ? 'deal' : 'lead',
+        entityId: link.dealId ?? link.leadId,
+        trigger: 'inbound',
+        triggerEventId: `inbound:${messageId}`,
+        messageId,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Could not queue the Outreach Drafter for message ${messageId}: ${err}`,
+      );
+    }
+  }
+
   private recordInbound(
     accountId: string,
     from: string,
@@ -140,6 +217,7 @@ export class TwilioService {
     content: string,
     messageSid: string,
     extra: Record<string, unknown> = {},
+    link: InboundLink | null = null,
   ) {
     return this.prisma.message.create({
       data: {
@@ -148,6 +226,7 @@ export class TwilioService {
         direction: 'inbound',
         status: 'delivered',
         content,
+        ...(link ? { leadId: link.leadId, dealId: link.dealId } : {}),
         ...counterpartyColumns('sms', from),
         metadata: {
           to,

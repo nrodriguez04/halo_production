@@ -18,6 +18,8 @@ import {
 import { loadLeadContext } from './agent-context';
 import { loadDealContext } from './deal-context';
 import { DealUnderwriterAgent } from './deal-underwriter.agent';
+import { loadOutreachContext } from './outreach-context';
+import { OutreachDrafterAgent } from './outreach-drafter.agent';
 import {
   AgentOutputError,
   LeadAnalystAgent,
@@ -29,6 +31,7 @@ const OPEN_RUN_WINDOW_MS = 10 * 60 * 1000;
 const RELEASED = new Set<AgentJobPayload['agent']>([
   'lead_analyst',
   'deal_underwriter',
+  'outreach_drafter',
 ]);
 
 export interface AgentJobResult {
@@ -58,8 +61,9 @@ export class AgentsProcessor extends WorkerHost {
     }
 
     // A lifecycle re-fire while a run is open (or awaiting a person) must
-    // not pile a second opinion on the same entity. Manual runs always go.
-    if (p.trigger !== 'manual') {
+    // not pile a second opinion on the same entity. Manual runs always go,
+    // and so does every inbound reply: each one deserves its own answer.
+    if (p.trigger !== 'manual' && p.trigger !== 'inbound') {
       const open = await prisma.automationRun.findFirst({
         where: {
           tenantId: p.accountId,
@@ -119,6 +123,11 @@ export class AgentsProcessor extends WorkerHost {
       const ctx = await loadDealContext(p.entityId, p.accountId);
       if (!ctx) return null;
       return new DealUnderwriterAgent({ models }).run(ctx, p.accountId, runId);
+    }
+    if (p.agent === 'outreach_drafter') {
+      const ctx = await loadOutreachContext(p);
+      if (!ctx) return null;
+      return new OutreachDrafterAgent({ models }).run(ctx, p.accountId, runId);
     }
     const ctx = await loadLeadContext(p.entityId, p.accountId);
     if (!ctx) return null;

@@ -32,6 +32,8 @@ import { LeadLifecycleService } from '../lead-lifecycle/lead-lifecycle.service';
 import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { AgentService } from './agent.service';
+import { OptOutService } from '../compliance/opt-out.service';
+import { openCounterparty } from '../communications/message-counterparty';
 
 const TRIGGER_TYPE: Record<AgentTrigger, AutomationTriggerType> = {
   lifecycle: AutomationTriggerType.API,
@@ -65,6 +67,7 @@ interface AppliedAction {
 type GatedAction = Extract<AgentAction, { gated: boolean }>;
 
 const DEFAULT_SWEEP_STALE_DAYS = 7;
+const DEFAULT_FOLLOWUP_DAYS = 3;
 
 /**
  * The api side of the agent frame: enqueue runs, open the ledger row before
@@ -86,6 +89,7 @@ export class AgentOrchestrationService {
     private queues: QueueService,
     private timeline: TimelineService,
     private agentService: AgentService,
+    private optOut: OptOutService,
   ) {}
 
   /** Queue an agent for an entity. Returns false when the control plane is off. */
@@ -366,7 +370,10 @@ export class AgentOrchestrationService {
    * deal for too long get another look. The job id carries the date, so the
    * same sweep never queues a lead twice.
    */
-  async sweep(now = new Date(), staleDays = sweepStaleDays()): Promise<number> {
+  async sweepStaleLeads(
+    now = new Date(),
+    staleDays = sweepStaleDays(),
+  ): Promise<number> {
     const cutoff = new Date(now.getTime() - staleDays * 86_400_000);
     const stale = await this.prisma.lead.findMany({
       where: {
@@ -385,6 +392,62 @@ export class AgentOrchestrationService {
         accountId: lead.accountId,
         entityType: 'lead',
         entityId: lead.id,
+        trigger: 'sweep',
+        triggerEventId: `sweep:${day}`,
+      });
+      if (ok) queued++;
+    }
+    return queued;
+  }
+
+  /** The nightly sweep: stale leads for the Analyst, quiet deals for the Drafter. */
+  async sweep(now = new Date(), staleDays = sweepStaleDays()): Promise<number> {
+    const leads = await this.sweepStaleLeads(now, staleDays);
+    const followUps = await this.sweepFollowUps(now);
+    return leads + followUps;
+  }
+
+  /**
+   * Design doc s3.3: a deal in contacted / negotiating whose last message
+   * is ours, sent at least AGENT_FOLLOWUP_DAYS ago with nothing waiting in
+   * the queue, gets a follow-up drafted. An inbound last message was already
+   * answered by the inbound trigger; a draft or pending message means a
+   * person has not acted yet.
+   */
+  async sweepFollowUps(
+    now = new Date(),
+    days = followUpDays(),
+  ): Promise<number> {
+    const cutoff = new Date(now.getTime() - days * 86_400_000);
+    const day = now.toISOString().slice(0, 10);
+    const deals = await this.prisma.deal.findMany({
+      where: {
+        stage: { in: ['contacted', 'negotiating'] },
+        leadId: { not: null },
+      },
+      select: { id: true, accountId: true },
+      take: 500,
+    });
+    let queued = 0;
+    for (const deal of deals) {
+      const last = await this.prisma.message.findFirst({
+        where: {
+          accountId: deal.accountId,
+          dealId: deal.id,
+          status: { not: 'failed' },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { direction: true, status: true, createdAt: true },
+      });
+      if (!last || last.direction !== 'outbound') continue;
+      if (['draft', 'pending_approval', 'approved'].includes(last.status))
+        continue;
+      if (last.createdAt > cutoff) continue;
+      const ok = await this.enqueue({
+        agent: 'outreach_drafter',
+        accountId: deal.accountId,
+        entityType: 'deal',
+        entityId: deal.id,
         trigger: 'sweep',
         triggerEventId: `sweep:${day}`,
       });
@@ -481,6 +544,23 @@ export class AgentOrchestrationService {
             );
             break;
           }
+          case 'classify_inbound': {
+            out.push(await this.classifyInbound(accountId, run, action));
+            break;
+          }
+          case 'record_opt_out': {
+            if (action.gated) {
+              out.push({ action, result: 'pending' });
+              break;
+            }
+            out.push(await this.recordOptOut(accountId, run, decision, action));
+            break;
+          }
+          case 'flag_contact': {
+            out.push(await this.flagContact(accountId, run, action));
+            break;
+          }
+          case 'transition_deal':
           case 'draft_message':
             out.push({ action, result: 'pending' });
             break;
@@ -564,6 +644,7 @@ export class AgentOrchestrationService {
     userId: string,
   ): Promise<AppliedAction> {
     const leadId = run.entityType === 'lead' ? run.entityId : null;
+    const dealId = run.entityType === 'deal' ? run.entityId : null;
     try {
       if (action.type === 'transition_lead') {
         if (!leadId) throw new Error('no lead on this run');
@@ -578,21 +659,25 @@ export class AgentOrchestrationService {
         });
         return { action, result: 'applied' };
       }
-      if (!leadId) throw new Error('no lead on this run');
-      const lead = await this.prisma.lead.findFirst({
-        where: { id: leadId, accountId },
-        select: {
-          id: true,
-          canonicalPhoneHash: true,
-          canonicalEmailHash: true,
-          properties: { select: { id: true }, take: 1 },
-        },
-      });
-      if (!lead) throw new Error('lead not found');
+      if (action.type === 'transition_deal') {
+        if (!dealId) throw new Error('no deal on this run');
+        await this.deals.updateStage(
+          dealId,
+          accountId,
+          action.to,
+          userId,
+          TimelineActorType.user,
+        );
+        return { action, result: 'applied' };
+      }
+      if (action.type === 'record_opt_out') {
+        return this.recordOptOut(accountId, run, { agent }, action);
+      }
+      const target = await this.draftTarget(accountId, run, userId);
       const hasContact =
         action.channel === 'sms'
-          ? !!lead.canonicalPhoneHash
-          : !!lead.canonicalEmailHash;
+          ? !!target.lead.canonicalPhoneHash
+          : !!target.lead.canonicalEmailHash;
       if (!hasContact) {
         return {
           action,
@@ -600,9 +685,8 @@ export class AgentOrchestrationService {
           detail: `lead has no ${action.channel === 'sms' ? 'phone' : 'email'} on file`,
         };
       }
-      const deal = await this.dealFor(accountId, lead, userId);
       const draft = await this.agentService.draftMessage(
-        deal.id,
+        target.dealId,
         accountId,
         action.channel,
         action.recipientType,
@@ -612,6 +696,9 @@ export class AgentOrchestrationService {
           agentName: agent,
           workflowName: agentWorkflow(agent),
           automationRunId: run.id,
+          metadata: action.inReplyToMessageId
+            ? { inReplyToMessageId: action.inReplyToMessageId }
+            : undefined,
         },
       );
       return {
@@ -622,6 +709,185 @@ export class AgentOrchestrationService {
     } catch (err) {
       return { action, result: 'failed', detail: (err as Error).message };
     }
+  }
+
+  /**
+   * Where a draft lives: the run's deal and its seller, or, for a lead run,
+   * the lead's open deal (created on approval when there is none).
+   */
+  private async draftTarget(
+    accountId: string,
+    run: { entityType: string | null; entityId: string | null },
+    userId: string,
+  ): Promise<{
+    dealId: string;
+    lead: {
+      canonicalPhoneHash: string | null;
+      canonicalEmailHash: string | null;
+    };
+  }> {
+    if (run.entityType === 'deal' && run.entityId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: run.entityId, accountId },
+        select: {
+          id: true,
+          lead: {
+            select: { canonicalPhoneHash: true, canonicalEmailHash: true },
+          },
+        },
+      });
+      if (!deal) throw new Error('deal not found');
+      if (!deal.lead) throw new Error('deal has no seller lead');
+      return { dealId: deal.id, lead: deal.lead };
+    }
+    if (run.entityType !== 'lead' || !run.entityId) {
+      throw new Error('no lead or deal on this run');
+    }
+    const lead = await this.prisma.lead.findFirst({
+      where: { id: run.entityId, accountId },
+      select: {
+        id: true,
+        canonicalPhoneHash: true,
+        canonicalEmailHash: true,
+        properties: { select: { id: true }, take: 1 },
+      },
+    });
+    if (!lead) throw new Error('lead not found');
+    const deal = await this.dealFor(accountId, lead, userId);
+    return { dealId: deal.id, lead };
+  }
+
+  /** The reply's intent, on the message and on the timeline of the deal (or lead). */
+  private async classifyInbound(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    action: Extract<AgentAction, { type: 'classify_inbound' }>,
+  ): Promise<AppliedAction> {
+    const message = await this.prisma.message.findFirst({
+      where: { id: action.messageId, accountId, direction: 'inbound' },
+      select: { id: true, metadata: true, leadId: true, dealId: true },
+    });
+    if (!message) throw new Error('inbound message not found');
+    await this.prisma.message.update({
+      where: { id: message.id },
+      data: {
+        metadata: {
+          ...((message.metadata as Record<string, unknown>) ?? {}),
+          intent: action.intent,
+          intentConfidence: action.confidence,
+          intentMethod: action.method,
+          classifiedByRunId: run.id,
+        } as Prisma.InputJsonObject,
+      },
+    });
+    const entityId = run.entityId ?? message.dealId ?? message.leadId;
+    if (entityId) {
+      await this.timeline.appendEvent({
+        tenantId: accountId,
+        entityType:
+          run.entityType === 'lead'
+            ? TimelineEntityType.LEAD
+            : TimelineEntityType.DEAL,
+        entityId,
+        eventType: 'INBOUND_CLASSIFIED',
+        payload: {
+          messageId: message.id,
+          intent: action.intent,
+          confidence: action.confidence,
+          method: action.method,
+          automationRunId: run.id,
+        },
+        actorId: null,
+        actorType: TimelineActorType.system,
+      });
+    }
+    return { action, result: 'applied' };
+  }
+
+  /**
+   * An opt-out goes through the compliance service (DNC entry, consents
+   * revoked, audit row), with the contact revealed api-side from the
+   * message's sealed counterparty. The worker never sees the number.
+   */
+  private async recordOptOut(
+    accountId: string,
+    run: { id: string },
+    decision: { agent: AgentName },
+    action: Extract<AgentAction, { type: 'record_opt_out' }>,
+  ): Promise<AppliedAction> {
+    const message = await this.prisma.message.findFirst({
+      where: { id: action.messageId, accountId, direction: 'inbound' },
+      select: { id: true, channel: true, counterpartyEnc: true },
+    });
+    if (!message) throw new Error('inbound message not found');
+    const contact = openCounterparty(message);
+    if (!contact) throw new Error('inbound message has no sealed sender');
+    const source = `agent:${decision.agent}:${run.id}`;
+    const recorded =
+      message.channel === 'email'
+        ? await this.optOut.recordEmailOptOut({
+            accountId,
+            email: contact,
+            source,
+            reason: action.reason,
+          })
+        : await this.optOut.recordPhoneOptOut({
+            accountIds: [accountId],
+            phone: contact,
+            source,
+            reason: action.reason,
+          });
+    return {
+      action,
+      result: 'applied',
+      detail: `opt-out recorded for ${recorded.accountIds.length} scope(s), ${recorded.consentsRevoked} consent(s) revoked`,
+    };
+  }
+
+  /** A contact that does not reach the owner: tag the lead for a new skip trace. */
+  private async flagContact(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    action: Extract<AgentAction, { type: 'flag_contact' }>,
+  ): Promise<AppliedAction> {
+    const leadId =
+      run.entityType === 'lead'
+        ? run.entityId
+        : run.entityType === 'deal' && run.entityId
+          ? (
+              await this.prisma.deal.findFirst({
+                where: { id: run.entityId, accountId },
+                select: { leadId: true },
+              })
+            )?.leadId
+          : null;
+    if (!leadId) throw new Error('no lead to flag');
+    const lead = await this.prisma.lead.findFirst({
+      where: { id: leadId, accountId },
+      select: { id: true, tags: true },
+    });
+    if (!lead) throw new Error('lead not found');
+    const tag = `contact:${action.reason}`;
+    if (!lead.tags.includes(tag)) {
+      await this.prisma.lead.updateMany({
+        where: { id: leadId, accountId },
+        data: { tags: [...lead.tags, tag] },
+      });
+    }
+    await this.timeline.appendEvent({
+      tenantId: accountId,
+      entityType: TimelineEntityType.LEAD,
+      entityId: leadId,
+      eventType: 'CONTACT_FLAGGED',
+      payload: {
+        reason: action.reason,
+        note: action.note,
+        automationRunId: run.id,
+      },
+      actorId: null,
+      actorType: TimelineActorType.system,
+    });
+    return { action, result: 'applied', detail: `tagged ${tag}` };
   }
 
   /** The lead's open deal, or a new one so the drafts have a home. */
@@ -655,4 +921,9 @@ export class AgentOrchestrationService {
 function sweepStaleDays(): number {
   const n = Number(process.env.AGENT_SWEEP_STALE_DAYS);
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_SWEEP_STALE_DAYS;
+}
+
+function followUpDays(): number {
+  const n = Number(process.env.AGENT_FOLLOWUP_DAYS);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_FOLLOWUP_DAYS;
 }
