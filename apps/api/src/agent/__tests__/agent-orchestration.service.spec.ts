@@ -12,7 +12,13 @@ const prisma = {
   deal: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
   underwritingResult: { upsert: jest.fn() },
   message: { findFirst: jest.fn(), update: jest.fn() },
+  marketingMaterial: { create: jest.fn() },
+  buyer: { findMany: jest.fn() },
 };
+const communications = { create: jest.fn() };
+jest.mock('../../pii/contact-crypto', () => ({
+  openValue: jest.fn((enc: string) => `open:${enc}`),
+}));
 const optOut = { recordPhoneOptOut: jest.fn(), recordEmailOptOut: jest.fn() };
 jest.mock('../../communications/message-counterparty', () => ({
   openCounterparty: jest.fn(() => '+15551234567'),
@@ -43,6 +49,7 @@ const service = () =>
     timeline as any,
     agentService as any,
     optOut as any,
+    communications as any,
   );
 
 const baseRun = {
@@ -134,6 +141,7 @@ describe('AgentOrchestrationService', () => {
     prisma.message.findFirst.mockResolvedValue(null);
     prisma.message.update.mockResolvedValue({});
     deals.updateStage.mockResolvedValue({});
+    prisma.marketingMaterial.create.mockResolvedValue({});
     optOut.recordPhoneOptOut.mockResolvedValue({
       accountIds: ['acct'],
       consentsRevoked: 1,
@@ -989,6 +997,179 @@ describe('AgentOrchestrationService', () => {
         trigger: 'sweep',
         triggerEventId: 'sweep:2026-10-12',
       });
+    });
+  });
+
+  describe('Disposition Matcher actions', () => {
+    const dealRun = { ...baseRun, entityType: 'deal', entityId: 'deal-1' };
+    const shortlist = [
+      {
+        buyerId: 'b1',
+        name: 'Sarah Johnson',
+        rank: 1,
+        fit: 'strong',
+        reason: 'fits',
+        ruleScore: 99,
+      },
+      {
+        buyerId: 'b2',
+        name: 'Open Buyer',
+        rank: 2,
+        fit: 'possible',
+        reason: 'open box',
+        ruleScore: 22,
+      },
+    ];
+    const ranking: AgentDecision = {
+      agent: 'disposition_matcher',
+      promptVersion: 'disposition_matcher.v1',
+      model: 'gpt-4o',
+      recommendation: 'market',
+      summary: 'market: 2 of 3 buyers shortlisted (1 strong); blast drafted',
+      rationale: 'r',
+      hardRule: null,
+      actions: [
+        {
+          type: 'rank_buyers',
+          shortlist: shortlist as any,
+          consideredCount: 3,
+        },
+        { type: 'append_note', note: 'r' },
+        {
+          type: 'queue_buyer_blast',
+          buyerIds: ['b1', 'b2'],
+          subject: 'Memphis SFH under contract',
+          body: '654 Birch Rd. Reply if interested.',
+          gated: true,
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue({ ...dealRun });
+      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1' });
+    });
+
+    it('records the ranking on the deal at once and holds the blast for a person', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'AWAITING_APPROVAL',
+        decision: ranking,
+        costUsd: 0.02,
+      });
+
+      expect(prisma.marketingMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          dealId: 'deal-1',
+          type: 'buyer_shortlist',
+          content:
+            '1. Sarah Johnson (strong): fits\n2. Open Buyer (possible): open box',
+          metadata: expect.objectContaining({
+            consideredCount: 3,
+            automationRunId: 'run-1',
+          }),
+        }),
+      });
+      expect(timeline.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'DEAL',
+          entityId: 'deal-1',
+          eventType: 'BUYERS_RANKED',
+        }),
+      );
+      expect(communications.create).not.toHaveBeenCalled();
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.status).toBe('AWAITING_APPROVAL');
+      expect(data.decisionJson.outcomes.map((o: any) => o.result)).toEqual([
+        'applied',
+        'applied',
+        'pending',
+      ]);
+    });
+
+    it('on approval creates one pending-approval email per buyer through the compliance path', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...dealRun,
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          ...ranking,
+          outcomes: [
+            { action: ranking.actions[0], result: 'applied' },
+            { action: ranking.actions[1], result: 'applied' },
+            { action: ranking.actions[2], result: 'pending' },
+          ],
+        },
+      });
+      prisma.buyer.findMany.mockResolvedValue([
+        { id: 'b1', name: 'Sarah Johnson', emailEnc: 'enc-sarah' },
+        { id: 'b2', name: 'Open Buyer', emailEnc: null },
+      ]);
+      communications.create.mockResolvedValue({ id: 'm-blast-1' });
+
+      await service().approve('acct', 'run-1', 'user-1');
+
+      expect(communications.create).toHaveBeenCalledTimes(1);
+      expect(communications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: 'acct',
+          dealId: 'deal-1',
+          channel: 'email',
+          direction: 'outbound',
+          content: '654 Birch Rd. Reply if interested.',
+          source: 'agent',
+          agentName: 'disposition_matcher',
+          automationRunId: 'run-1',
+          metadata: expect.objectContaining({
+            email: 'open:enc-sarah',
+            recipientType: 'buyer',
+            buyerId: 'b1',
+            type: 'buyer_blast',
+            subject: 'Memphis SFH under contract',
+          }),
+        }),
+      );
+      const material = prisma.marketingMaterial.create.mock.calls.find(
+        (c: any) => c[0].data.type === 'buyer_blast',
+      )[0].data;
+      expect(material.metadata).toMatchObject({
+        buyerIds: ['b1', 'b2'],
+        messageIds: ['m-blast-1'],
+        skipped: ['Open Buyer: no email'],
+      });
+      expect(automation.completeRun).toHaveBeenCalledWith(
+        'run-1',
+        'acct',
+        expect.objectContaining({
+          outputJson: expect.objectContaining({ messageIds: ['m-blast-1'] }),
+        }),
+      );
+    });
+
+    it('reports a blast that produced no draft as failed without losing the approval', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...dealRun,
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          ...ranking,
+          outcomes: [{ action: ranking.actions[2], result: 'pending' }],
+        },
+      });
+      prisma.buyer.findMany.mockResolvedValue([
+        { id: 'b1', name: 'Sarah Johnson', emailEnc: 'enc-sarah' },
+      ]);
+      communications.create.mockRejectedValue(
+        new Error('Communications are currently disabled'),
+      );
+
+      await service().approve('acct', 'run-1', 'user-1');
+
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.decisionJson.outcomes[0]).toMatchObject({
+        result: 'failed',
+        detail: expect.stringContaining(
+          'Communications are currently disabled',
+        ),
+      });
+      expect(automation.completeRun).toHaveBeenCalled();
     });
   });
 });

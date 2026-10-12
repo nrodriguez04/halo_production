@@ -34,6 +34,8 @@ import { TimelineService } from '../timeline/timeline.service';
 import { AgentService } from './agent.service';
 import { OptOutService } from '../compliance/opt-out.service';
 import { openCounterparty } from '../communications/message-counterparty';
+import { CommunicationsService } from '../communications/communications.service';
+import { openValue } from '../pii/contact-crypto';
 
 const TRIGGER_TYPE: Record<AgentTrigger, AutomationTriggerType> = {
   lifecycle: AutomationTriggerType.API,
@@ -90,6 +92,7 @@ export class AgentOrchestrationService {
     private timeline: TimelineService,
     private agentService: AgentService,
     private optOut: OptOutService,
+    private communications: CommunicationsService,
   ) {}
 
   /** Queue an agent for an entity. Returns false when the control plane is off. */
@@ -252,10 +255,7 @@ export class AgentOrchestrationService {
         recommendation: decision.recommendation,
         summary: decision.summary,
         applied: outcomes.filter((o) => o.result === 'applied').length,
-        messageIds: applied
-          .map((o) => o.detail)
-          .filter((d): d is string => !!d && d.startsWith('message:'))
-          .map((d) => d.slice('message:'.length)),
+        messageIds: applied.flatMap((o) => messageIdsFromDetail(o.detail)),
       },
     });
   }
@@ -560,6 +560,11 @@ export class AgentOrchestrationService {
             out.push(await this.flagContact(accountId, run, action));
             break;
           }
+          case 'rank_buyers': {
+            out.push(await this.rankBuyers(accountId, run, decision, action));
+            break;
+          }
+          case 'queue_buyer_blast':
           case 'transition_deal':
           case 'draft_message':
             out.push({ action, result: 'pending' });
@@ -672,6 +677,15 @@ export class AgentOrchestrationService {
       }
       if (action.type === 'record_opt_out') {
         return this.recordOptOut(accountId, run, { agent }, action);
+      }
+      if (action.type === 'queue_buyer_blast') {
+        return this.createBuyerBlastDrafts(
+          accountId,
+          run,
+          agent,
+          action,
+          userId,
+        );
       }
       const target = await this.draftTarget(accountId, run, userId);
       const hasContact =
@@ -890,6 +904,145 @@ export class AgentOrchestrationService {
     return { action, result: 'applied', detail: `tagged ${tag}` };
   }
 
+  /** The Matcher's ranking: a shortlist row on the deal's marketing materials and a timeline event. */
+  private async rankBuyers(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    decision: { agent: AgentName },
+    action: Extract<AgentAction, { type: 'rank_buyers' }>,
+  ): Promise<AppliedAction> {
+    if (run.entityType !== 'deal' || !run.entityId) {
+      throw new Error('no deal on this run');
+    }
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: run.entityId, accountId },
+      select: { id: true },
+    });
+    if (!deal) throw new Error('deal not found');
+    await this.prisma.marketingMaterial.create({
+      data: {
+        dealId: deal.id,
+        type: 'buyer_shortlist',
+        content:
+          action.shortlist
+            .map((b) => `${b.rank}. ${b.name} (${b.fit}): ${b.reason}`)
+            .join('\n') || null,
+        metadata: {
+          shortlist: action.shortlist,
+          consideredCount: action.consideredCount,
+          agent: decision.agent,
+          automationRunId: run.id,
+        } as unknown as Prisma.InputJsonObject,
+      },
+    });
+    await this.timeline.appendEvent({
+      tenantId: accountId,
+      entityType: TimelineEntityType.DEAL,
+      entityId: deal.id,
+      eventType: 'BUYERS_RANKED',
+      payload: {
+        count: action.shortlist.length,
+        considered: action.consideredCount,
+        buyerIds: action.shortlist.map((b) => b.buyerId),
+        automationRunId: run.id,
+      },
+      actorId: null,
+      actorType: TimelineActorType.system,
+    });
+    return {
+      action,
+      result: 'applied',
+      detail: `${action.shortlist.length} buyer(s) shortlisted of ${action.consideredCount}`,
+    };
+  }
+
+  /**
+   * The approved blast: one email draft per shortlisted buyer, created
+   * through the communications service so DNC, consent and quiet hours are
+   * checked per recipient and each lands in the approval queue. The buyer's
+   * address is revealed here, api-side, and sealed on the message row.
+   */
+  private async createBuyerBlastDrafts(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    agent: AgentName,
+    action: Extract<AgentAction, { type: 'queue_buyer_blast' }>,
+    userId: string,
+  ): Promise<AppliedAction> {
+    if (run.entityType !== 'deal' || !run.entityId) {
+      throw new Error('no deal on this run');
+    }
+    const dealId = run.entityId;
+    const buyers = await this.prisma.buyer.findMany({
+      where: { id: { in: action.buyerIds }, accountId },
+      select: { id: true, name: true, emailEnc: true },
+    });
+    const messageIds: string[] = [];
+    const skipped: string[] = [];
+    for (const buyer of buyers) {
+      const email = buyer.emailEnc ? openValue(buyer.emailEnc) : null;
+      if (!email) {
+        skipped.push(`${buyer.name}: no email`);
+        continue;
+      }
+      try {
+        const message = await this.communications.create({
+          accountId,
+          dealId,
+          channel: 'email',
+          direction: 'outbound',
+          content: action.body,
+          metadata: {
+            email,
+            recipientType: 'buyer',
+            buyerId: buyer.id,
+            buyerName: buyer.name,
+            type: 'buyer_blast',
+            subject: action.subject,
+            agentName: agent,
+            automationRunId: run.id,
+            approvedRunBy: userId,
+          },
+          source: 'agent',
+          agentName: agent,
+          automationRunId: run.id,
+        } as Parameters<CommunicationsService['create']>[0]);
+        messageIds.push(message.id);
+      } catch (err) {
+        skipped.push(`${buyer.name}: ${(err as Error).message}`);
+      }
+    }
+    await this.prisma.marketingMaterial.create({
+      data: {
+        dealId,
+        type: 'buyer_blast',
+        content: `${action.subject}\n\n${action.body}`,
+        metadata: {
+          buyerIds: action.buyerIds,
+          messageIds,
+          subject: action.subject,
+          agent,
+          automationRunId: run.id,
+          skipped,
+        } as unknown as Prisma.InputJsonObject,
+      },
+    });
+    if (messageIds.length === 0) {
+      return {
+        action,
+        result: 'failed',
+        detail: `no draft could be created: ${skipped.join('; ') || 'no buyers found'}`,
+      };
+    }
+    return {
+      action,
+      result: 'applied',
+      detail:
+        `messages:${messageIds.join(',')}` +
+        (skipped.length ? `; skipped ${skipped.join('; ')}` : ''),
+    };
+  }
+
   /** The lead's open deal, or a new one so the drafts have a home. */
   private async dealFor(
     accountId: string,
@@ -926,4 +1079,19 @@ function sweepStaleDays(): number {
 function followUpDays(): number {
   const n = Number(process.env.AGENT_FOLLOWUP_DAYS);
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_FOLLOWUP_DAYS;
+}
+
+/** Message ids recorded on an applied outcome: `message:<id>` or `messages:<id>,<id>`. */
+function messageIdsFromDetail(detail?: string): string[] {
+  if (!detail) return [];
+  if (detail.startsWith('message:')) return [detail.slice('message:'.length)];
+  if (detail.startsWith('messages:')) {
+    return detail
+      .slice('messages:'.length)
+      .split(';')[0]
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+  return [];
 }

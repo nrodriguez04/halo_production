@@ -25,6 +25,10 @@ export interface PromptTemplates {
     system: string;
     user: string;
   };
+  disposition_matcher: {
+    system: string;
+    user: string;
+  };
 }
 
 export const prompts: PromptTemplates = promptsData as PromptTemplates;
