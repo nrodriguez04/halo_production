@@ -80,6 +80,17 @@ This will start:
 - API: http://localhost:3001
 - Worker: running in background
 
+## Deploying
+
+One VM, Docker Compose, Caddy for TLS. The whole procedure, including
+first-time bootstrap, backups, restore, rollback and the smoke checklist, is
+in [docs/deployment-runbook.md](docs/deployment-runbook.md); the scripts
+are in `scripts/deploy/`.
+
+```bash
+cp .env.prod.example .env && scripts/deploy/bootstrap.sh && scripts/deploy/deploy.sh
+```
+
 ## Infrastructure Services
 
 - **Postgres** (with pgvector): localhost:5432
