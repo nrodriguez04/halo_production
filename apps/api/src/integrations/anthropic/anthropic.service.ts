@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 
 // Cost-aware Anthropic adapter, the Claude counterpart of OpenAIService. The
 // internal AI route picks the adapter from the model name, so worker
@@ -55,22 +56,38 @@ function usesServerSideFallbacks(model: string): boolean {
 @Injectable()
 export class AnthropicService {
   private readonly logger = new Logger(AnthropicService.name);
-  private _client: Anthropic | null = null;
+  /** One SDK client per (key, workspace) pair, so a change on the Integrations page takes effect at once. */
+  private readonly clients = new Map<string, Anthropic>();
 
-  constructor(private costControl: IntegrationCostControlService) {}
+  constructor(
+    private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
+  ) {}
 
-  private get client(): Anthropic {
-    if (!this._client) {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw IntegrationUnavailableException.notConfigured(
-          'anthropic',
-          'ANTHROPIC_API_KEY',
-        );
-      }
-      this._client = new Anthropic({ apiKey });
+  private async client(): Promise<Anthropic> {
+    const apiKey = await this.secrets.resolve('anthropic', 'ANTHROPIC_API_KEY');
+    if (!apiKey) {
+      throw IntegrationUnavailableException.notConfigured(
+        'anthropic',
+        'ANTHROPIC_API_KEY',
+      );
     }
-    return this._client;
+    // Organization-level keys must name the workspace on every request.
+    const workspaceId =
+      (await this.secrets.resolve('anthropic', 'ANTHROPIC_WORKSPACE_ID')) ||
+      undefined;
+    const cacheKey = `${apiKey}|${workspaceId ?? ''}`;
+    let client = this.clients.get(cacheKey);
+    if (!client) {
+      client = new Anthropic({
+        apiKey,
+        ...(workspaceId
+          ? { defaultHeaders: { 'anthropic-workspace-id': workspaceId } }
+          : {}),
+      });
+      this.clients.set(cacheKey, client);
+    }
+    return client;
   }
 
   async chatCompletion(
@@ -78,6 +95,8 @@ export class AnthropicService {
     ctx: CostContext,
   ): Promise<AnthropicChatResult | null> {
     const action = `chat_completion.${input.model}`;
+    // A missing key fails here, before any budget is reserved.
+    await this.client();
     const out = await this.costControl.checkAndCall<
       AnthropicChatInput & { tokensIn: number; tokensOut: number },
       AnthropicChatResult
@@ -104,6 +123,7 @@ export class AnthropicService {
   private async complete(
     input: AnthropicChatInput,
   ): Promise<AnthropicChatResult> {
+    const client = await this.client();
     // OpenAI-style transcripts put the system prompt in the message list;
     // the Messages API takes it as a top-level field.
     const system = input.messages
@@ -131,13 +151,21 @@ export class AnthropicService {
     // too, and the fallbacks parameter only exists there.
     let response: Anthropic.Beta.BetaMessage;
     try {
-      response = await this.client.beta.messages.create({
+      response = await client.beta.messages.create({
         ...base,
         ...(usesServerSideFallbacks(input.model)
           ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }
           : {}),
       });
     } catch (err) {
+      // 429 covers rate limits and "credit balance is too low".
+      if (err instanceof Anthropic.RateLimitError) {
+        throw new IntegrationUnavailableException(
+          'anthropic',
+          'UPSTREAM_ERROR',
+          (err as Error).message,
+        );
+      }
       // Bad credentials are a configuration problem, not a transient failure:
       // surface them as 503 REJECTED_CREDENTIALS like the other adapters.
       if (

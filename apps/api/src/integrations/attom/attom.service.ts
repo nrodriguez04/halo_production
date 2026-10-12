@@ -5,6 +5,7 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import * as crypto from 'crypto';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 
 interface ATTOMResponse {
   property: Array<{
@@ -39,13 +40,18 @@ export class AttomService {
   private readonly logger = new Logger(AttomService.name);
   private readonly baseUrl =
     process.env.ATTOM_BASE_URL || 'https://api.gateway.attomdata.com';
-  private readonly apiKey = process.env.ATTOM_API_KEY || '';
 
   constructor(
     private prisma: PrismaService,
     private controlPlane: ControlPlaneService,
     private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
   ) {}
+
+  /** Resolved per call: a key saved on the Integrations page wins over env. */
+  private apiKey(): Promise<string | null> {
+    return this.secrets.resolve('attom', 'ATTOM_API_KEY');
+  }
 
   async lookupProperty(
     address: string,
@@ -79,7 +85,7 @@ export class AttomService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('attom');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       // Checked before checkAndCall so a missing key does not reserve budget
       // or burn a round-trip just to be rejected with a 401.
       throw IntegrationUnavailableException.notConfigured(
@@ -126,7 +132,7 @@ export class AttomService {
     if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
       throw IntegrationUnavailableException.disabled('attom');
     }
-    if (!this.apiKey) {
+    if (!(await this.apiKey())) {
       // Checked before checkAndCall so a missing key does not reserve budget
       // or burn a round-trip just to be rejected with a 401.
       throw IntegrationUnavailableException.notConfigured(
@@ -172,7 +178,10 @@ export class AttomService {
         const fullUrl = `${url}?${queryString}`;
         const response = await fetch(fullUrl, {
           method: 'GET',
-          headers: { apikey: this.apiKey, Accept: 'application/json' },
+          headers: {
+            apikey: (await this.apiKey()) ?? '',
+            Accept: 'application/json',
+          },
         });
 
         if (!response.ok) {

@@ -27,6 +27,8 @@ const envSchema = z.object({
   TWILIO_PHONE_NUMBER: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Only for organization-level keys, which must name a workspace per request.
+  ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   SENDGRID_API_KEY: z.string().optional(),
   SENDGRID_FROM_EMAIL: z.string().optional(),
   USE_SENDGRID: z.enum(['true', 'false']).optional(),

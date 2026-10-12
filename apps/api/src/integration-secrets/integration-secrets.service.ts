@@ -327,10 +327,38 @@ export class IntegrationSecretsService {
     const res = await fetch('https://api.openai.com/v1/models', {
       headers: { Authorization: `Bearer ${key}` },
     });
-    if (res.ok) return { connected: true };
     if (res.status === 401)
       return { connected: false, error: 'Invalid API key' };
-    return { connected: false, error: `HTTP ${res.status}` };
+    if (!res.ok) return { connected: false, error: `HTTP ${res.status}` };
+
+    // The key is valid; a one-token completion tells whether the account can
+    // actually pay for calls (a 429 with insufficient_quota means no credits).
+    const ping = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+      }),
+    });
+    if (ping.ok) return { connected: true };
+    if (ping.status === 429) {
+      const body = await ping.text();
+      return {
+        connected: true,
+        error: /insufficient_quota|no credits/i.test(body)
+          ? 'Key works, but OpenAI reports no credits remaining; add credits at platform.openai.com/settings/organization/billing'
+          : 'Key works, but OpenAI is rate-limiting this account right now',
+      };
+    }
+    return {
+      connected: true,
+      error: `Key works; test completion got HTTP ${ping.status}`,
+    };
   }
 
   private async testAnthropic(): Promise<{
@@ -339,16 +367,33 @@ export class IntegrationSecretsService {
   }> {
     const key = await this.resolve('anthropic', 'ANTHROPIC_API_KEY');
     if (!key) return { connected: false, error: 'Missing API key' };
+    const workspaceId = await this.resolve(
+      'anthropic',
+      'ANTHROPIC_WORKSPACE_ID',
+    );
 
     try {
       // Listing models is free and exercises the key without a completion.
-      await new Anthropic({ apiKey: key }).models.list({ limit: 1 });
+      await new Anthropic({
+        apiKey: key,
+        ...(workspaceId
+          ? { defaultHeaders: { 'anthropic-workspace-id': workspaceId } }
+          : {}),
+      }).models.list({ limit: 1 });
       return { connected: true };
     } catch (err) {
       if (err instanceof Anthropic.AuthenticationError) {
         return { connected: false, error: 'Invalid API key' };
       }
-      return { connected: false, error: (err as Error).message };
+      const message = (err as Error).message;
+      if (/not scoped to a workspace/i.test(message)) {
+        return {
+          connected: false,
+          error:
+            'This is an organization-level key. Enter the Anthropic workspace ID below (Console > Settings > Workspaces), or create a key inside a workspace.',
+        };
+      }
+      return { connected: false, error: message };
     }
   }
 
@@ -393,14 +438,43 @@ export class IntegrationSecretsService {
   }> {
     const key = await this.resolve('sendgrid', 'SENDGRID_API_KEY');
     if (!key) return { connected: false, error: 'Missing API key' };
+    const from =
+      (await this.resolve('sendgrid', 'SENDGRID_FROM_EMAIL')) ||
+      process.env.EMAIL_FROM ||
+      'no-reply@example.com';
 
-    const res = await fetch('https://api.sendgrid.com/v3/user/profile', {
-      headers: { Authorization: `Bearer ${key}` },
+    // A sandbox-mode send validates the key with only the Mail Send scope
+    // (restricted keys cannot read the account profile) and delivers nothing.
+    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [
+          { to: [{ email: 'connectivity-check@example.com' }] },
+        ],
+        from: { email: from },
+        subject: 'Halo connectivity check',
+        content: [{ type: 'text/plain', value: 'sandbox' }],
+        mail_settings: { sandbox_mode: { enable: true } },
+      }),
     });
     if (res.ok) return { connected: true };
     if (res.status === 401)
       return { connected: false, error: 'Invalid API key' };
-    return { connected: false, error: `HTTP ${res.status}` };
+    const detail = await sendGridErrorDetail(res);
+    if (res.status === 403 && /verified Sender Identity/i.test(detail)) {
+      return {
+        connected: true,
+        error: `Key works, but ${from} is not a verified sender in SendGrid; verify it before sending`,
+      };
+    }
+    return {
+      connected: false,
+      error: `HTTP ${res.status}${detail ? `: ${detail}` : ''}`,
+    };
   }
 
   private async testRentCast(): Promise<{
@@ -415,8 +489,15 @@ export class IntegrationSecretsService {
       { headers: { 'X-Api-Key': key, Accept: 'application/json' } },
     );
     if (res.ok || res.status === 404) return { connected: true };
-    if (res.status === 401 || res.status === 403)
+    if (res.status === 401)
       return { connected: false, error: 'Invalid API key' };
+    if (res.status === 403) {
+      return {
+        connected: false,
+        error:
+          'RentCast rejected the key (403): the account needs an active API plan with a billing method, or the key was revoked',
+      };
+    }
     return { connected: false, error: `HTTP ${res.status}` };
   }
 
@@ -447,5 +528,21 @@ export class IntegrationSecretsService {
       };
     }
     return { connected: false, error: `HTTP ${res.status}` };
+  }
+}
+
+/** SendGrid error bodies: { errors: [{ message, field, help }] }. */
+async function sendGridErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as {
+      errors?: Array<{ message?: string }>;
+    };
+    return (body.errors ?? [])
+      .map((e) => e.message)
+      .filter(Boolean)
+      .join('; ')
+      .slice(0, 240);
+  } catch {
+    return '';
   }
 }

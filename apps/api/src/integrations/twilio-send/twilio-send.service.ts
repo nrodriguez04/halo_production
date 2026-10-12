@@ -3,6 +3,7 @@ import { Twilio } from 'twilio';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 
 // Cost-aware Twilio outbound SMS adapter. Replaces the inline twilio.messages
 // .create() call in the worker's CommunicationsProcessor. Pricing is
@@ -28,23 +29,30 @@ export interface SendSmsResult {
 @Injectable()
 export class TwilioSendService {
   private readonly logger = new Logger(TwilioSendService.name);
-  private _client: Twilio | null = null;
+  /** One client per credential pair, so a rotation on the Integrations page takes effect at once. */
+  private readonly clients = new Map<string, Twilio>();
 
-  constructor(private costControl: IntegrationCostControlService) {}
+  constructor(
+    private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
+  ) {}
 
-  private get client(): Twilio {
-    if (!this._client) {
-      const sid = process.env.TWILIO_ACCOUNT_SID;
-      const token = process.env.TWILIO_AUTH_TOKEN;
-      if (!sid || !token) {
-        throw IntegrationUnavailableException.notConfigured(
-          'twilio',
-          'TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN',
-        );
-      }
-      this._client = new Twilio(sid, token);
+  private async client(): Promise<Twilio> {
+    const sid = await this.secrets.resolve('twilio', 'TWILIO_ACCOUNT_SID');
+    const token = await this.secrets.resolve('twilio', 'TWILIO_AUTH_TOKEN');
+    if (!sid || !token) {
+      throw IntegrationUnavailableException.notConfigured(
+        'twilio',
+        'TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN',
+      );
     }
-    return this._client;
+    const cacheKey = `${sid}|${token}`;
+    let client = this.clients.get(cacheKey);
+    if (!client) {
+      client = new Twilio(sid, token);
+      this.clients.set(cacheKey, client);
+    }
+    return client;
   }
 
   async sendSms(
@@ -64,7 +72,9 @@ export class TwilioSendService {
         ? { idempotencyKey: `sms:${input.messageId}` }
         : undefined,
       execute: async () => {
-        const result = await this.client.messages.create({
+        const result = await (
+          await this.client()
+        ).messages.create({
           body: input.body,
           to: input.to,
           from: input.from,

@@ -115,7 +115,14 @@ const INTEGRATIONS: IntegrationDef[] = [
     provider: 'anthropic',
     category: 'ai',
     name: 'Anthropic',
-    keys: [{ keyName: 'ANTHROPIC_API_KEY', label: 'API Key', placeholder: 'sk-ant-...' }],
+    keys: [
+      { keyName: 'ANTHROPIC_API_KEY', label: 'API Key', placeholder: 'sk-ant-...' },
+      {
+        keyName: 'ANTHROPIC_WORKSPACE_ID',
+        label: 'Workspace ID (organization-level keys only)',
+        placeholder: 'wrkspc_...',
+      },
+    ],
   },
   {
     provider: 'sendgrid',
