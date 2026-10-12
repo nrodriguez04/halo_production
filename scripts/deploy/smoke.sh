@@ -45,6 +45,7 @@ if [ -n "$API" ] && ! printf '%s' "$API" | grep -q 'example.com'; then
   c="$(code "$API/internal/health")"; [ "$c" = "404" ] && pass "internal routes hidden at the edge ($c)" || fail "internal routes reachable at the edge ($c); check Caddyfile"
   c="$(code -X POST "$API/webhooks/twilio/inbound" --data 'From=%2B15555550100&Body=hi')"; [ "$c" = "403" ] && pass "twilio webhook rejects unsigned posts ($c)" || fail "twilio webhook unsigned post returned $c"
   c="$(code -X POST "$API/webhooks/docusign" -H 'content-type: application/json' --data '{}')"; [ "$c" = "403" ] && pass "docusign webhook rejects unsigned posts ($c)" || fail "docusign webhook unsigned post returned $c"
+  c="$(code -X POST "$API/webhooks/email/inbound" -H 'content-type: application/json' --data '{}')"; [ "$c" = "403" ] && pass "inbound email rejects posts without the token ($c)" || fail "inbound email post without token returned $c"
   c="$(code "$API/leads")"; [ "$c" = "401" ] && pass "api requires auth ($c)" || fail "unauthenticated /leads returned $c"
 else
   echo "SKIP  public checks (PUBLIC_API_URL not set to a real domain)"

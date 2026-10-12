@@ -175,6 +175,9 @@ services:
       DOCUSIGN_RSA_PRIVATE_KEY: ${DOCUSIGN_RSA_PRIVATE_KEY:-}
       DOCUSIGN_ENV: ${DOCUSIGN_ENV:-demo}
       DOCUSIGN_CONNECT_SECRET: ${DOCUSIGN_CONNECT_SECRET:-}
+      # Inbound email: Reply-To on every send, token for the Inbound Parse webhook
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO:-}
+      INBOUND_EMAIL_TOKEN: ${INBOUND_EMAIL_TOKEN:-}
 
       # Inside the compose network, not localhost.
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}

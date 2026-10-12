@@ -51,7 +51,17 @@ describe('outbound content', () => {
         postalAddress: '100 Main St, Austin, TX 78701',
         publicApiUrl: 'https://api.example/api',
         from: 'offers@example.com',
+        replyTo: null,
       });
+    });
+
+    it('carries the inbound-email Reply-To when one is configured', () => {
+      expect(
+        emailSettings({
+          ...complete,
+          EMAIL_REPLY_TO: ' deals@reply.example.com ',
+        }).replyTo,
+      ).toBe('deals@reply.example.com');
     });
 
     it('falls back to the SendGrid verified sender', () => {

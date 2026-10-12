@@ -68,6 +68,7 @@ Webhooks to configure on the provider side (all HTTPS on `api.<domain>`):
 | Twilio inbound SMS | `https://api.<domain>/api/webhooks/twilio/inbound` | signature with `TWILIO_AUTH_TOKEN` |
 | Twilio status callback | `https://api.<domain>/api/webhooks/twilio/status` | same |
 | DocuSign Connect | `https://api.<domain>/api/webhooks/docusign` | HMAC with `DOCUSIGN_CONNECT_SECRET` |
+| SendGrid Inbound Parse | `https://api.<domain>/api/webhooks/email/inbound?token=<SENDGRID_INBOUND_TOKEN>` | the token in the URL; MX for `reply.<domain>` -> `mx.sendgrid.net`; set `EMAIL_REPLY_TO` |
 
 Twilio signs the public https URL, which is why `TRUST_PROXY=1` is set and
 Caddy is the only hop in front of the api. Do not put another proxy in
