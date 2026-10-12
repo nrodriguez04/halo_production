@@ -167,10 +167,13 @@ services:
       BATCH_SKIPTRACE_API_KEY: ${BATCH_SKIPTRACE_API_KEY:-}
       SKIP_TRACE_PROVIDER: ${SKIP_TRACE_PROVIDER:-batch}
 
+      # DocuSign JWT grant; normally saved on the Integrations page instead (docs/integrations/docusign.md)
       DOCUSIGN_BASE_URL: ${DOCUSIGN_BASE_URL:-}
       DOCUSIGN_CLIENT_ID: ${DOCUSIGN_CLIENT_ID:-}
-      DOCUSIGN_CLIENT_SECRET: ${DOCUSIGN_CLIENT_SECRET:-}
+      DOCUSIGN_USER_ID: ${DOCUSIGN_USER_ID:-}
       DOCUSIGN_ACCOUNT_ID: ${DOCUSIGN_ACCOUNT_ID:-}
+      DOCUSIGN_RSA_PRIVATE_KEY: ${DOCUSIGN_RSA_PRIVATE_KEY:-}
+      DOCUSIGN_ENV: ${DOCUSIGN_ENV:-demo}
       DOCUSIGN_CONNECT_SECRET: ${DOCUSIGN_CONNECT_SECRET:-}
 
       # Inside the compose network, not localhost.

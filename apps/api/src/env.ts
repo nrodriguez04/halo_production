@@ -105,10 +105,13 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
 
+  // DocuSign JWT grant (docs/integrations/docusign.md); the Integrations page wins over env
   DOCUSIGN_BASE_URL: z.string().optional(),
   DOCUSIGN_CLIENT_ID: z.string().optional(),
-  DOCUSIGN_CLIENT_SECRET: z.string().optional(),
+  DOCUSIGN_USER_ID: z.string().optional(),
   DOCUSIGN_ACCOUNT_ID: z.string().optional(),
+  DOCUSIGN_RSA_PRIVATE_KEY: z.string().optional(),
+  DOCUSIGN_ENV: z.string().optional(),
 
   NODE_ENV: z
     .enum(['development', 'production', 'test'])

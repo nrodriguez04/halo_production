@@ -151,8 +151,21 @@ async function main() {
 
   // 7. DocuSign envelope
   log('7/10', 'Creating DocuSign envelope...');
-  const dsRes = await api(`/integrations/docusign/envelopes?dealId=${dealId}`, { method: 'POST' });
-  log('7/10', dsRes.ok ? 'Envelope created' : 'Skipped (requires DocuSign creds)');
+  // Envelopes are built from the documents library: the first signable
+  // document on the deal goes to the seller. Skipped when there is none.
+  const docsRes = await api(`/documents?dealId=${dealId}`);
+  const docs = docsRes.ok ? ((await docsRes.json()) as Array<{ id: string; fileName: string }>) : [];
+  const signable = docs.find((d) => /\.(pdf|docx?)$/i.test(d.fileName));
+  const dsRes = signable
+    ? await api('/integrations/docusign/envelopes', {
+        method: 'POST',
+        body: JSON.stringify({ dealId, documentIds: [signable.id], recipients: [{ role: 'seller' }] }),
+      })
+    : null;
+  log(
+    '7/10',
+    dsRes?.ok ? 'Envelope created' : 'Skipped (needs a library document, a seller email and DocuSign creds)',
+  );
 
   // 8. Simulate webhook
   log('8/10', 'Simulating DocuSign webhook...');

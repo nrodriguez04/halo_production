@@ -5,6 +5,11 @@ import { randomUUID } from 'crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { MlsClient } from '../integrations/mls/mls.client';
 import { resolveMlsConfig } from '../integrations/mls/mls.config';
+import {
+  DocuSignAuthError,
+  parseEnv,
+  requestSession,
+} from '../integrations/docusign/docusign-auth';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -172,10 +177,7 @@ export class IntegrationSecretsService {
           result = await this.testRealie();
           break;
         case 'docusign':
-          result = {
-            connected: false,
-            error: 'DocuSign connectivity test requires OAuth flow',
-          };
+          result = await this.testDocuSign();
           break;
         default:
           result = { connected: false, error: `Unknown provider: ${provider}` };
@@ -286,6 +288,63 @@ export class IntegrationSecretsService {
   }
 
   // ---- connectivity tests ----
+
+  /**
+   * The JWT grant end to end: assertion, token, userinfo, account. A missing
+   * consent comes back with the URL the API user has to open once.
+   */
+  private async testDocuSign(): Promise<{
+    connected: boolean;
+    error?: string;
+    details?: Record<string, unknown>;
+  }> {
+    const [integrationKey, userId, accountId, privateKey, env, baseUrl] =
+      await Promise.all([
+        this.resolve('docusign', 'DOCUSIGN_CLIENT_ID'),
+        this.resolve('docusign', 'DOCUSIGN_USER_ID'),
+        this.resolve('docusign', 'DOCUSIGN_ACCOUNT_ID'),
+        this.resolve('docusign', 'DOCUSIGN_RSA_PRIVATE_KEY'),
+        this.resolve('docusign', 'DOCUSIGN_ENV'),
+        this.resolve('docusign', 'DOCUSIGN_BASE_URL'),
+      ]);
+    const missing = [
+      ['DOCUSIGN_CLIENT_ID', integrationKey],
+      ['DOCUSIGN_USER_ID', userId],
+      ['DOCUSIGN_ACCOUNT_ID', accountId],
+      ['DOCUSIGN_RSA_PRIVATE_KEY', privateKey],
+    ]
+      .filter(([, v]) => !v?.trim())
+      .map(([k]) => k);
+    if (missing.length) {
+      return { connected: false, error: `Missing ${missing.join(', ')}` };
+    }
+    try {
+      const session = await requestSession({
+        integrationKey: integrationKey!.trim(),
+        userId: userId!.trim(),
+        accountId: accountId!.trim(),
+        privateKey: privateKey!,
+        env: parseEnv(env),
+        baseUrl: baseUrl?.trim() || null,
+      });
+      return {
+        connected: true,
+        details: {
+          env: parseEnv(env),
+          accountName: session.accountName,
+          baseUri: session.baseUri,
+        },
+      };
+    } catch (err) {
+      if (err instanceof DocuSignAuthError && err.consentUrl) {
+        return {
+          connected: false,
+          error: `${err.message}. Open this URL as the API user, accept, then test again: ${err.consentUrl}`,
+        };
+      }
+      return { connected: false, error: (err as Error).message };
+    }
+  }
 
   private async testTwilio(): Promise<{ connected: boolean; error?: string }> {
     const sid = await this.resolve('twilio', 'TWILIO_ACCOUNT_SID');

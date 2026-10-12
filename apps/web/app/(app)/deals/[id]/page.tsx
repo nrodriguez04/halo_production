@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/page-header';
 import { LoadingState, EmptyState, ErrorState } from '@/components/states';
 import { cn } from '@/lib/utils';
 import { FileText, Brain, Clock, MapPin, Calculator } from 'lucide-react';
+import { ContractsPanel, type ContractRow } from '@/components/deals/contracts-panel';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
 const Marker = dynamic(() => import('react-map-gl/maplibre').then((m) => m.Marker), { ssr: false });
@@ -36,8 +37,13 @@ interface Deal {
     longitude?: number;
     estimatedValue?: number;
   };
-  lead?: { id: string; canonicalOwner?: string; canonicalPhone?: string };
-  contracts?: Array<{ id: string; status: string; createdAt: string }>;
+  lead?: {
+    id: string;
+    canonicalOwner?: string;
+    canonicalPhone?: string;
+    canonicalEmail?: string | null;
+  };
+  contracts?: ContractRow[];
   marketingMaterials?: Array<{ id: string; type: string; createdAt: string }>;
 }
 
@@ -86,6 +92,7 @@ export default function DealDetailPage() {
   const [deal, setDeal] = useState<Deal | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [uwResult, setUwResult] = useState<UnderwritingResult | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -115,7 +122,7 @@ export default function DealDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadKey]);
 
   async function runUnderwriting() {
     if (analyzing) return;
@@ -309,37 +316,13 @@ export default function DealDetailPage() {
         </TabsContent>
 
         <TabsContent value="contracts">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <FileText size={16} className="text-primary" aria-hidden />
-                <CardTitle>Contracts</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {(deal.contracts?.length || 0) > 0 ? (
-                <div className="space-y-2">
-                  {deal.contracts!.map((c) => (
-                    <div
-                      key={c.id}
-                      className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2"
-                    >
-                      <Badge variant="info">{c.status}</Badge>
-                      <span className="text-caption text-muted-foreground">
-                        {new Date(c.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={FileText}
-                  title="No contracts yet"
-                  description="Generated contracts and DocuSign envelopes will appear here."
-                />
-              )}
-            </CardContent>
-          </Card>
+          <ContractsPanel
+            dealId={id}
+            propertyAddress={deal.property?.address}
+            lead={deal.lead}
+            contracts={deal.contracts ?? []}
+            onChanged={() => setReloadKey((k) => k + 1)}
+          />
         </TabsContent>
 
         <TabsContent value="timeline">

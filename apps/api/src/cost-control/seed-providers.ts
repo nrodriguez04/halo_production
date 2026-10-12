@@ -53,6 +53,21 @@ const PROVIDERS = [
     ],
   },
 
+  // Contracts
+  {
+    key: 'docusign',
+    displayName: 'DocuSign',
+    category: 'contracts',
+    enabled: true,
+    rateLimitPerMin: 60,
+    pricing: [
+      // Plans bill per envelope or per seat; set the per-envelope figure for
+      // your plan on the Cost Governance page. Zero keeps the ledger row
+      // without blocking.
+      { action: 'create_envelope', unitCostUsd: 0, unit: 'per_call' },
+    ],
+  },
+
   // Geocoding
   {
     key: 'google_geocoding',

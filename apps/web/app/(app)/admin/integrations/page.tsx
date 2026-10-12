@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from '@/components/ui/toast';
@@ -28,7 +29,7 @@ interface IntegrationDef {
   provider: string;
   name: string;
   category: IntegrationCategory;
-  keys: { keyName: string; label: string; placeholder: string }[];
+  keys: { keyName: string; label: string; placeholder: string; multiline?: boolean }[];
 }
 
 // Grouped by what the integration does for the business, not by vendor.
@@ -84,12 +85,33 @@ const INTEGRATIONS: IntegrationDef[] = [
       {
         keyName: 'DOCUSIGN_CLIENT_ID',
         label: 'Integration Key',
-        placeholder: 'Your DocuSign integration key',
+        placeholder: 'Apps and Keys -> your app -> Integration Key',
+      },
+      {
+        keyName: 'DOCUSIGN_USER_ID',
+        label: 'API User ID',
+        placeholder: 'GUID of the user the integration acts as',
+      },
+      {
+        keyName: 'DOCUSIGN_ACCOUNT_ID',
+        label: 'API Account ID',
+        placeholder: 'GUID of the DocuSign account',
+      },
+      {
+        keyName: 'DOCUSIGN_RSA_PRIVATE_KEY',
+        label: 'RSA Private Key',
+        placeholder: '-----BEGIN RSA PRIVATE KEY----- ... (one-line paste is fine)',
+        multiline: true,
+      },
+      {
+        keyName: 'DOCUSIGN_ENV',
+        label: 'Environment',
+        placeholder: 'demo (default) or production',
       },
       {
         keyName: 'DOCUSIGN_CONNECT_SECRET',
         label: 'Connect Secret',
-        placeholder: 'HMAC secret for webhook verification',
+        placeholder: 'HMAC key configured on the Connect webhook',
       },
     ],
   },
@@ -384,19 +406,31 @@ export default function IntegrationsPage() {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <Input
-                          type="password"
-                          placeholder={keyDef.placeholder}
-                          value={inputValues[k] || ''}
-                          onChange={(e) =>
-                            setInputValues((p) => ({ ...p, [k]: e.target.value }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter')
-                              handleSave(integration.provider, keyDef.keyName);
-                          }}
-                          className="font-mono"
-                        />
+                        {keyDef.multiline ? (
+                          <Textarea
+                            placeholder={keyDef.placeholder}
+                            value={inputValues[k] || ''}
+                            onChange={(e) =>
+                              setInputValues((p) => ({ ...p, [k]: e.target.value }))
+                            }
+                            rows={5}
+                            className="font-mono text-xs"
+                          />
+                        ) : (
+                          <Input
+                            type="password"
+                            placeholder={keyDef.placeholder}
+                            value={inputValues[k] || ''}
+                            onChange={(e) =>
+                              setInputValues((p) => ({ ...p, [k]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter')
+                                handleSave(integration.provider, keyDef.keyName);
+                            }}
+                            className="font-mono"
+                          />
+                        )}
                         <Button
                           size="icon"
                           loading={isSaving}
