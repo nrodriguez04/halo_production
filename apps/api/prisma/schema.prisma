@@ -396,6 +396,12 @@ model ControlPlane {
   aiDailyCostCap Float @default(2.0)
   apiDailyCostCap  Float    @default(50)
   aiEnabled      Boolean @default(true)
+  /// Agent autonomy tier (docs/agent-design.md s5): draft_only keeps every
+  /// agent action approval-gated; standard lets agents apply the autonomous
+  /// tier (scores, notes, hard-rule disqualifies) on their own.
+  agentAutonomy  String  @default("draft_only")
+  /// Model per tier, e.g. {"cheap":"gpt-4o-mini","mid":"gpt-4o","strong":"claude-opus-5-5"}; null = platform default.
+  agentModels    Json?
   updatedAt DateTime @updatedAt
   updatedBy String?
 

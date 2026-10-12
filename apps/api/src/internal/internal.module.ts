@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AgentModule } from '../agent/agent.module';
 import { InternalController } from './internal.controller';
 import { GeocodingModule } from '../integrations/geocoding/geocoding.module';
 import { AttomModule } from '../integrations/attom/attom.module';
@@ -10,7 +11,7 @@ import { MessageDispatchService } from '../communications/message-dispatch.servi
 // resolve without re-importing them here. Geocoding and ATTOM are not,
 // hence the explicit imports.
 @Module({
-  imports: [GeocodingModule, AttomModule],
+  imports: [GeocodingModule, AttomModule, AgentModule],
   controllers: [InternalController],
   providers: [PrismaService, MessageDispatchService],
 })

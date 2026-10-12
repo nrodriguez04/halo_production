@@ -1,0 +1,561 @@
+import { BadRequestException } from '@nestjs/common';
+import { AGENT_NAMES, type AgentDecision } from '@halo/shared';
+import { AgentOrchestrationService } from '../agent-orchestration.service';
+
+const prisma = {
+  automationRun: {
+    findFirst: jest.fn(),
+    update: jest.fn(),
+    findMany: jest.fn(),
+  },
+  lead: { updateMany: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
+  deal: { findFirst: jest.fn() },
+};
+const automation = {
+  createRun: jest.fn(),
+  startRun: jest.fn(),
+  failRun: jest.fn(),
+  completeRun: jest.fn(),
+  approveRun: jest.fn(),
+  getRun: jest.fn(),
+};
+const controlPlane = { isEnabled: jest.fn(), getStatus: jest.fn() };
+const deals = { create: jest.fn() };
+const lifecycle = { transition: jest.fn() };
+const queues = { enqueueAgent: jest.fn() };
+const timeline = { appendEvent: jest.fn() };
+const agentService = { draftMessage: jest.fn() };
+
+const service = () =>
+  new AgentOrchestrationService(
+    prisma as any,
+    automation as any,
+    controlPlane as any,
+    deals as any,
+    lifecycle as any,
+    queues as any,
+    timeline as any,
+    agentService as any,
+  );
+
+const baseRun = {
+  id: 'run-1',
+  tenantId: 'acct',
+  status: 'RUNNING',
+  entityType: 'lead',
+  entityId: 'lead-1',
+  decisionJson: null as unknown,
+};
+
+const ruleDisqualify: AgentDecision = {
+  agent: 'lead_analyst',
+  promptVersion: 'lead_analyst.v1',
+  model: null,
+  recommendation: 'disqualified',
+  summary: 'disqualified by rule dnc',
+  rationale: 'Contact is on the do-not-call list',
+  confidence: 1,
+  hardRule: 'dnc',
+  actions: [
+    { type: 'set_lead_score', score: 5 },
+    { type: 'append_note', note: 'DNC (rule: dnc)' },
+    {
+      type: 'transition_lead',
+      to: 'disqualified',
+      reason: 'Contact is on the do-not-call list',
+      gated: false,
+    },
+  ],
+};
+
+const qualified: AgentDecision = {
+  agent: 'lead_analyst',
+  promptVersion: 'lead_analyst.v1',
+  model: 'gpt-4o',
+  recommendation: 'qualified',
+  summary: 'qualified (82/100): absentee, equity',
+  rationale: 'Absentee owner with equity.',
+  hardRule: null,
+  actions: [
+    { type: 'set_lead_score', score: 82 },
+    { type: 'append_note', note: 'Absentee owner with equity.' },
+    {
+      type: 'transition_lead',
+      to: 'qualified',
+      reason: 'Lead Analyst recommendation',
+      gated: true,
+    },
+    {
+      type: 'draft_message',
+      channel: 'sms',
+      recipientType: 'seller',
+      content: 'Hi about 123 Main St',
+      gated: true,
+    },
+    {
+      type: 'draft_message',
+      channel: 'email',
+      recipientType: 'seller',
+      content: 'Hello about 123 Main St',
+      subject: '123 Main St',
+      gated: true,
+    },
+  ],
+};
+
+describe('AgentOrchestrationService', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controlPlane.isEnabled.mockResolvedValue(true);
+    controlPlane.getStatus.mockResolvedValue({ agentAutonomy: 'draft_only' });
+    prisma.automationRun.findFirst.mockResolvedValue({ ...baseRun });
+    prisma.automationRun.update.mockResolvedValue({});
+    prisma.lead.updateMany.mockResolvedValue({ count: 1 });
+    timeline.appendEvent.mockResolvedValue({});
+    lifecycle.transition.mockResolvedValue({});
+    automation.createRun.mockResolvedValue({ id: 'run-1' });
+    automation.startRun.mockResolvedValue({});
+    automation.getRun.mockResolvedValue({ id: 'run-1', status: 'x' });
+    automation.completeRun.mockResolvedValue({
+      id: 'run-1',
+      status: 'COMPLETED',
+    });
+    automation.failRun.mockResolvedValue({ id: 'run-1', status: 'FAILED' });
+    automation.approveRun.mockResolvedValue({});
+    queues.enqueueAgent.mockResolvedValue({});
+  });
+
+  describe('enqueue', () => {
+    const payload = {
+      agent: 'lead_analyst' as const,
+      accountId: 'acct',
+      entityType: 'lead' as const,
+      entityId: 'lead-1',
+      trigger: 'manual' as const,
+    };
+
+    it('queues when the control plane is on', async () => {
+      await expect(service().enqueue(payload)).resolves.toBe(true);
+      expect(queues.enqueueAgent).toHaveBeenCalledWith(payload);
+    });
+
+    it('queues nothing when the control plane is off', async () => {
+      controlPlane.isEnabled.mockResolvedValue(false);
+      await expect(service().enqueue(payload)).resolves.toBe(false);
+      expect(queues.enqueueAgent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('openRun', () => {
+    it('opens and starts a ledger row attributed to the agent workflow', async () => {
+      const res = await service().openRun('acct', {
+        agent: 'lead_analyst',
+        entityType: 'lead',
+        entityId: 'lead-1',
+        trigger: 'sweep',
+        triggerEventId: 'sweep:2026-10-12',
+      });
+      expect(res).toEqual({ id: 'run-1' });
+      expect(automation.createRun).toHaveBeenCalledWith({
+        tenantId: 'acct',
+        source: 'agent',
+        agentName: 'lead_analyst',
+        workflowName: 'agent:lead_analyst',
+        entityType: 'lead',
+        entityId: 'lead-1',
+        triggerType: 'SCHEDULED',
+        inputJson: {
+          trigger: 'sweep',
+          triggerEventId: 'sweep:2026-10-12',
+          actorId: null,
+        },
+        approvalRequired: false,
+      });
+      expect(automation.startRun).toHaveBeenCalledWith('run-1', 'acct');
+    });
+  });
+
+  describe('recordDecision', () => {
+    it('fails the run with the worker error', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'FAILED',
+        error: 'openai unavailable',
+      });
+      expect(automation.failRun).toHaveBeenCalledWith('run-1', 'acct', {
+        error: 'openai unavailable',
+        decision: null,
+      });
+    });
+
+    it('rejects a run the tenant does not own', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(null);
+      await expect(
+        service().recordDecision('acct', 'run-9', { status: 'COMPLETED' }),
+      ).rejects.toThrow('Automation run run-9 not found');
+    });
+
+    it('under draft_only applies score and note but holds even a rule disqualify for a person', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: ruleDisqualify,
+        costUsd: 0,
+      });
+
+      expect(prisma.lead.updateMany).toHaveBeenCalledWith({
+        where: { id: 'lead-1', accountId: 'acct' },
+        data: { score: 5 },
+      });
+      expect(timeline.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'acct',
+          entityId: 'lead-1',
+          eventType: 'AGENT_NOTE',
+          payload: expect.objectContaining({
+            note: 'DNC (rule: dnc)',
+            agent: 'lead_analyst',
+            automationRunId: 'run-1',
+            hardRule: 'dnc',
+          }),
+        }),
+      );
+      expect(lifecycle.transition).not.toHaveBeenCalled();
+      expect(automation.completeRun).not.toHaveBeenCalled();
+
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        status: 'AWAITING_APPROVAL',
+        approvalRequired: true,
+        modelProvider: null,
+        modelName: null,
+        promptVersion: 'lead_analyst.v1',
+        aiCostUsd: 0,
+        outputJson: { recommendation: 'disqualified', pendingActions: 1 },
+      });
+      expect(data.decisionJson.autonomy).toBe('draft_only');
+      expect(data.decisionJson.outcomes.map((o: any) => o.result)).toEqual([
+        'applied',
+        'applied',
+        'pending',
+      ]);
+    });
+
+    it('under standard applies an ungated transition as the system and completes the run', async () => {
+      controlPlane.getStatus.mockResolvedValue({ agentAutonomy: 'standard' });
+
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: ruleDisqualify,
+      });
+
+      expect(lifecycle.transition).toHaveBeenCalledWith({
+        leadId: 'lead-1',
+        accountId: 'acct',
+        next: 'disqualified',
+        actorType: 'system',
+        reason: 'Contact is on the do-not-call list',
+        metadata: { agent: 'lead_analyst', automationRunId: 'run-1' },
+      });
+      expect(automation.completeRun).toHaveBeenCalledWith('run-1', 'acct', {
+        outputJson: {
+          recommendation: 'disqualified',
+          summary: 'disqualified by rule dnc',
+          applied: 3,
+        },
+        aiCostUsd: 0,
+      });
+    });
+
+    it('never applies gated actions on its own, whatever the autonomy', async () => {
+      controlPlane.getStatus.mockResolvedValue({ agentAutonomy: 'standard' });
+
+      await service().recordDecision('acct', 'run-1', {
+        status: 'AWAITING_APPROVAL',
+        decision: qualified,
+        costUsd: 0.03,
+      });
+
+      expect(lifecycle.transition).not.toHaveBeenCalled();
+      expect(agentService.draftMessage).not.toHaveBeenCalled();
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        status: 'AWAITING_APPROVAL',
+        modelProvider: 'openai',
+        modelName: 'gpt-4o',
+        aiCostUsd: 0.03,
+        outputJson: { recommendation: 'qualified', pendingActions: 3 },
+      });
+    });
+
+    it('records a budget block as cancelled with the blocked decision', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'CANCELLED',
+        decision: { ...qualified, recommendation: 'blocked', actions: [] },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'run-1' },
+          data: expect.objectContaining({
+            status: 'CANCELLED',
+            decisionJson: expect.objectContaining({
+              recommendation: 'blocked',
+            }),
+          }),
+        }),
+      );
+      expect(automation.getRun).toHaveBeenCalledWith('run-1', 'acct');
+    });
+  });
+
+  describe('approve', () => {
+    const awaiting = () => ({
+      ...baseRun,
+      status: 'AWAITING_APPROVAL',
+      decisionJson: {
+        ...qualified,
+        autonomy: 'draft_only',
+        outcomes: [
+          { action: qualified.actions[0], result: 'applied' },
+          { action: qualified.actions[1], result: 'applied' },
+          { action: qualified.actions[2], result: 'pending' },
+          { action: qualified.actions[3], result: 'pending' },
+          { action: qualified.actions[4], result: 'pending' },
+        ],
+      },
+    });
+
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue(awaiting());
+      prisma.lead.findFirst.mockResolvedValue({
+        id: 'lead-1',
+        canonicalPhoneHash: 'ph',
+        canonicalEmailHash: null,
+        properties: [{ id: 'prop-1' }],
+      });
+      prisma.deal.findFirst.mockResolvedValue({ id: 'deal-1' });
+      agentService.draftMessage.mockResolvedValue({ message: { id: 'm1' } });
+    });
+
+    it('moves the lead as the approver, drafts only on channels with a contact, and completes', async () => {
+      await service().approve('acct', 'run-1', 'user-1');
+
+      expect(lifecycle.transition).toHaveBeenCalledWith({
+        leadId: 'lead-1',
+        accountId: 'acct',
+        next: 'qualified',
+        actorId: 'user-1',
+        actorType: 'user',
+        reason: 'Lead Analyst recommendation',
+        metadata: {
+          agent: 'lead_analyst',
+          automationRunId: 'run-1',
+          approvedBy: 'user-1',
+        },
+      });
+      expect(agentService.draftMessage).toHaveBeenCalledTimes(1);
+      expect(agentService.draftMessage).toHaveBeenCalledWith(
+        'deal-1',
+        'acct',
+        'sms',
+        'seller',
+        {
+          content: 'Hi about 123 Main St',
+          subject: undefined,
+          agentName: 'lead_analyst',
+          workflowName: 'agent:lead_analyst',
+          automationRunId: 'run-1',
+        },
+      );
+      expect(deals.create).not.toHaveBeenCalled();
+      expect(automation.approveRun).toHaveBeenCalledWith(
+        'run-1',
+        'acct',
+        'user-1',
+      );
+
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.decisionJson.approval).toMatchObject({ by: 'user-1' });
+      expect(data.decisionJson.outcomes.map((o: any) => o.result)).toEqual([
+        'applied',
+        'applied',
+        'applied',
+        'applied',
+        'skipped',
+      ]);
+      expect(data.decisionJson.outcomes[4].detail).toBe(
+        'lead has no email on file',
+      );
+
+      expect(automation.completeRun).toHaveBeenCalledWith('run-1', 'acct', {
+        outputJson: {
+          recommendation: 'qualified',
+          summary: 'qualified (82/100): absentee, equity',
+          applied: 4,
+          messageIds: ['m1'],
+        },
+      });
+    });
+
+    it('opens a deal for the drafts when the lead has none', async () => {
+      prisma.deal.findFirst.mockResolvedValue(null);
+      deals.create.mockResolvedValue({ id: 'deal-2' });
+
+      await service().approve('acct', 'run-1', 'user-1');
+
+      expect(deals.create).toHaveBeenCalledWith(
+        {
+          accountId: 'acct',
+          leadId: 'lead-1',
+          propertyId: 'prop-1',
+          stage: 'new',
+        },
+        'user-1',
+      );
+      expect(agentService.draftMessage.mock.calls[0][0]).toBe('deal-2');
+    });
+
+    it('records a failed draft without losing the approval', async () => {
+      agentService.draftMessage.mockRejectedValue(new Error('sms disabled'));
+
+      await service().approve('acct', 'run-1', 'user-1');
+
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.decisionJson.outcomes[3]).toMatchObject({
+        result: 'failed',
+        detail: 'sms disabled',
+      });
+      expect(automation.completeRun).toHaveBeenCalled();
+    });
+
+    it('refuses a run that is not awaiting approval', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...baseRun,
+        status: 'COMPLETED',
+      });
+      await expect(
+        service().approve('acct', 'run-1', 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(lifecycle.transition).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reject', () => {
+    it('closes the run as cancelled with the reason and leaves the lead alone', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...baseRun,
+        status: 'AWAITING_APPROVAL',
+        decisionJson: { ...qualified },
+      });
+
+      await service().reject('acct', 'run-1', 'user-1', 'wrong owner');
+
+      expect(lifecycle.transition).not.toHaveBeenCalled();
+      expect(prisma.lead.updateMany).not.toHaveBeenCalled();
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.status).toBe('CANCELLED');
+      expect(data.decisionJson.rejection).toMatchObject({
+        by: 'user-1',
+        reason: 'wrong owner',
+      });
+      expect(data.decisionJson.recommendation).toBe('qualified');
+    });
+
+    it('refuses a run that is not awaiting approval', async () => {
+      await expect(
+        service().reject('acct', 'run-1', 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('listRuns', () => {
+    it('lists agent runs with a lead label', async () => {
+      prisma.automationRun.findMany.mockResolvedValue([
+        { id: 'r1', entityType: 'lead', entityId: 'lead-1' },
+        { id: 'r2', entityType: 'lead', entityId: 'lead-gone' },
+      ]);
+      prisma.lead.findMany.mockResolvedValue([
+        {
+          id: 'lead-1',
+          canonicalAddress: '1 Main St',
+          canonicalCity: 'Austin',
+          canonicalState: 'TX',
+          status: 'enriched',
+          score: 50,
+        },
+      ]);
+
+      const runs = await service().listRuns('acct', {});
+
+      expect(prisma.automationRun.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'acct',
+            source: 'agent',
+            agentName: { in: [...AGENT_NAMES] },
+          },
+          take: 50,
+        }),
+      );
+      expect(runs[0].entity).toEqual({
+        label: '1 Main St, Austin, TX',
+        status: 'enriched',
+        score: 50,
+      });
+      expect(runs[1].entity).toBeNull();
+    });
+
+    it('filters by agent and status and caps the page size', async () => {
+      prisma.automationRun.findMany.mockResolvedValue([]);
+      await service().listRuns('acct', {
+        agent: 'lead_analyst',
+        status: 'AWAITING_APPROVAL' as any,
+        limit: 1000,
+      });
+      expect(prisma.automationRun.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'acct',
+            source: 'agent',
+            agentName: 'lead_analyst',
+            status: 'AWAITING_APPROVAL',
+          },
+          take: 200,
+        }),
+      );
+      expect(prisma.lead.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sweep', () => {
+    it('re-queues leads stale in enriched with no deal, once per day, only for enabled tenants', async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        { id: 'l1', accountId: 'a1' },
+        { id: 'l2', accountId: 'a2' },
+      ]);
+      controlPlane.isEnabled.mockImplementation(
+        async (id: string) => id === 'a1',
+      );
+      const now = new Date('2026-10-12T07:05:00.000Z');
+
+      await expect(service().sweep(now, 7)).resolves.toBe(1);
+
+      expect(prisma.lead.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: 'enriched',
+            updatedAt: { lte: new Date('2026-10-05T07:05:00.000Z') },
+            deals: { none: {} },
+          },
+        }),
+      );
+      expect(queues.enqueueAgent).toHaveBeenCalledTimes(1);
+      expect(queues.enqueueAgent).toHaveBeenCalledWith({
+        agent: 'lead_analyst',
+        accountId: 'a1',
+        entityType: 'lead',
+        entityId: 'l1',
+        trigger: 'sweep',
+        triggerEventId: 'sweep:2026-10-12',
+      });
+    });
+  });
+});

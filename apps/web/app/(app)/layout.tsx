@@ -24,6 +24,7 @@ import {
   Bot,
   DollarSign,
   Wallet,
+  Sparkles,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,7 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
     { path: '/analytics/automation/by-workflow' },
     { path: '/analytics/automation/agent-cards' },
   ],
+  '/admin/agents': [{ path: '/agent/runs', params: { limit: 100 } }, { path: '/control-plane' }],
   '/admin/api-spend': [
     { path: '/analytics/api-spend' },
     { path: '/analytics/api-spend/by-provider' },
@@ -90,6 +92,7 @@ const navItems: NavItem[] = [
 const adminItems: NavItem[] = [
   { href: '/admin', label: 'Control Plane', icon: Shield },
   { href: '/admin/automation', label: 'Automation', icon: Bot },
+  { href: '/admin/agents', label: 'Agents', icon: Sparkles },
   { href: '/admin/api-spend', label: 'API Spend', icon: DollarSign },
   { href: '/admin/cost-governance', label: 'Cost Governance', icon: Wallet },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },

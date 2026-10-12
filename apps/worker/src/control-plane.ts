@@ -12,6 +12,9 @@ export interface WorkerControlPlane {
   aiEnabled: boolean;
   aiDailyCostCap: number;
   apiDailyCostCap: number;
+  /** Agent autonomy tier and per-tier model overrides (tenant row only). */
+  agentAutonomy: string;
+  agentModels: unknown;
 }
 
 /**
@@ -31,6 +34,8 @@ const ALL_DISABLED: WorkerControlPlane = {
   aiEnabled: false,
   aiDailyCostCap: 0,
   apiDailyCostCap: 0,
+  agentAutonomy: 'draft_only',
+  agentModels: null,
 };
 
 /**
@@ -74,6 +79,8 @@ export async function getControlPlane(
       aiEnabled: tenant.aiEnabled && global.aiEnabled,
       aiDailyCostCap: Math.min(tenant.aiDailyCostCap, global.aiDailyCostCap),
       apiDailyCostCap: Math.min(tenant.apiDailyCostCap, global.apiDailyCostCap),
+      agentAutonomy: tenant.agentAutonomy,
+      agentModels: tenant.agentModels,
     };
   } catch (err) {
     console.error(

@@ -118,21 +118,36 @@ Tier → model is a tenant setting with a platform default, so changing a model 
 - **Golden set**: 30 leads and 10 deals with known-good decisions, re-run on every prompt change in CI (`npm run agents:eval`), failing the build if the decision agreement rate drops below a threshold. The set is seeded from the first 50 human approvals/rejections.
 - **Decision drift**: weekly job compares agent recommendations with the human approval rate per agent and surfaces it on the runs page.
 
-## 9. Decisions needed
+## 9. Decisions (taken 2026-10-12)
 
-1. **Runtime** — TypeScript worker first (recommended), or CrewAI from the start?
-2. **Trigger set for release one** — lifecycle + inbound + nightly sweep (recommended), or lifecycle only?
-3. **Autonomy default** — `draft_only` for every tenant until flipped (recommended), or `standard` from day one for your own tenant?
-4. **Model tiers** — the table in §7 as the platform default (recommended), or OpenAI-only until Anthropic is configured?
-5. **Release order** — Analyst → Underwriter → Drafter → Matcher (recommended: each one makes the next one's input better), or Drafter first because outreach is the bottleneck?
+The recommended defaults were adopted:
+
+1. **Runtime**: TypeScript worker. CrewAI (`apps/agents`) stays an escape hatch behind the same `AgentDecision` contract.
+2. **Triggers**: lifecycle + inbound + nightly sweep (`AGENT_SWEEP_HOUR_UTC`, default 07:00 UTC, after the sourcing pulls).
+3. **Autonomy default**: `draft_only` for every tenant; `standard` is a per-tenant switch on the Agents admin page.
+4. **Model tiers**: the table in s7 is the intent. Until an Anthropic workspace key is configured the platform defaults are OpenAI (`gpt-4o-mini` / `gpt-4o` / `gpt-4o`); a tenant can override each tier.
+5. **Release order**: Analyst -> Underwriter -> Drafter -> Matcher.
 
 ## 10. Rollout
 
-1. `agents` queue, processor, `AgentDecision` type, run recording, tenant autonomy setting, per-agent budget buckets. No agent yet. (small)
-2. Lead Analyst on lifecycle trigger, `draft_only`. Golden set seeded from the first approvals. (medium)
-3. Deal Underwriter moved onto the agent frame; nightly sweep. (small — the processor exists)
-4. Outreach Drafter: inbound classification deterministic-first, drafts to the queue. (medium)
-5. Disposition Matcher. (medium)
+1. [done] `agents` queue, processor, `AgentDecision` type, run recording, tenant autonomy setting, per-agent budget buckets.
+2. [done] Lead Analyst on lifecycle + sweep triggers, `draft_only`. Golden set: to be seeded from the first approvals.
+3. [next] Deal Underwriter moved onto the agent frame (deal stage triggers).
+4. Outreach Drafter: inbound classification deterministic-first, drafts to the queue.
+5. Disposition Matcher.
 6. Autonomy `standard` for tenants that opt in after reviewing their runs.
 
 Each step is its own PR with its agent's eval in CI.
+
+## 11. Implementation notes (steps 1-2)
+
+- **Contract**: `packages/shared/src/agents/agents.ts` (`AgentJobPayload`, `agentJobId`, `AgentDecision`, `AgentAction`, model tiers, the Lead Analyst output schema). Prompt: `prompts.json` -> `lead_analyst`, version `lead_analyst.v1`.
+- **Queue**: BullMQ `agents`, one queue for every agent, dispatched on `payload.agent`. Job id = `agent__entityType__entityId__triggerEventId` (BullMQ forbids `:` in custom ids), so a replayed trigger never runs the same agent twice for the same event.
+- **Triggers**: the worker queues `lead_analyst` when enrichment finalizes a lead as `enriched` (`apps/worker/src/processors/lead-enrichment.processor.ts`); `AgentSweepService` (api) re-queues leads that sat in `enriched` with no deal for `AGENT_SWEEP_STALE_DAYS` (default 7); `POST /agent/runs` queues one by hand (the Agents page).
+- **Worker**: `apps/worker/src/agents/` (`agents.processor.ts`, `lead-analyst.agent.ts`, `agent-context.ts`). The context is non-contact data only (phone/email appear as present/absent flags, sealed payloads stay sealed). The processor opens the run through `POST /api/internal/agent/runs` before any work and reports through `POST /api/internal/agent/runs/:id/decision`. It never writes domain tables.
+- **Rules before models**: DNC, no usable address, out-of-scope property type, owner-occupied without a distress signal. A rule answer costs nothing.
+- **Api**: `AgentOrchestrationService` applies the decision within the tenant's autonomy (`ControlPlane.agentAutonomy`). Score and note always apply; an ungated transition (rule disqualify) applies only under `standard`; gated actions (qualify, first-touch drafts) wait for `POST /agent/runs/:id/approve`, which moves the lead as the approving user and creates Message drafts (recipient revealed api-side; drafts still go through the communications approval queue before anything sends). `POST /agent/runs/:id/reject` closes the run without touching the lead.
+- **Budget**: workflow buckets `agent:<name>` (monthly; see `seed-providers.ts`) via the `workflow` hint on the internal chat route. A blocked run is recorded CANCELLED with a `blocked` decision, not FAILED.
+- **Models**: `ControlPlane.agentModels` overrides per tier; `claude-*` routes to the Anthropic adapter, everything else to OpenAI.
+- **UI**: `/admin/agents` (approval queue with the drafts in full, recent runs, autonomy + model tiers, queue a run).
+- **Not yet**: the golden-set eval in CI, Underwriter / Drafter / Matcher on the frame, the inbound trigger (lands with the Drafter), CrewAI runtime.

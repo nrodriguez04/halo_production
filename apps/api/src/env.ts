@@ -57,6 +57,10 @@ const envSchema = z.object({
   SOURCING_SCHEDULER: z.string().optional(),
   SOURCING_TICK_SEC: z.string().optional(),
   SOURCING_RUN_HOUR_UTC: z.string().optional(),
+  // Agent sweep (docs/agent-design.md s4): on | off, hour (UTC), stale days
+  AGENT_SWEEP: z.string().optional(),
+  AGENT_SWEEP_HOUR_UTC: z.string().optional(),
+  AGENT_SWEEP_STALE_DAYS: z.string().optional(),
 
   // Cost-governance back-compat: declared so legacy code paths that read
   // process.env.OPENAI_DAILY_COST_CAP via parseFloat(...) get a typed,

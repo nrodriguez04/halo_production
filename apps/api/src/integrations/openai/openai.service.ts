@@ -16,6 +16,8 @@ import { IntegrationSecretsService } from '../../integration-secrets/integration
 
 export interface ChatCompletionInput {
   model: string;
+  /** Workflow-scoped budget bucket (e.g. agent:lead_analyst); see cost-control hints. */
+  workflow?: string;
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
   temperature?: number;
   maxTokens?: number;
@@ -81,6 +83,7 @@ export class OpenAIService {
         tokensOut: input.estimatedTokensOut ?? input.maxTokens ?? 256,
       },
       context: ctx,
+      hints: input.workflow ? { workflow: input.workflow } : undefined,
       execute: async () => {
         try {
           const completion = await client.chat.completions.create({

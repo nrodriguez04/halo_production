@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AI_PROVIDER_KEYS } from '@halo/shared';
@@ -15,6 +16,10 @@ export interface ControlPlaneStatus {
   aiEnabled: boolean;
   aiDailyCostCap: number;
   apiDailyCostCap: number;
+  /** Agent autonomy tier: draft_only (default) or standard. */
+  agentAutonomy: string;
+  /** Model per tier; null means the platform default. */
+  agentModels: Record<string, string> | null;
   updatedAt?: Date;
   updatedBy?: string | null;
   /** True when a GLOBAL row is narrowing this tenant's settings. */
@@ -67,6 +72,8 @@ export class ControlPlaneService {
         aiEnabled: false,
         aiDailyCostCap: 0,
         apiDailyCostCap: 0,
+        agentAutonomy: 'draft_only',
+        agentModels: null,
         globallyConstrained: !!globalRow,
       };
     }
@@ -74,7 +81,11 @@ export class ControlPlaneService {
     const tenant = tenantRow ?? (await this.provision(accountId));
 
     if (!globalRow) {
-      return { ...tenant, globallyConstrained: false };
+      return {
+        ...tenant,
+        agentModels: tenant.agentModels as Record<string, string> | null,
+        globallyConstrained: false,
+      };
     }
 
     return {
@@ -93,6 +104,8 @@ export class ControlPlaneService {
       ),
       updatedAt: tenant.updatedAt,
       updatedBy: tenant.updatedBy,
+      agentAutonomy: tenant.agentAutonomy,
+      agentModels: tenant.agentModels as Record<string, string> | null,
       globallyConstrained: true,
     };
   }
@@ -115,13 +128,23 @@ export class ControlPlaneService {
       aiEnabled?: boolean;
       aiDailyCostCap?: number;
       apiDailyCostCap?: number;
+      agentAutonomy?: string;
+      agentModels?: Record<string, string> | null;
     },
     userId: string,
   ) {
+    // A nullable Json column takes Prisma.JsonNull, not null.
+    const { agentModels, ...rest } = updates;
+    const data = {
+      ...rest,
+      ...(agentModels !== undefined
+        ? { agentModels: agentModels === null ? Prisma.JsonNull : agentModels }
+        : {}),
+    };
     const cp = await this.prisma.controlPlane.upsert({
       where: { accountId },
-      create: { accountId, ...updates, updatedBy: userId },
-      update: { ...updates, updatedBy: userId },
+      create: { accountId, ...data, updatedBy: userId },
+      update: { ...data, updatedBy: userId },
     });
 
     // Bridge legacy ControlPlane caps into the cost-governance budget buckets

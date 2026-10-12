@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { REDIS } from '../redis/redis.module';
+import { agentJobId, type AgentJobPayload } from '@halo/shared';
 
 @Injectable()
 export class QueueService {
@@ -10,6 +11,7 @@ export class QueueService {
   private underwritingQueue: Queue;
   private marketingQueue: Queue;
   private marketingVideoQueue: Queue;
+  private agentsQueue: Queue;
 
   constructor(@Inject(REDIS) private redis: Redis) {
     this.leadEnrichmentQueue = new Queue('lead-enrichment', {
@@ -33,6 +35,18 @@ export class QueueService {
     // budget. The worker has a dedicated VideoProcessor on this queue.
     this.marketingVideoQueue = new Queue('marketing-video', {
       connection: this.redis,
+    });
+
+    // One queue for every agent; the worker dispatches on payload.agent.
+    this.agentsQueue = new Queue('agents', { connection: this.redis });
+  }
+
+  /** Queue an agent run. The job id makes the same (agent, entity, trigger event) idempotent. */
+  async enqueueAgent(payload: AgentJobPayload) {
+    return this.agentsQueue.add(payload.agent, payload, {
+      jobId: agentJobId(payload),
+      removeOnComplete: 500,
+      removeOnFail: 200,
     });
   }
 

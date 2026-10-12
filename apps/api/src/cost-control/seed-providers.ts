@@ -327,6 +327,35 @@ const BUDGET_TEMPLATES = [
   },
 
   // Workflow caps
+  // One bucket per agent so a runaway agent cannot drain the tenant's AI budget.
+  {
+    scope: 'workflow',
+    scopeRef: 'agent:lead_analyst',
+    period: 'month',
+    hardCapUsd: 25,
+    softCapUsd: 20,
+  },
+  {
+    scope: 'workflow',
+    scopeRef: 'agent:deal_underwriter',
+    period: 'month',
+    hardCapUsd: 50,
+    softCapUsd: 40,
+  },
+  {
+    scope: 'workflow',
+    scopeRef: 'agent:outreach_drafter',
+    period: 'month',
+    hardCapUsd: 25,
+    softCapUsd: 20,
+  },
+  {
+    scope: 'workflow',
+    scopeRef: 'agent:disposition_matcher',
+    period: 'month',
+    hardCapUsd: 25,
+    softCapUsd: 20,
+  },
   {
     scope: 'workflow',
     scopeRef: 'skip_trace_pipeline',

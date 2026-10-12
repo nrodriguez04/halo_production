@@ -13,6 +13,10 @@ export interface PromptTemplates {
     flyer: string;
     buyer_blast: string;
   };
+  lead_analyst: {
+    system: string;
+    user: string;
+  };
 }
 
 export const prompts: PromptTemplates = promptsData as PromptTemplates;

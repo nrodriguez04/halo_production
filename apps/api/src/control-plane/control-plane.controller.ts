@@ -17,6 +17,16 @@ const UpdateControlPlaneSchema = z
     aiEnabled: z.boolean().optional(),
     aiDailyCostCap: z.number().min(0).optional(),
     apiDailyCostCap: z.number().min(0).optional(),
+    agentAutonomy: z.enum(['draft_only', 'standard']).optional(),
+    agentModels: z
+      .object({
+        cheap: z.string().trim().min(1).optional(),
+        mid: z.string().trim().min(1).optional(),
+        strong: z.string().trim().min(1).optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 

@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { transitionLeadStatus } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { getControlPlane } from '../control-plane';
+import { enqueueAgentJob } from '../agents/agents-queue';
 import {
   CostBlockedError,
   IntegrationUnavailableError,
@@ -170,6 +171,17 @@ export class LeadEnrichmentProcessor extends WorkerHost {
           (geocodeResult.cost ?? 0) + (attomResult.cost ?? 0) + (skipTrace.costUsd ?? 0),
         progress,
       });
+      if (finalized) {
+        // The Lead Analyst's lifecycle trigger (docs/agent-design.md s4).
+        await enqueueAgentJob({
+          agent: 'lead_analyst',
+          accountId,
+          entityType: 'lead',
+          entityId: leadId,
+          trigger: 'lifecycle',
+          triggerEventId: `enriched:${enrichmentJob.id}`,
+        });
+      }
       if (!finalized) {
         return { success: false, leadId, reason: 'lead_status_changed_during_enrichment' };
       }

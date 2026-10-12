@@ -1,3 +1,4 @@
+import type { AgentDecision } from '@halo/shared';
 // Worker -> api client for paid operations.
 //
 // The worker cannot run IntegrationCostControlService itself (it is wired
@@ -143,6 +144,8 @@ export interface ChatCompletionResponse {
 }
 
 export interface CostAttribution {
+  /** Workflow-scoped budget bucket, e.g. agent:lead_analyst. */
+  workflow?: string;
   leadId?: string;
   propertyId?: string;
   dealId?: string;
@@ -246,5 +249,44 @@ export function propertyLookup(
     'enrichment/property-lookup',
     accountId,
     { ...input },
+  );
+}
+
+// ----------------------------------------------------------------- agents
+
+export interface AgentRunOpenInput {
+  agent: string;
+  entityType: 'lead' | 'deal' | 'message';
+  entityId: string;
+  trigger: 'lifecycle' | 'inbound' | 'sweep' | 'manual';
+  triggerEventId?: string;
+  actorId?: string | null;
+}
+
+/** Opens the AutomationRun for an agent before any work; returns its id. */
+export function openAgentRun(
+  accountId: string,
+  input: AgentRunOpenInput,
+): Promise<{ id: string }> {
+  return postInternal<{ id: string }>('agent/runs', accountId, { ...input });
+}
+
+export interface AgentDecisionReport {
+  status: 'COMPLETED' | 'AWAITING_APPROVAL' | 'FAILED' | 'CANCELLED';
+  decision?: AgentDecision;
+  costUsd?: number;
+  error?: string;
+}
+
+/** Reports the decision; the api applies it within the tenant's autonomy tier. */
+export function recordAgentDecision(
+  accountId: string,
+  runId: string,
+  report: AgentDecisionReport,
+): Promise<unknown> {
+  return postInternal(
+    `agent/runs/${encodeURIComponent(runId)}/decision`,
+    accountId,
+    { ...report },
   );
 }

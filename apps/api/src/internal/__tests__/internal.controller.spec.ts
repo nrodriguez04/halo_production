@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma.service';
 import { MessageDispatchService } from '../../communications/message-dispatch.service';
 import { LeadSkipTraceService } from '../../skip-trace/lead-skip-trace.service';
 import { SkipTraceLeadDto } from '../dto/internal.dto';
+import { AgentOrchestrationService } from '../../agent/agent-orchestration.service';
 
 describe('InternalController', () => {
   let controller: InternalController;
@@ -66,6 +67,10 @@ describe('InternalController', () => {
         { provide: GeocodingService, useValue: geocoding },
         { provide: AttomService, useValue: attom },
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: AgentOrchestrationService,
+          useValue: { openRun: jest.fn(), recordDecision: jest.fn() },
+        },
       ],
     }).compile();
     controller = module.get(InternalController);
