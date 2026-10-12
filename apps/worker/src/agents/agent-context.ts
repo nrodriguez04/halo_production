@@ -215,7 +215,10 @@ function summarizeAttom(r: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** Scalar fields of an object (one level, or `depth` levels for nested step results). */
-function scalarsOf(value: unknown, depth: number): Record<string, unknown> {
+export function scalarsOf(
+  value: unknown,
+  depth: number,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   let keys = 0;
   for (const [k, v] of Object.entries(obj(value))) {

@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  JobRunEntityType,
   JobRunKind,
   TimelineActorType,
   TimelineEntityType,
@@ -16,7 +15,7 @@ import {
   assertPolicy,
   evaluatePolicy,
 } from '@halo/shared';
-import { QueueService } from '../queues/queue.service';
+import { AgentOrchestrationService } from '../agent/agent-orchestration.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { aiSpendSince, startOfToday } from '../cost-control/ai-spend';
 
@@ -24,9 +23,9 @@ import { aiSpendSince, startOfToday } from '../cost-control/ai-spend';
 export class UnderwritingService {
   constructor(
     private prisma: PrismaService,
-    private queueService: QueueService,
     private timelineService: TimelineService,
     private controlPlaneService: ControlPlaneService,
+    private agents: AgentOrchestrationService,
   ) {}
 
   async analyze(accountId: string, actorId: string | null, dealId: string) {
@@ -60,31 +59,27 @@ export class UnderwritingService {
         aiEnabled: controlPlane.enabled && controlPlane.aiEnabled,
       });
 
-      const run = await this.prisma.jobRun.create({
-        data: {
-          tenantId: accountId,
-          kind: JobRunKind.UNDERWRITE_DEAL,
-          entityType: JobRunEntityType.DEAL,
-          entityId: dealId,
-          status: 'QUEUED',
-          actorId: actorId || null,
-        },
-      });
-
-      await this.queueService.enqueueUnderwriting({
-        jobRunId: run.id,
-        tenantId: accountId,
-        dealId,
+      // On demand the Underwriter is the same agent the stage triggers run
+      // (design doc s3.2); the run shows up on /admin/agents.
+      const queued = await this.agents.enqueue({
+        agent: 'deal_underwriter',
+        accountId,
+        entityType: 'deal',
+        entityId: dealId,
+        trigger: 'manual',
+        triggerEventId: `manual:${Date.now()}`,
         actorId,
       });
 
       await this.timelineService.appendEvent({
         tenantId: accountId,
-        entityType: TimelineEntityType.JOB,
-        entityId: run.id,
+        entityType: TimelineEntityType.DEAL,
+        entityId: dealId,
         eventType: 'UNDERWRITE_ENQUEUED',
         payload: {
           dealId,
+          agent: 'deal_underwriter',
+          queued,
           policy: evaluatePolicy({
             tenantId: accountId,
             actorId,
@@ -99,7 +94,11 @@ export class UnderwritingService {
         actorType: TimelineActorType.user,
       });
 
-      return { jobId: run.id, status: run.status };
+      return {
+        queued,
+        status: queued ? 'QUEUED' : 'DISABLED',
+        agent: 'deal_underwriter',
+      };
     } catch (error) {
       if (error instanceof PolicyViolationError) {
         throw new ForbiddenException({
@@ -111,52 +110,76 @@ export class UnderwritingService {
     }
   }
 
+  /**
+   * The newest numbers for the deal: the Underwriter's row in
+   * underwriting_results (legacy results live there too) or, when it is
+   * newer, the last successful legacy job run. Flattened for the deal page.
+   */
   async getResult(accountId: string, dealId: string) {
-    const lastRun = await this.prisma.jobRun.findFirst({
-      where: {
-        tenantId: accountId,
-        kind: JobRunKind.UNDERWRITE_DEAL,
-        entityId: dealId,
-        status: 'SUCCEEDED',
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-
-    if (lastRun?.resultJson) {
-      return {
-        source: 'job_run',
-        jobId: lastRun.id,
-        result: lastRun.resultJson,
-      };
-    }
-
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
     });
-
     if (!deal) {
       throw new NotFoundException(
         `No underwriting result found for deal ${dealId}`,
       );
     }
 
-    const legacy = await this.prisma.underwritingResult.findUnique({
-      where: { dealId },
-      include: {
-        deal: true,
-        property: true,
-      },
-    });
+    const [row, lastRun] = await Promise.all([
+      this.prisma.underwritingResult.findUnique({
+        where: { dealId },
+        include: { deal: true, property: true },
+      }),
+      this.prisma.jobRun.findFirst({
+        where: {
+          tenantId: accountId,
+          kind: JobRunKind.UNDERWRITE_DEAL,
+          entityId: dealId,
+          status: 'SUCCEEDED',
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    ]);
 
-    if (!legacy) {
+    const fromRun = (lastRun?.resultJson ?? null) as Record<
+      string,
+      unknown
+    > | null;
+    if (
+      lastRun &&
+      fromRun &&
+      (!row || !row.updatedAt || lastRun.updatedAt > row.updatedAt)
+    ) {
+      return {
+        source: 'job_run',
+        jobId: lastRun.id,
+        result: fromRun,
+        arv: fromRun.arv ?? null,
+        repairEstimate: fromRun.repairEstimate ?? null,
+        mao: fromRun.mao ?? null,
+        confidence: fromRun.confidence ?? null,
+        summary: fromRun.rationale ?? null,
+        updatedAt: lastRun.updatedAt,
+      };
+    }
+    if (!row) {
       throw new NotFoundException(
         `No underwriting result found for deal ${dealId}`,
       );
     }
-
+    const meta = (row.evaluationMetadata ?? {}) as Record<string, unknown>;
     return {
-      source: 'legacy',
-      result: legacy,
+      source: meta.agent ? 'agent' : 'legacy',
+      result: row,
+      arv: row.arv,
+      repairEstimate: row.repairEstimate,
+      mao: row.mao,
+      confidence: row.confidence,
+      summary: row.rationale,
+      offerRange: meta.offerRange ?? null,
+      stale: meta.stale === true,
+      automationRunId: meta.automationRunId ?? null,
+      updatedAt: row.updatedAt,
     };
   }
 

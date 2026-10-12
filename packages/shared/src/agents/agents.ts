@@ -107,6 +107,25 @@ export type AgentAction =
       content: string;
       subject?: string;
       gated: true;
+    }
+  | {
+      /**
+       * Deal Underwriter numbers (design doc s3.2). Autonomous in every tier:
+       * numbers never reach a seller. The api applies them only when the deal
+       * has not been edited since `dealUpdatedAt`, and records the result
+       * either way.
+       */
+      type: 'set_deal_economics';
+      arv: number | null;
+      repairEstimate: number | null;
+      mao: number | null;
+      confidence: number | null;
+      offerLow: number | null;
+      offerHigh: number | null;
+      rationale: string;
+      compsSummary: string | null;
+      /** deal.updatedAt (ISO) when the context was loaded. */
+      dealUpdatedAt: string;
     };
 
 export interface AgentDecision {
@@ -150,21 +169,54 @@ export const LeadAnalystOutputSchema = z.object({
 });
 export type LeadAnalystOutput = z.infer<typeof LeadAnalystOutputSchema>;
 
+/** The first JSON object in a model reply, or undefined when there is none. */
+function firstJsonObject(text: string): unknown {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return undefined;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Parses the model's reply: the first JSON object in the text, validated.
  * Returns null when there is none or it does not fit, so the caller can
  * record a failed run instead of acting on garbage.
  */
 export function parseLeadAnalystOutput(text: string): LeadAnalystOutput | null {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return null;
-  }
+  const raw = firstJsonObject(text);
+  if (raw === undefined) return null;
   const parsed = LeadAnalystOutputSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+// -------------------------------------------------------------- Deal Underwriter
+
+export const DEAL_UNDERWRITER_PROMPT_VERSION = 'deal_underwriter.v1';
+
+const money = z.number().min(0).max(100_000_000).nullable().default(null);
+
+export const DealUnderwriterOutputSchema = z.object({
+  arv: money,
+  repair_estimate: money,
+  mao: z.number().min(-100_000_000).max(100_000_000).nullable().default(null),
+  offer_low: money,
+  offer_high: money,
+  confidence: z.number().min(0).max(1),
+  recommendation: z.enum(['offer', 'pass', 'hold']),
+  rationale: z.string().min(1).max(3000),
+  comps_summary: z.string().max(2000).nullable().default(null),
+});
+export type DealUnderwriterOutput = z.infer<typeof DealUnderwriterOutputSchema>;
+
+export function parseDealUnderwriterOutput(
+  text: string,
+): DealUnderwriterOutput | null {
+  const raw = firstJsonObject(text);
+  if (raw === undefined) return null;
+  const parsed = DealUnderwriterOutputSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }

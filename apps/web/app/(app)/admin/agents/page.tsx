@@ -34,7 +34,15 @@ import {
 type AgentName = 'lead_analyst' | 'deal_underwriter' | 'outreach_drafter' | 'disposition_matcher';
 
 interface AgentAction {
-  type: 'set_lead_score' | 'append_note' | 'transition_lead' | 'draft_message';
+  type:
+    | 'set_lead_score'
+    | 'append_note'
+    | 'transition_lead'
+    | 'draft_message'
+    | 'set_deal_economics';
+  arv?: number | null;
+  repairEstimate?: number | null;
+  mao?: number | null;
   score?: number;
   note?: string;
   to?: string;
@@ -106,11 +114,13 @@ const AGENT_LABEL: Record<AgentName, string> = {
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
 };
-const RELEASED: AgentName[] = ['lead_analyst'];
+const RELEASED: AgentName[] = ['lead_analyst', 'deal_underwriter'];
 const DEFAULT_MODELS: Required<AgentModels> = { cheap: 'gpt-4o-mini', mid: 'gpt-4o', strong: 'gpt-4o' };
 const RUNS_PARAMS = { limit: 100 };
 
 const usd = (n: number | null | undefined) => (n != null ? `$${n.toFixed(3)}` : '—');
+const money = (n: number | null | undefined) =>
+  n != null ? `$${Math.round(n).toLocaleString()}` : '—';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -139,6 +149,8 @@ const recommendationVariant: Record<string, 'success' | 'destructive' | 'warning
   disqualified: 'destructive',
   hold: 'warning',
   blocked: 'secondary',
+  offer: 'success',
+  pass: 'destructive',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -165,6 +177,8 @@ function describeAction(action: AgentAction): string {
       return `Move the lead to ${action.to}`;
     case 'draft_message':
       return `Draft a seller ${action.channel === 'sms' ? 'text' : 'email'} for the approval queue`;
+    case 'set_deal_economics':
+      return `Set ARV ${money(action.arv)}, repairs ${money(action.repairEstimate)}, MAO ${money(action.mao)} on the deal`;
     default:
       return action.type;
   }
@@ -225,7 +239,7 @@ function ApprovalCard({
               {run.entity && (
                 <span className="text-muted-foreground">
                   {' '}
-                  · lead is {run.entity.status}
+                  · {run.entityType ?? 'lead'} is {run.entity.status}
                   {run.entity.score != null ? `, score ${run.entity.score}` : ''}
                 </span>
               )}
@@ -325,6 +339,7 @@ export default function AgentsPage() {
   const [models, setModels] = useState<AgentModels>({});
   const [queueLeadId, setQueueLeadId] = useState('');
   const [queueAgent, setQueueAgent] = useState<AgentName>('lead_analyst');
+  const queueEntityType: 'lead' | 'deal' = queueAgent === 'deal_underwriter' ? 'deal' : 'lead';
 
   useEffect(() => {
     if (!controlPlane) return;
@@ -359,11 +374,14 @@ export default function AgentsPage() {
       onError: (err) => toast.error('Reject failed', { description: err?.message ?? 'Unknown error' }),
     },
   );
-  const queueMutation = useApiMutation<{ agent: AgentName; entityId: string }, { queued: boolean }>(
+  const queueMutation = useApiMutation<
+    { agent: AgentName; entityType: 'lead' | 'deal'; entityId: string },
+    { queued: boolean }
+  >(
     (body) =>
       apiJson<{ queued: boolean }>('/agent/runs', {
         method: 'POST',
-        body: JSON.stringify({ ...body, entityType: 'lead' }),
+        body: JSON.stringify(body),
       }),
     {
       onSuccess: (res) => {
@@ -555,18 +573,26 @@ export default function AgentsPage() {
             </div>
             <div className="space-y-1">
               <label className="text-caption font-medium text-foreground" htmlFor="queue-lead">
-                Lead ID
+                {queueEntityType === 'deal' ? 'Deal ID' : 'Lead ID'}
               </label>
               <Input
                 id="queue-lead"
                 value={queueLeadId}
                 onChange={(e) => setQueueLeadId(e.target.value)}
-                placeholder="Paste a lead id from the Leads page"
+                placeholder={
+                  queueEntityType === 'deal'
+                    ? 'Paste a deal id from the Deals page'
+                    : 'Paste a lead id from the Leads page'
+                }
               />
             </div>
             <Button
               size="sm"
-              onClick={() => queueMutation.mutate({ agent: queueAgent, entityId: queueLeadId.trim() })}
+              onClick={() => queueMutation.mutate({
+                  agent: queueAgent,
+                  entityType: queueEntityType,
+                  entityId: queueLeadId.trim(),
+                })}
               disabled={!queueLeadId.trim() || queueMutation.isPending}
             >
               <Clock size={14} className="mr-1" aria-hidden />
@@ -593,7 +619,7 @@ export default function AgentsPage() {
                   <TableRow>
                     <TableHead>When</TableHead>
                     <TableHead>Agent</TableHead>
-                    <TableHead>Lead</TableHead>
+                    <TableHead>Entity</TableHead>
                     <TableHead>Trigger</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Recommendation</TableHead>

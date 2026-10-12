@@ -3,6 +3,7 @@ import {
   agentJobId,
   agentWorkflow,
   decisionNeedsApproval,
+  parseDealUnderwriterOutput,
   parseLeadAnalystOutput,
   resolveAgentModel,
 } from './agents';
@@ -78,5 +79,28 @@ describe('agent frame', () => {
       recommendation: 'hold',
       signals: [],
     });
+  });
+
+  it('parses the Deal Underwriter JSON, defaulting missing numbers to null', () => {
+    const out = parseDealUnderwriterOutput(
+      '```json\n{"arv": 250000, "repair_estimate": 35000, "mao": 130000, "confidence": 0.7, "recommendation": "offer", "rationale": "Solid spread."}\n```',
+    );
+    expect(out).toEqual({
+      arv: 250000,
+      repair_estimate: 35000,
+      mao: 130000,
+      offer_low: null,
+      offer_high: null,
+      confidence: 0.7,
+      recommendation: 'offer',
+      rationale: 'Solid spread.',
+      comps_summary: null,
+    });
+    expect(
+      parseDealUnderwriterOutput('{"confidence": 0.5, "recommendation": "buy", "rationale": "x"}'),
+    ).toBeNull();
+    expect(
+      parseDealUnderwriterOutput('{"confidence": 1.5, "recommendation": "offer", "rationale": "x"}'),
+    ).toBeNull();
   });
 });

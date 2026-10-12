@@ -16,9 +16,20 @@ import {
   recordAgentDecision,
 } from '../internal-api.client';
 import { loadLeadContext } from './agent-context';
-import { AgentOutputError, LeadAnalystAgent } from './lead-analyst.agent';
+import { loadDealContext } from './deal-context';
+import { DealUnderwriterAgent } from './deal-underwriter.agent';
+import {
+  AgentOutputError,
+  LeadAnalystAgent,
+  type LeadAnalystResult,
+} from './lead-analyst.agent';
 
 const OPEN_RUN_WINDOW_MS = 10 * 60 * 1000;
+/** Agents on the frame so far (design doc s10). */
+const RELEASED = new Set<AgentJobPayload['agent']>([
+  'lead_analyst',
+  'deal_underwriter',
+]);
 
 export interface AgentJobResult {
   runId?: string;
@@ -42,7 +53,7 @@ export class AgentsProcessor extends WorkerHost {
     if (!controlPlane.enabled || !controlPlane.aiEnabled) {
       return { skipped: 'ai disabled for tenant' };
     }
-    if (p.agent !== 'lead_analyst') {
+    if (!RELEASED.has(p.agent)) {
       return { skipped: `agent ${p.agent} is not released yet` };
     }
 
@@ -73,19 +84,16 @@ export class AgentsProcessor extends WorkerHost {
     });
 
     try {
-      const ctx = await loadLeadContext(p.entityId, p.accountId);
-      if (!ctx) {
+      const result = await this.runAgent(p, controlPlane.agentModels, run.id);
+      if (!result) {
+        const noun = p.entityType === 'deal' ? 'Deal' : 'Lead';
         await recordAgentDecision(p.accountId, run.id, {
           status: 'FAILED',
-          error: `Lead ${p.entityId} not found`,
+          error: `${noun} ${p.entityId} not found`,
         });
         return { runId: run.id, status: 'FAILED' };
       }
-
-      const agent = new LeadAnalystAgent({
-        models: controlPlane.agentModels as AgentModels | null,
-      });
-      const { decision, costUsd } = await agent.run(ctx, p.accountId, run.id);
+      const { decision, costUsd } = result;
       const status = decisionNeedsApproval(decision)
         ? 'AWAITING_APPROVAL'
         : 'COMPLETED';
@@ -98,6 +106,23 @@ export class AgentsProcessor extends WorkerHost {
     } catch (err) {
       return this.closeOnError(p, run.id, err);
     }
+  }
+
+  /** Loads the entity's context and runs the agent; null when the entity is gone. */
+  private async runAgent(
+    p: AgentJobPayload,
+    agentModels: unknown,
+    runId: string,
+  ): Promise<LeadAnalystResult | null> {
+    const models = agentModels as AgentModels | null;
+    if (p.agent === 'deal_underwriter') {
+      const ctx = await loadDealContext(p.entityId, p.accountId);
+      if (!ctx) return null;
+      return new DealUnderwriterAgent({ models }).run(ctx, p.accountId, runId);
+    }
+    const ctx = await loadLeadContext(p.entityId, p.accountId);
+    if (!ctx) return null;
+    return new LeadAnalystAgent({ models }).run(ctx, p.accountId, runId);
   }
 
   /**

@@ -9,7 +9,8 @@ const prisma = {
     findMany: jest.fn(),
   },
   lead: { updateMany: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
-  deal: { findFirst: jest.fn() },
+  deal: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+  underwritingResult: { upsert: jest.fn() },
 };
 const automation = {
   createRun: jest.fn(),
@@ -555,6 +556,143 @@ describe('AgentOrchestrationService', () => {
         entityId: 'l1',
         trigger: 'sweep',
         triggerEventId: 'sweep:2026-10-12',
+      });
+    });
+  });
+
+  describe('set_deal_economics (Deal Underwriter)', () => {
+    const numbers: AgentDecision = {
+      agent: 'deal_underwriter',
+      promptVersion: 'deal_underwriter.v1',
+      model: 'gpt-4o',
+      recommendation: 'offer',
+      summary: 'offer $110,000-$130,000',
+      rationale: 'Solid spread.',
+      confidence: 0.72,
+      hardRule: null,
+      actions: [
+        {
+          type: 'set_deal_economics',
+          arv: 250000,
+          repairEstimate: 35000,
+          mao: 130000,
+          confidence: 0.72,
+          offerLow: 110000,
+          offerHigh: 130000,
+          rationale: 'Solid spread.',
+          compsSummary: 'Two sales nearby.',
+          dealUpdatedAt: '2026-10-12T10:00:00.000Z',
+        },
+        { type: 'append_note', note: 'Solid spread.' },
+      ],
+    };
+
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...baseRun,
+        entityType: 'deal',
+        entityId: 'deal-1',
+      });
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        propertyId: 'prop-1',
+      });
+      prisma.deal.updateMany.mockResolvedValue({ count: 1 });
+      prisma.underwritingResult.upsert.mockResolvedValue({});
+    });
+
+    it('writes the numbers behind the stale guard, records the result, notes the deal, and completes', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: numbers,
+        costUsd: 0.05,
+      });
+
+      expect(prisma.deal.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'deal-1',
+          accountId: 'acct',
+          updatedAt: new Date('2026-10-12T10:00:00.000Z'),
+        },
+        data: { arv: 250000, repairEstimate: 35000, mao: 130000 },
+      });
+      const upsert = prisma.underwritingResult.upsert.mock.calls[0][0];
+      expect(upsert.where).toEqual({ dealId: 'deal-1' });
+      expect(upsert.create).toMatchObject({
+        dealId: 'deal-1',
+        propertyId: 'prop-1',
+        arv: 250000,
+        confidence: 0.72,
+        rationale: 'Solid spread.',
+        compsSummary: { summary: 'Two sales nearby.' },
+        evaluationMetadata: {
+          agent: 'deal_underwriter',
+          automationRunId: 'run-1',
+          model: 'gpt-4o',
+          recommendation: 'offer',
+          offerRange: { low: 110000, high: 130000 },
+          stale: false,
+        },
+      });
+      expect(timeline.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'DEAL',
+          entityId: 'deal-1',
+          eventType: 'AGENT_NOTE',
+        }),
+      );
+      expect(prisma.lead.updateMany).not.toHaveBeenCalled();
+      expect(automation.completeRun).toHaveBeenCalledWith('run-1', 'acct', {
+        outputJson: {
+          recommendation: 'offer',
+          summary: 'offer $110,000-$130,000',
+          applied: 2,
+        },
+        aiCostUsd: 0.05,
+      });
+    });
+
+    it("keeps a person's edits when the deal changed during the run and flags the result stale", async () => {
+      prisma.deal.updateMany.mockResolvedValue({ count: 0 });
+
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: numbers,
+      });
+
+      const upsert = prisma.underwritingResult.upsert.mock.calls[0][0];
+      expect(upsert.update.evaluationMetadata.stale).toBe(true);
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.decisionJson.outcomes[0]).toMatchObject({
+        result: 'skipped',
+        detail: expect.stringContaining('edited during the run'),
+      });
+      expect(automation.completeRun).toHaveBeenCalledWith(
+        'run-1',
+        'acct',
+        expect.objectContaining({
+          outputJson: expect.objectContaining({ applied: 1 }),
+        }),
+      );
+    });
+
+    it('labels deal runs with the property address and stage', async () => {
+      prisma.automationRun.findMany.mockResolvedValue([
+        { id: 'r3', entityType: 'deal', entityId: 'deal-1' },
+      ]);
+      prisma.deal.findMany.mockResolvedValue([
+        {
+          id: 'deal-1',
+          stage: 'contacted',
+          property: { address: '9 Elm St', city: 'Austin', state: 'TX' },
+        },
+      ]);
+      const runs = await service().listRuns('acct', {});
+      expect(prisma.lead.findMany).not.toHaveBeenCalled();
+      expect(runs[0].entity).toEqual({
+        label: '9 Elm St, Austin, TX',
+        status: 'contacted',
+        score: null,
       });
     });
   });

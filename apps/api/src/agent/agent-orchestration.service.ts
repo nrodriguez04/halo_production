@@ -331,6 +331,30 @@ export class AgentOrchestrationService {
         },
       ]),
     );
+    const dealIds = runs
+      .filter((r) => r.entityType === 'deal' && r.entityId)
+      .map((r) => r.entityId as string);
+    const deals = dealIds.length
+      ? await this.prisma.deal.findMany({
+          where: { id: { in: dealIds }, accountId },
+          select: {
+            id: true,
+            stage: true,
+            property: { select: { address: true, city: true, state: true } },
+          },
+        })
+      : [];
+    for (const d of deals) {
+      labels.set(d.id, {
+        label: d.property
+          ? [d.property.address, d.property.city, d.property.state]
+              .filter(Boolean)
+              .join(', ')
+          : `Deal ${d.id}`,
+        status: d.stage,
+        score: null,
+      });
+    }
     return runs.map((r) => ({
       ...r,
       entity: r.entityId ? (labels.get(r.entityId) ?? null) : null,
@@ -392,6 +416,7 @@ export class AgentOrchestrationService {
   ): Promise<AppliedAction[]> {
     const out: AppliedAction[] = [];
     const leadId = run.entityType === 'lead' ? run.entityId : null;
+    const dealId = run.entityType === 'deal' ? run.entityId : null;
     for (const action of decision.actions) {
       try {
         switch (action.type) {
@@ -405,11 +430,14 @@ export class AgentOrchestrationService {
             break;
           }
           case 'append_note': {
-            if (!leadId) throw new Error('no lead on this run');
+            const noteEntity = leadId ?? dealId;
+            if (!noteEntity) throw new Error('no lead or deal on this run');
             await this.timeline.appendEvent({
               tenantId: accountId,
-              entityType: TimelineEntityType.LEAD,
-              entityId: leadId,
+              entityType: leadId
+                ? TimelineEntityType.LEAD
+                : TimelineEntityType.DEAL,
+              entityId: noteEntity,
               eventType: 'AGENT_NOTE',
               payload: {
                 note: action.note,
@@ -440,6 +468,19 @@ export class AgentOrchestrationService {
             out.push({ action, result: 'applied' });
             break;
           }
+          case 'set_deal_economics': {
+            if (!dealId) throw new Error('no deal on this run');
+            out.push(
+              await this.applyDealEconomics(
+                accountId,
+                run.id,
+                dealId,
+                action,
+                decision,
+              ),
+            );
+            break;
+          }
           case 'draft_message':
             out.push({ action, result: 'pending' });
             break;
@@ -449,6 +490,70 @@ export class AgentOrchestrationService {
       }
     }
     return out;
+  }
+
+  /**
+   * Underwriter numbers (design doc s3.2): written to the deal only when
+   * nobody edited it since the context was loaded, and recorded in
+   * underwriting_results either way so the run stays auditable.
+   */
+  private async applyDealEconomics(
+    accountId: string,
+    runId: string,
+    dealId: string,
+    action: Extract<AgentAction, { type: 'set_deal_economics' }>,
+    decision: AgentDecision,
+  ): Promise<AppliedAction> {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
+      select: { id: true, propertyId: true },
+    });
+    if (!deal) throw new Error('deal not found');
+    const write = await this.prisma.deal.updateMany({
+      where: {
+        id: dealId,
+        accountId,
+        updatedAt: new Date(action.dealUpdatedAt),
+      },
+      data: {
+        arv: action.arv,
+        repairEstimate: action.repairEstimate,
+        mao: action.mao,
+      },
+    });
+    const stale = write.count === 0;
+    const numbers = {
+      arv: action.arv,
+      repairEstimate: action.repairEstimate,
+      mao: action.mao,
+      confidence: action.confidence,
+      rationale: action.rationale,
+      compsSummary: action.compsSummary
+        ? { summary: action.compsSummary }
+        : Prisma.JsonNull,
+      evaluationMetadata: {
+        agent: decision.agent,
+        automationRunId: runId,
+        model: decision.model,
+        promptVersion: decision.promptVersion,
+        recommendation: decision.recommendation,
+        offerRange: { low: action.offerLow, high: action.offerHigh },
+        stale,
+      },
+    };
+    await this.prisma.underwritingResult.upsert({
+      where: { dealId },
+      create: { dealId, propertyId: deal.propertyId ?? undefined, ...numbers },
+      update: numbers,
+    });
+    return stale
+      ? {
+          action,
+          result: 'skipped',
+          detail:
+            'deal was edited during the run; its numbers were kept and the result recorded as stale',
+        }
+      : { action, result: 'applied' };
   }
 
   private async applyGated(

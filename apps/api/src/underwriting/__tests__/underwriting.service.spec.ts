@@ -1,7 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../prisma.service';
-import { QueueService } from '../../queues/queue.service';
+import { AgentOrchestrationService } from '../../agent/agent-orchestration.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { UnderwritingService } from '../underwriting.service';
@@ -34,8 +34,8 @@ describe('UnderwritingService', () => {
         UnderwritingService,
         { provide: PrismaService, useValue: prisma },
         {
-          provide: QueueService,
-          useValue: { enqueueUnderwriting: jest.fn() },
+          provide: AgentOrchestrationService,
+          useValue: { enqueue: jest.fn().mockResolvedValue(true) },
         },
         {
           provide: TimelineService,
@@ -71,7 +71,9 @@ describe('UnderwritingService', () => {
     });
     prisma.underwritingResult.findUnique.mockResolvedValue(legacy);
 
-    await expect(service.getResult('tenant_1', 'deal_1')).resolves.toEqual({
+    await expect(
+      service.getResult('tenant_1', 'deal_1'),
+    ).resolves.toMatchObject({
       source: 'legacy',
       result: legacy,
     });
@@ -99,7 +101,6 @@ describe('UnderwritingService', () => {
       id: 'deal-1',
       accountId: 'tenant-1',
     });
-    prisma.jobRun.create = jest.fn();
     (service as any).controlPlaneService.getStatus.mockResolvedValueOnce({
       enabled: true,
       externalDataEnabled: true,
@@ -109,6 +110,107 @@ describe('UnderwritingService', () => {
     await expect(
       service.analyze('tenant-1', 'user-1', 'deal-1'),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.jobRun.create).not.toHaveBeenCalled();
+    expect((service as any).agents.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('queues the Deal Underwriter by hand and records the request on the deal timeline', async () => {
+    prisma.deal.findFirst.mockResolvedValueOnce({
+      id: 'deal-1',
+      accountId: 'tenant-1',
+    });
+
+    await expect(
+      service.analyze('tenant-1', 'user-1', 'deal-1'),
+    ).resolves.toEqual({
+      queued: true,
+      status: 'QUEUED',
+      agent: 'deal_underwriter',
+    });
+
+    expect((service as any).agents.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: 'deal_underwriter',
+        accountId: 'tenant-1',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        trigger: 'manual',
+        actorId: 'user-1',
+      }),
+    );
+    expect((service as any).timelineService.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'DEAL',
+        entityId: 'deal-1',
+        eventType: 'UNDERWRITE_ENQUEUED',
+      }),
+    );
+  });
+
+  it("prefers the Underwriter's row over an older legacy job run, flattened for the deal page", async () => {
+    prisma.deal.findFirst.mockResolvedValue({
+      id: 'deal_1',
+      accountId: 'tenant_1',
+    });
+    prisma.jobRun.findFirst.mockResolvedValue({
+      id: 'job_1',
+      updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+      resultJson: { arv: 200000, mao: 100000 },
+    });
+    prisma.underwritingResult.findUnique.mockResolvedValue({
+      id: 'uw_1',
+      dealId: 'deal_1',
+      arv: 250000,
+      repairEstimate: 35000,
+      mao: 130000,
+      confidence: 0.72,
+      rationale: 'Solid spread.',
+      updatedAt: new Date('2026-10-12T00:00:00.000Z'),
+      evaluationMetadata: {
+        agent: 'deal_underwriter',
+        automationRunId: 'run-1',
+        offerRange: { low: 110000, high: 130000 },
+        stale: false,
+      },
+    });
+
+    await expect(
+      service.getResult('tenant_1', 'deal_1'),
+    ).resolves.toMatchObject({
+      source: 'agent',
+      arv: 250000,
+      mao: 130000,
+      confidence: 0.72,
+      summary: 'Solid spread.',
+      offerRange: { low: 110000, high: 130000 },
+      stale: false,
+      automationRunId: 'run-1',
+    });
+  });
+
+  it('falls back to a newer legacy job run when the result row is older', async () => {
+    prisma.deal.findFirst.mockResolvedValue({
+      id: 'deal_1',
+      accountId: 'tenant_1',
+    });
+    prisma.jobRun.findFirst.mockResolvedValue({
+      id: 'job_1',
+      updatedAt: new Date('2026-10-12T00:00:00.000Z'),
+      resultJson: { arv: 200000, mao: 100000, rationale: 'legacy' },
+    });
+    prisma.underwritingResult.findUnique.mockResolvedValue({
+      id: 'uw_1',
+      dealId: 'deal_1',
+      arv: 250000,
+      updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+    });
+
+    await expect(
+      service.getResult('tenant_1', 'deal_1'),
+    ).resolves.toMatchObject({
+      source: 'job_run',
+      jobId: 'job_1',
+      arv: 200000,
+      summary: 'legacy',
+    });
   });
 });
