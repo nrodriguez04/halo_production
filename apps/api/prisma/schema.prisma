@@ -913,3 +913,30 @@ model LeadEnrichmentJob {
   @@map("lead_enrichment_jobs")
 }
 
+
+/// A target market the sourcing scheduler pulls leads for on a cadence
+/// (docs/sourcing-markets.md). One row per area per tenant; `sources` are
+/// listing-source keys (mls | rentcast | realie), `criteria` the per-source
+/// filters, `lastResult` the outcome of the latest pull.
+model SourcingMarket {
+  id         String    @id @default(cuid())
+  accountId  String
+  label      String
+  state      String
+  city       String?
+  postalCode String?
+  sources    String[]
+  criteria   Json?
+  cadence    String    @default("daily") // daily | weekly | manual
+  enabled    Boolean   @default(true)
+  nextRunAt  DateTime?
+  lastRunAt  DateTime?
+  lastResult Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([accountId, label])
+  @@index([enabled, nextRunAt])
+  @@index([accountId, createdAt])
+  @@map("sourcing_markets")
+}

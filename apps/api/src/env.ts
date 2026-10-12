@@ -53,6 +53,10 @@ const envSchema = z.object({
   // Realie (county records): docs/integrations/listing-sources.md
   REALIE_API_KEY: z.string().optional(),
   REALIE_BASE_URL: z.string().optional(),
+  // Sourcing scheduler (docs/sourcing-markets.md): on | off, tick seconds, run hour (UTC)
+  SOURCING_SCHEDULER: z.string().optional(),
+  SOURCING_TICK_SEC: z.string().optional(),
+  SOURCING_RUN_HOUR_UTC: z.string().optional(),
 
   // Cost-governance back-compat: declared so legacy code paths that read
   // process.env.OPENAI_DAILY_COST_CAP via parseFloat(...) get a typed,

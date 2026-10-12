@@ -7,6 +7,7 @@ import { useDescope } from '@descope/nextjs-sdk/client';
 import {
   LayoutDashboard,
   Users,
+  Globe,
   GitCompare,
   Handshake,
   MessageSquare,
@@ -60,6 +61,7 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
     { path: '/cost-governance/decisions/pending' },
     { path: '/cost-governance/events', params: { limit: 100 } },
   ],
+  '/leads/markets': [{ path: '/sourcing/markets' }, { path: '/sourcing/runs', params: { limit: 20 } }],
   '/admin/integrations': [{ path: '/integration-secrets' }],
   '/admin/chaos': [{ path: '/admin/chaos/status' }, { path: '/admin/dlq' }],
 };
@@ -73,6 +75,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/leads', label: 'Leads', icon: Users },
+  { href: '/leads/markets', label: 'Markets', icon: Globe },
   { href: '/leads/triage', label: 'Data Triage', icon: GitCompare },
   { href: '/deals', label: 'Deals', icon: Handshake },
   { href: '/communications', label: 'Communications', icon: MessageSquare },
