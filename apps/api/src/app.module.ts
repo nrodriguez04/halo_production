@@ -6,6 +6,7 @@ import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { LeadsModule } from './leads/leads.module';
 import { SourcingModule } from './sourcing/sourcing.module';
+import { DocumentsModule } from './documents/documents.module';
 import { LeadPiiModule } from './leads/lead-pii.module';
 import { PropertiesModule } from './properties/properties.module';
 import { DealsModule } from './deals/deals.module';
@@ -66,6 +67,7 @@ import { AuditModule } from './audit/audit.module';
     LeadPiiModule,
     LeadsModule,
     SourcingModule,
+    DocumentsModule,
     PropertiesModule,
     DealsModule,
     CommunicationsModule,
