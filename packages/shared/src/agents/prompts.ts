@@ -17,6 +17,10 @@ export interface PromptTemplates {
     system: string;
     user: string;
   };
+  deal_underwriter: {
+    system: string;
+    user: string;
+  };
 }
 
 export const prompts: PromptTemplates = promptsData as PromptTemplates;

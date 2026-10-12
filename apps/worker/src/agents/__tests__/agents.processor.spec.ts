@@ -33,12 +33,22 @@ jest.mock('../lead-analyst.agent', () => {
   };
 });
 
+const mockLoadDealContext = jest.fn();
+jest.mock('../deal-context', () => ({
+  loadDealContext: (...args: unknown[]) => mockLoadDealContext(...args),
+}));
+const mockUnderwriterRun = jest.fn();
+jest.mock('../deal-underwriter.agent', () => ({
+  DealUnderwriterAgent: jest.fn().mockImplementation(() => ({ run: mockUnderwriterRun })),
+}));
+
 import {
   CostBlockedError,
   IntegrationUnavailableError,
   InternalApiError,
 } from '../../internal-api.client';
 import { AgentOutputError, LeadAnalystAgent } from '../lead-analyst.agent';
+import { DealUnderwriterAgent } from '../deal-underwriter.agent';
 import { AgentsProcessor } from '../agents.processor';
 
 const job = (data: Partial<AgentJobPayload> = {}) =>
@@ -100,8 +110,8 @@ describe('AgentsProcessor', () => {
   });
 
   it('skips agents that are not released yet', async () => {
-    await expect(processor.process(job({ agent: 'deal_underwriter' }))).resolves.toEqual({
-      skipped: 'agent deal_underwriter is not released yet',
+    await expect(processor.process(job({ agent: 'outreach_drafter' }))).resolves.toEqual({
+      skipped: 'agent outreach_drafter is not released yet',
     });
     expect(mockOpenAgentRun).not.toHaveBeenCalled();
   });
@@ -219,6 +229,50 @@ describe('AgentsProcessor', () => {
     expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
       status: 'FAILED',
       error: 'openai unavailable (REJECTED_CREDENTIALS): bad key',
+    });
+  });
+
+  it('dispatches deal runs to the Deal Underwriter with the tenant models', async () => {
+    const numbers = decision([
+      {
+        type: 'set_deal_economics',
+        arv: 250000,
+        repairEstimate: 30000,
+        mao: 135000,
+        confidence: 0.7,
+        offerLow: 115000,
+        offerHigh: 135000,
+        rationale: 'r',
+        compsSummary: null,
+        dealUpdatedAt: '2026-10-12T00:00:00.000Z',
+      },
+    ]);
+    mockLoadDealContext.mockResolvedValue({ deal: { id: 'deal-1' } });
+    mockUnderwriterRun.mockResolvedValue({ decision: numbers, costUsd: 0.05 });
+
+    const result = await processor.process(
+      job({ agent: 'deal_underwriter', entityType: 'deal', entityId: 'deal-1' }),
+    );
+
+    expect(mockLoadDealContext).toHaveBeenCalledWith('deal-1', 'acct');
+    expect(mockLoadLeadContext).not.toHaveBeenCalled();
+    expect(DealUnderwriterAgent).toHaveBeenCalledWith({ models: { mid: 'gpt-4o' } });
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'COMPLETED',
+      decision: numbers,
+      costUsd: 0.05,
+    });
+    expect(result.status).toBe('COMPLETED');
+  });
+
+  it('fails a deal run when the deal is gone', async () => {
+    mockLoadDealContext.mockResolvedValue(null);
+    await processor.process(
+      job({ agent: 'deal_underwriter', entityType: 'deal', entityId: 'deal-9' }),
+    );
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'FAILED',
+      error: 'Deal deal-9 not found',
     });
   });
 });

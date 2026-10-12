@@ -5,12 +5,16 @@ import { PrismaService } from '../../prisma.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { AutomationService } from '../../automation/automation.service';
 import { PIIService } from '../../pii/pii.service';
+import { QueueService } from '../../queues/queue.service';
+import { ControlPlaneService } from '../../control-plane/control-plane.service';
 
 describe('DealsService', () => {
   let service: DealsService;
   let prisma: any;
   let timelineService: any;
   let automationService: any;
+  let queueService: any;
+  let controlPlaneService: any;
 
   const existingDeal = {
     id: 'deal-1',
@@ -41,6 +45,8 @@ describe('DealsService', () => {
     automationService = {
       attributeStageChange: jest.fn(),
     };
+    queueService = { enqueueAgent: jest.fn().mockResolvedValue({}) };
+    controlPlaneService = { isEnabled: jest.fn().mockResolvedValue(true) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -48,6 +54,8 @@ describe('DealsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: TimelineService, useValue: timelineService },
         { provide: AutomationService, useValue: automationService },
+        { provide: QueueService, useValue: queueService },
+        { provide: ControlPlaneService, useValue: controlPlaneService },
         PIIService,
       ],
     }).compile();
@@ -233,6 +241,74 @@ describe('DealsService', () => {
       ).rejects.toThrow(NotFoundException);
 
       expect(prisma.deal.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateStage', () => {
+    it('queues the Deal Underwriter when a deal reaches contacted', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'new',
+      });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'contacted',
+        updatedAt: new Date('2026-10-12T10:00:00.000Z'),
+      });
+
+      await service.updateStage('deal-1', 'tenant-1', 'contacted', 'user-1');
+
+      expect(queueService.enqueueAgent).toHaveBeenCalledWith({
+        agent: 'deal_underwriter',
+        accountId: 'tenant-1',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        trigger: 'lifecycle',
+        triggerEventId: 'stage:contacted:2026-10-12T10:00:00.000Z',
+      });
+    });
+
+    it('leaves the Underwriter alone for other stages and when the control plane is off', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'new',
+      });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'lost',
+        updatedAt: new Date(),
+      });
+      await service.updateStage('deal-1', 'tenant-1', 'lost', 'user-1');
+      expect(queueService.enqueueAgent).not.toHaveBeenCalled();
+
+      controlPlaneService.isEnabled.mockResolvedValue(false);
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'contacted',
+      });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'negotiating',
+        updatedAt: new Date(),
+      });
+      await service.updateStage('deal-1', 'tenant-1', 'negotiating', 'user-1');
+      expect(queueService.enqueueAgent).not.toHaveBeenCalled();
+    });
+
+    it('never fails a stage change because the queue is down', async () => {
+      queueService.enqueueAgent.mockRejectedValue(new Error('redis down'));
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'new',
+      });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'contacted',
+        updatedAt: new Date(),
+      });
+      await expect(
+        service.updateStage('deal-1', 'tenant-1', 'contacted', 'user-1'),
+      ).resolves.toMatchObject({ stage: 'contacted' });
     });
   });
 });

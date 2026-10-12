@@ -14,6 +14,8 @@ import {
 import { TimelineService } from '../timeline/timeline.service';
 import { AutomationService } from '../automation/automation.service';
 import { PIIService } from '../pii/pii.service';
+import { QueueService } from '../queues/queue.service';
+import { ControlPlaneService } from '../control-plane/control-plane.service';
 import type { PiiViewer } from '../auth/pii-access';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 
@@ -26,6 +28,8 @@ export class DealsService {
     private timelineService: TimelineService,
     private automationService: AutomationService,
     private pii: PIIService,
+    private queues: QueueService,
+    private controlPlane: ControlPlaneService,
   ) {}
 
   /**
@@ -273,6 +277,38 @@ export class DealsService {
       );
     }
 
+    if (stage === 'contacted' || stage === 'negotiating') {
+      await this.queueUnderwriter(accountId, id, stage, updated.updatedAt);
+    }
+
     return updated;
+  }
+
+  /**
+   * Design doc s3.2: the Deal Underwriter values a deal when it reaches
+   * contacted or negotiating. Queue failures are logged, never thrown: the
+   * stage change already happened.
+   */
+  private async queueUnderwriter(
+    accountId: string,
+    dealId: string,
+    stage: DealStage,
+    at: Date,
+  ) {
+    try {
+      if (!(await this.controlPlane.isEnabled(accountId))) return;
+      await this.queues.enqueueAgent({
+        agent: 'deal_underwriter',
+        accountId,
+        entityType: 'deal',
+        entityId: dealId,
+        trigger: 'lifecycle',
+        triggerEventId: `stage:${stage}:${at.toISOString()}`,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Could not queue the Deal Underwriter for deal ${dealId}: ${(err as Error).message}`,
+      );
+    }
   }
 }

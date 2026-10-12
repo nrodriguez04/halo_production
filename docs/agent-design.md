@@ -132,14 +132,14 @@ The recommended defaults were adopted:
 
 1. [done] `agents` queue, processor, `AgentDecision` type, run recording, tenant autonomy setting, per-agent budget buckets.
 2. [done] Lead Analyst on lifecycle + sweep triggers, `draft_only`. Golden set: to be seeded from the first approvals.
-3. [next] Deal Underwriter moved onto the agent frame (deal stage triggers).
-4. Outreach Drafter: inbound classification deterministic-first, drafts to the queue.
+3. [done] Deal Underwriter on the agent frame (stage triggers `contacted` / `negotiating`, manual `POST /underwriting/analyze/:dealId`).
+4. [next] Outreach Drafter: inbound classification deterministic-first, drafts to the queue.
 5. Disposition Matcher.
 6. Autonomy `standard` for tenants that opt in after reviewing their runs.
 
 Each step is its own PR with its agent's eval in CI.
 
-## 11. Implementation notes (steps 1-2)
+## 11. Implementation notes (steps 1-3)
 
 - **Contract**: `packages/shared/src/agents/agents.ts` (`AgentJobPayload`, `agentJobId`, `AgentDecision`, `AgentAction`, model tiers, the Lead Analyst output schema). Prompt: `prompts.json` -> `lead_analyst`, version `lead_analyst.v1`.
 - **Queue**: BullMQ `agents`, one queue for every agent, dispatched on `payload.agent`. Job id = `agent__entityType__entityId__triggerEventId` (BullMQ forbids `:` in custom ids), so a replayed trigger never runs the same agent twice for the same event.
@@ -150,4 +150,5 @@ Each step is its own PR with its agent's eval in CI.
 - **Budget**: workflow buckets `agent:<name>` (monthly; see `seed-providers.ts`) via the `workflow` hint on the internal chat route. A blocked run is recorded CANCELLED with a `blocked` decision, not FAILED.
 - **Models**: `ControlPlane.agentModels` overrides per tier; `claude-*` routes to the Anthropic adapter, everything else to OpenAI.
 - **UI**: `/admin/agents` (approval queue with the drafts in full, recent runs, autonomy + model tiers, queue a run).
-- **Not yet**: the golden-set eval in CI, Underwriter / Drafter / Matcher on the frame, the inbound trigger (lands with the Drafter), CrewAI runtime.
+- **Deal Underwriter** (step 3): context = deal numbers + property + provenance summaries + the lead's non-contact facts + the prior result (`apps/worker/src/agents/deal-context.ts`); one strong-tier call (`deal_underwriter.v1`, strict JSON: ARV, repairs, MAO, offer range, confidence, offer/pass/hold). `set_deal_economics` is autonomous in both tiers (numbers never reach a seller): the api writes `arv`/`repairEstimate`/`mao` only if `deal.updatedAt` still equals the snapshot the worker loaded (a person's edit during the run wins) and always upserts `underwriting_results` with `evaluationMetadata.stale`, the offer range and the run id. Triggers: `DealsService.updateStage` into `contacted` or `negotiating` (job id carries the stage and timestamp), and `POST /underwriting/analyze/:dealId`, which now queues this agent instead of the legacy `underwriting` job. `GET /underwriting/result/:dealId` returns the newest of the agent row / legacy row / legacy job run, flattened for the deal page. The legacy `underwriting` queue and processor stay only because the chaos tooling references the queue; nothing enqueues them any more.
+- **Not yet**: the golden-set eval in CI, Drafter / Matcher on the frame, the inbound trigger (lands with the Drafter), CrewAI runtime.
