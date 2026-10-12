@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TwilioService } from '../twilio.service';
 import { PrismaService } from '../../../prisma.service';
 import { AutomationService } from '../../../automation/automation.service';
+import { AgentOrchestrationService } from '../../../agent/agent-orchestration.service';
 import { LeadPiiService } from '../../../leads/lead-pii.service';
 import { OptOutService } from '../../../compliance/opt-out.service';
 import { hashPhone } from '@halo/shared';
@@ -25,6 +26,7 @@ describe('TwilioService', () => {
   let service: TwilioService;
   let prisma: any;
   let automationService: any;
+  let agents: any;
 
   beforeEach(async () => {
     prisma = {
@@ -37,6 +39,7 @@ describe('TwilioService', () => {
       },
       lead: {
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       buyer: { findMany: jest.fn().mockResolvedValue([]) },
       consent: {
@@ -53,6 +56,7 @@ describe('TwilioService', () => {
     automationService = {
       attributeReply: jest.fn().mockResolvedValue({ attributed: false }),
     };
+    agents = { enqueue: jest.fn().mockResolvedValue(true) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,6 +64,7 @@ describe('TwilioService', () => {
         OptOutService,
         { provide: PrismaService, useValue: prisma },
         { provide: AutomationService, useValue: automationService },
+        { provide: AgentOrchestrationService, useValue: agents },
         LeadPiiService,
       ],
     }).compile();
@@ -413,6 +418,65 @@ describe('TwilioService', () => {
       counterpartyHash: {
         in: expect.arrayContaining([hashPhone('+15551234567')]),
       },
+    });
+  });
+
+  describe('Outreach Drafter trigger', () => {
+    it('links an ordinary reply to the lead and its open deal and queues the Drafter', async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
+      prisma.lead.findFirst.mockResolvedValueOnce({
+        id: 'lead-1',
+        deals: [{ id: 'deal-1' }],
+      });
+
+      await inbound('Maybe, what are you thinking?');
+
+      const data = prisma.message.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        accountId: 'tenant-a',
+        leadId: 'lead-1',
+        dealId: 'deal-1',
+      });
+      expect(prisma.lead.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ accountId: 'tenant-a' }),
+        }),
+      );
+      expect(agents.enqueue).toHaveBeenCalledWith({
+        agent: 'outreach_drafter',
+        accountId: 'tenant-a',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        trigger: 'inbound',
+        triggerEventId: 'inbound:msg-inbound-1',
+        messageId: 'msg-inbound-1',
+      });
+    });
+
+    it('queues the Drafter on the lead when there is no open deal, and not at all for unknown senders', async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
+      prisma.lead.findFirst.mockResolvedValueOnce({ id: 'lead-1', deals: [] });
+      await inbound('Who is this?');
+      expect(agents.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ entityType: 'lead', entityId: 'lead-1' }),
+      );
+
+      agents.enqueue.mockClear();
+      await inbound('Hello?', '+15559999999');
+      expect(agents.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('never fails the webhook because the queue is down', async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);
+      prisma.lead.findFirst.mockResolvedValueOnce({
+        id: 'lead-1',
+        deals: [{ id: 'deal-1' }],
+      });
+      agents.enqueue.mockRejectedValueOnce(new Error('redis down'));
+      await expect(inbound('Still here')).resolves.toEqual({
+        handled: 'message',
+        reply: null,
+      });
     });
   });
 });

@@ -34,6 +34,8 @@ export interface AgentJobPayload {
   /** What fired the trigger (timeline event id, message id, sweep date), for idempotency. */
   triggerEventId?: string;
   actorId?: string | null;
+  /** The inbound message that fired an `inbound` trigger. */
+  messageId?: string;
 }
 
 /** BullMQ job id: the same (agent, entity, trigger event) is never queued twice. */
@@ -106,6 +108,40 @@ export type AgentAction =
       recipientType: 'seller' | 'buyer';
       content: string;
       subject?: string;
+      /** The inbound message this draft answers, when it answers one. */
+      inReplyToMessageId?: string;
+      gated: true;
+    }
+  | {
+      /** The inbound message's intent, recorded on the message and the timeline. */
+      type: 'classify_inbound';
+      messageId: string;
+      intent: InboundIntent;
+      confidence: number;
+      method: 'rule' | 'model';
+    }
+  | {
+      /**
+       * The contact asked not to be contacted: DNC entry plus revoked
+       * consents through the compliance service. Autonomous when a rule or a
+       * confident model classification found it; gated when the model was
+       * unsure.
+       */
+      type: 'record_opt_out';
+      messageId: string;
+      reason: string;
+      gated: boolean;
+    }
+  | {
+      /** The number does not reach the owner: tags the lead for a new skip trace. */
+      type: 'flag_contact';
+      reason: 'wrong_number';
+      note: string;
+    }
+  | {
+      type: 'transition_deal';
+      to: 'negotiating' | 'lost';
+      reason: string;
       gated: true;
     }
   | {
@@ -218,5 +254,80 @@ export function parseDealUnderwriterOutput(
   const raw = firstJsonObject(text);
   if (raw === undefined) return null;
   const parsed = DealUnderwriterOutputSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+// ------------------------------------------------------------- Outreach Drafter
+
+export const INBOUND_INTENTS = [
+  'interested',
+  'not_interested',
+  'callback',
+  'wrong_number',
+  'opt_out',
+  'unclear',
+] as const;
+export type InboundIntent = (typeof INBOUND_INTENTS)[number];
+
+export const OUTREACH_DRAFTER_PROMPT_VERSION = 'outreach_drafter.v1';
+
+const OPT_OUT_PHRASES: RegExp[] = [
+  /\b(stop|quit|cease|never|do not|don'?t|dont)\b[^.!?]{0,40}\b(text|texting|texts|message|messaging|messages|contact|contacting|call|calling|calls|email|emailing|reach(ing)? out)\b/i,
+  /\b(remove|take) me (off|from)\b/i,
+  /\bunsubscribe\b/i,
+  /\bleave me alone\b/i,
+  /\bno more (texts|messages|calls|emails)\b/i,
+  /\bopt ?out\b/i,
+  /\blose (my|this) number\b/i,
+];
+const WRONG_NUMBER_PHRASES: RegExp[] = [
+  /\bwrong (number|person)\b/i,
+  /\b(don'?t|do not) know (who this is|what (you'?re|you are) talking about)\b/i,
+  /\bnot the owner\b/i,
+  /\bno one (by that name|named)\b/i,
+  /\bnever owned\b/i,
+  /\byou have the wrong\b/i,
+  /\bnot (my|mine|our) (house|property|home|address)\b/i,
+];
+
+/**
+ * Rule-first classification of an inbound reply (design doc s3.3): an
+ * opt-out or a wrong number is decided here, at no cost and with no model
+ * in the loop. Whole-message keywords (STOP, HELP) never reach the agent;
+ * the webhook handles them first. Null means "ask the model".
+ */
+export function classifyInboundByRule(
+  text: string,
+): { intent: 'opt_out' | 'wrong_number'; rule: string } | null {
+  const t = text.trim();
+  if (!t) return null;
+  const optOut = OPT_OUT_PHRASES.find((re) => re.test(t));
+  if (optOut) return { intent: 'opt_out', rule: `phrase:${optOut.source}` };
+  const wrong = WRONG_NUMBER_PHRASES.find((re) => re.test(t));
+  if (wrong) return { intent: 'wrong_number', rule: `phrase:${wrong.source}` };
+  return null;
+}
+
+export const OutreachDrafterOutputSchema = z.object({
+  intent: z.enum([...INBOUND_INTENTS, 'follow_up']),
+  confidence: z.number().min(0).max(1),
+  reply: z
+    .object({
+      body: z.string().min(1).max(3000),
+      subject: z.string().max(150).nullable().default(null),
+    })
+    .nullable()
+    .default(null),
+  rationale: z.string().min(1).max(2000),
+  next_step: z.string().max(300).nullable().default(null),
+});
+export type OutreachDrafterOutput = z.infer<typeof OutreachDrafterOutputSchema>;
+
+export function parseOutreachDrafterOutput(
+  text: string,
+): OutreachDrafterOutput | null {
+  const raw = firstJsonObject(text);
+  if (raw === undefined) return null;
+  const parsed = OutreachDrafterOutputSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }

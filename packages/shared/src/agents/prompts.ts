@@ -21,6 +21,10 @@ export interface PromptTemplates {
     system: string;
     user: string;
   };
+  outreach_drafter: {
+    system: string;
+    user: string;
+  };
 }
 
 export const prompts: PromptTemplates = promptsData as PromptTemplates;
