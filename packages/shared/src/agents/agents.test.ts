@@ -5,6 +5,7 @@ import {
   decisionNeedsApproval,
   classifyInboundByRule,
   parseDealUnderwriterOutput,
+  parseDispositionMatcherOutput,
   parseOutreachDrafterOutput,
   parseLeadAnalystOutput,
   resolveAgentModel,
@@ -140,5 +141,21 @@ describe('agent frame', () => {
     expect(
       parseOutreachDrafterOutput('{"intent": "opt_out", "confidence": 1, "reply": null, "rationale": "x"}'),
     ).toMatchObject({ intent: 'opt_out', reply: null });
+  });
+
+  it('parses the Disposition Matcher JSON with an empty shortlist and null blast by default', () => {
+    expect(
+      parseDispositionMatcherOutput(
+        '{"shortlist": [{"buyer_id": "b1", "fit": "strong", "reason": "Memphis SFH buyer, replied twice"}], "blast": {"subject": "Memphis SFH under contract", "body": "..."}, "rationale": "r"}',
+      ),
+    ).toMatchObject({ shortlist: [{ buyer_id: 'b1', fit: 'strong' }], blast: { subject: 'Memphis SFH under contract' } });
+    expect(parseDispositionMatcherOutput('{"rationale": "nobody fits"}')).toEqual({
+      shortlist: [],
+      blast: null,
+      rationale: 'nobody fits',
+    });
+    expect(
+      parseDispositionMatcherOutput('{"shortlist": [{"buyer_id": "b1", "fit": "great", "reason": "x"}], "rationale": "r"}'),
+    ).toBeNull();
   });
 });

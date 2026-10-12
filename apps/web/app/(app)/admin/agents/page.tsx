@@ -43,7 +43,13 @@ interface AgentAction {
     | 'classify_inbound'
     | 'record_opt_out'
     | 'flag_contact'
-    | 'transition_deal';
+    | 'transition_deal'
+    | 'rank_buyers'
+    | 'queue_buyer_blast';
+  shortlist?: Array<{ buyerId: string; name: string; rank: number; fit: string; reason: string }>;
+  consideredCount?: number;
+  buyerIds?: string[];
+  body?: string;
   intent?: string;
   confidence?: number;
   method?: string;
@@ -122,7 +128,12 @@ const AGENT_LABEL: Record<AgentName, string> = {
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
 };
-const RELEASED: AgentName[] = ['lead_analyst', 'deal_underwriter', 'outreach_drafter'];
+const RELEASED: AgentName[] = [
+  'lead_analyst',
+  'deal_underwriter',
+  'outreach_drafter',
+  'disposition_matcher',
+];
 const DEFAULT_MODELS: Required<AgentModels> = { cheap: 'gpt-4o-mini', mid: 'gpt-4o', strong: 'gpt-4o' };
 const RUNS_PARAMS = { limit: 100 };
 
@@ -169,6 +180,7 @@ const recommendationVariant: Record<
   callback: 'info',
   unclear: 'warning',
   follow_up: 'info',
+  market: 'success',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -205,6 +217,15 @@ function describeAction(action: AgentAction): string {
       return `Tag the lead ${action.reason} for a new skip trace`;
     case 'transition_deal':
       return `Move the deal to ${action.to}`;
+    case 'rank_buyers':
+      return action.shortlist && action.shortlist.length > 0
+        ? `Rank buyers: ${action.shortlist
+            .slice(0, 5)
+            .map((b) => `${b.name} (${b.fit})`)
+            .join(', ')}${action.shortlist.length > 5 ? ', ...' : ''}`
+        : `Rank buyers: none of ${action.consideredCount ?? 0} fit`;
+    case 'queue_buyer_blast':
+      return `Draft the buyer blast to ${action.buyerIds?.length ?? 0} buyer(s) (emails go to the approval queue)`;
     default:
       return action.type;
   }
@@ -314,6 +335,12 @@ function ApprovalCard({
                     <div className="mt-2 space-y-1 text-caption text-muted-foreground">
                       {o.action.subject && <p className="font-medium">Subject: {o.action.subject}</p>}
                       <p className="whitespace-pre-wrap">{o.action.content}</p>
+                    </div>
+                  )}
+                  {o.action.type === 'queue_buyer_blast' && (
+                    <div className="mt-2 space-y-1 text-caption text-muted-foreground">
+                      <p className="font-medium">Subject: {o.action.subject}</p>
+                      <p className="whitespace-pre-wrap">{o.action.body}</p>
                     </div>
                   )}
                   {o.action.type === 'transition_lead' && o.action.reason && (

@@ -278,18 +278,34 @@ export class DealsService {
     }
 
     if (stage === 'contacted' || stage === 'negotiating') {
-      await this.queueUnderwriter(accountId, id, stage, updated.updatedAt);
+      await this.queueStageAgent(
+        'deal_underwriter',
+        accountId,
+        id,
+        stage,
+        updated.updatedAt,
+      );
+    } else if (stage === 'under_contract') {
+      await this.queueStageAgent(
+        'disposition_matcher',
+        accountId,
+        id,
+        stage,
+        updated.updatedAt,
+      );
     }
 
     return updated;
   }
 
   /**
-   * Design doc s3.2: the Deal Underwriter values a deal when it reaches
-   * contacted or negotiating. Queue failures are logged, never thrown: the
-   * stage change already happened.
+   * Stage-driven agents (design doc s3.2, s3.4): the Deal Underwriter when a
+   * deal reaches contacted or negotiating, the Disposition Matcher when it
+   * goes under contract. Queue failures are logged, never thrown: the stage
+   * change already happened.
    */
-  private async queueUnderwriter(
+  private async queueStageAgent(
+    agent: 'deal_underwriter' | 'disposition_matcher',
     accountId: string,
     dealId: string,
     stage: DealStage,
@@ -298,7 +314,7 @@ export class DealsService {
     try {
       if (!(await this.controlPlane.isEnabled(accountId))) return;
       await this.queues.enqueueAgent({
-        agent: 'deal_underwriter',
+        agent,
         accountId,
         entityType: 'deal',
         entityId: dealId,
@@ -307,7 +323,7 @@ export class DealsService {
       });
     } catch (err) {
       this.logger.warn(
-        `Could not queue the Deal Underwriter for deal ${dealId}: ${(err as Error).message}`,
+        `Could not queue ${agent} for deal ${dealId}: ${(err as Error).message}`,
       );
     }
   }

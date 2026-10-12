@@ -268,6 +268,34 @@ describe('DealsService', () => {
       });
     });
 
+    it('queues the Disposition Matcher when a deal goes under contract', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'negotiating',
+      });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'under_contract',
+        updatedAt: new Date('2026-10-12T11:00:00.000Z'),
+      });
+
+      await service.updateStage(
+        'deal-1',
+        'tenant-1',
+        'under_contract',
+        'user-1',
+      );
+
+      expect(queueService.enqueueAgent).toHaveBeenCalledWith({
+        agent: 'disposition_matcher',
+        accountId: 'tenant-1',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        trigger: 'lifecycle',
+        triggerEventId: 'stage:under_contract:2026-10-12T11:00:00.000Z',
+      });
+    });
+
     it('leaves the Underwriter alone for other stages and when the control plane is off', async () => {
       prisma.deal.findFirst.mockResolvedValue({
         ...existingDeal,

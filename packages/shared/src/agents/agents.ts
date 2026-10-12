@@ -145,6 +145,24 @@ export type AgentAction =
       gated: true;
     }
   | {
+      /** Disposition Matcher ranking (design doc s3.4): recorded for the deal, never sent. */
+      type: 'rank_buyers';
+      shortlist: BuyerShortlistEntry[];
+      consideredCount: number;
+    }
+  | {
+      /**
+       * One email draft per shortlisted buyer, created in the communications
+       * approval queue once a person approves the run. Sends still go
+       * through the same boundary as every other message.
+       */
+      type: 'queue_buyer_blast';
+      buyerIds: string[];
+      subject: string;
+      body: string;
+      gated: true;
+    }
+  | {
       /**
        * Deal Underwriter numbers (design doc s3.2). Autonomous in every tier:
        * numbers never reach a seller. The api applies them only when the deal
@@ -329,5 +347,52 @@ export function parseOutreachDrafterOutput(
   const raw = firstJsonObject(text);
   if (raw === undefined) return null;
   const parsed = OutreachDrafterOutputSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+// ----------------------------------------------------------- Disposition Matcher
+
+export interface BuyerShortlistEntry {
+  buyerId: string;
+  name: string;
+  rank: number;
+  fit: 'strong' | 'possible';
+  reason: string;
+  /** The deterministic buy-box score the model started from (0-100). */
+  ruleScore: number;
+}
+
+export const DISPOSITION_MATCHER_PROMPT_VERSION = 'disposition_matcher.v1';
+
+export const DispositionMatcherOutputSchema = z.object({
+  shortlist: z
+    .array(
+      z.object({
+        buyer_id: z.string().min(1).max(64),
+        fit: z.enum(['strong', 'possible']),
+        reason: z.string().min(1).max(300),
+      }),
+    )
+    .max(25)
+    .default([]),
+  blast: z
+    .object({
+      subject: z.string().min(1).max(150),
+      body: z.string().min(1).max(4000),
+    })
+    .nullable()
+    .default(null),
+  rationale: z.string().min(1).max(2000),
+});
+export type DispositionMatcherOutput = z.infer<
+  typeof DispositionMatcherOutputSchema
+>;
+
+export function parseDispositionMatcherOutput(
+  text: string,
+): DispositionMatcherOutput | null {
+  const raw = firstJsonObject(text);
+  if (raw === undefined) return null;
+  const parsed = DispositionMatcherOutputSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }

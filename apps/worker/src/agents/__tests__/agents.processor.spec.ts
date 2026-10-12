@@ -51,6 +51,15 @@ jest.mock('../outreach-drafter.agent', () => ({
   OutreachDrafterAgent: jest.fn().mockImplementation(() => ({ run: mockDrafterRun })),
 }));
 
+const mockLoadDispositionContext = jest.fn();
+jest.mock('../disposition-context', () => ({
+  loadDispositionContext: (...args: unknown[]) => mockLoadDispositionContext(...args),
+}));
+const mockMatcherRun = jest.fn();
+jest.mock('../disposition-matcher.agent', () => ({
+  DispositionMatcherAgent: jest.fn().mockImplementation(() => ({ run: mockMatcherRun })),
+}));
+
 import {
   CostBlockedError,
   IntegrationUnavailableError,
@@ -119,8 +128,8 @@ describe('AgentsProcessor', () => {
   });
 
   it('skips agents that are not released yet', async () => {
-    await expect(processor.process(job({ agent: 'disposition_matcher' }))).resolves.toEqual({
-      skipped: 'agent disposition_matcher is not released yet',
+    await expect(processor.process(job({ agent: 'closing_coordinator' as any }))).resolves.toEqual({
+      skipped: 'agent closing_coordinator is not released yet',
     });
     expect(mockOpenAgentRun).not.toHaveBeenCalled();
   });
@@ -322,5 +331,26 @@ describe('AgentsProcessor', () => {
       costUsd: 0.004,
     });
     expect(result.status).toBe('AWAITING_APPROVAL');
+  });
+
+  it('dispatches under-contract deals to the Disposition Matcher', async () => {
+    const ranking = decision([
+      { type: 'rank_buyers', shortlist: [], consideredCount: 0 },
+      { type: 'append_note', note: 'n' },
+    ]);
+    mockLoadDispositionContext.mockResolvedValue({ deal: { id: 'deal-1' } });
+    mockMatcherRun.mockResolvedValue({ decision: ranking, costUsd: 0 });
+
+    const result = await processor.process(
+      job({ agent: 'disposition_matcher', entityType: 'deal', entityId: 'deal-1' }),
+    );
+
+    expect(mockLoadDispositionContext).toHaveBeenCalledWith('deal-1', 'acct');
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'COMPLETED',
+      decision: ranking,
+      costUsd: 0,
+    });
+    expect(result.status).toBe('COMPLETED');
   });
 });

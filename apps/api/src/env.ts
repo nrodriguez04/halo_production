@@ -65,6 +65,9 @@ const envSchema = z.object({
   AGENT_FOLLOWUP_DAYS: z.string().optional(),
   AGENT_FOLLOWUP_MAX: z.string().optional(),
   OUTREACH_STRONG_TIER_MIN_ARV: z.string().optional(),
+  // Disposition Matcher (docs/agent-design.md s3.4): candidates sent to the model, shortlist size
+  AGENT_MATCHER_CANDIDATES: z.string().optional(),
+  AGENT_MATCHER_SHORTLIST_MAX: z.string().optional(),
 
   // Cost-governance back-compat: declared so legacy code paths that read
   // process.env.OPENAI_DAILY_COST_CAP via parseFloat(...) get a typed,
