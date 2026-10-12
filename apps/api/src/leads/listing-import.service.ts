@@ -1,53 +1,84 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { CSVImportRow } from '@halo/shared';
+import { normalizeAddress } from '@halo/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { LeadsService } from './leads.service';
-import { MlsService } from '../integrations/mls/mls.service';
+import { ListingSourceService } from '../integrations/listings/listing-source.service';
 import type {
-  MlsListing,
-  MlsSearchCriteria,
-} from '../integrations/mls/mls.types';
+  Listing,
+  ListingSearchCriteria,
+  ListingSource,
+} from '../integrations/listings/listing-source.types';
 import { sealJson } from '../pii/contact-crypto';
-import { normalizeAddress } from '@halo/shared';
 
-export interface MlsImportResult {
+export interface ListingImportResult {
+  source: ListingSource;
+  /** Provenance detail: the MLS dialect, or the vendor endpoint. */
+  feed: string;
   searched: number;
   total: number | null;
   created: number;
   duplicates: number;
   errors: string[];
-  dialect: string;
 }
 
+export const LISTING_SOURCE_LABEL: Record<ListingSource, string> = {
+  mls: 'MLS',
+  rentcast: 'RentCast',
+  realie: 'Realie',
+};
+
+/** `source_records.endpoint` per source: what was queried, in the vendor's own terms. */
+const SOURCE_ENDPOINT: Record<ListingSource, string> = {
+  mls: 'Property',
+  rentcast: 'listings/sale',
+  realie: 'public/property/search',
+};
+
+/** Licensed MLS data outranks public-record and aggregator copies of it. */
+const SOURCE_TRUST: Record<ListingSource, number> = {
+  mls: 0.9,
+  rentcast: 0.8,
+  realie: 0.85,
+};
+
+/** Sources whose records are listings; county records carry owner signals instead. */
+const LISTING_FEEDS: ReadonlySet<ListingSource> = new Set(['mls', 'rentcast']);
+
+/** Days on market at which a listing is tagged `stale_listing`. */
+export const STALE_LISTING_DAYS = 90;
+
 /**
- * Turns an MLS search into leads. The listing becomes the lead's canonical
- * address; the seller is not in the feed (only the listing agent is), so no
- * contact fields are set and the usual enrichment / skip-trace path fills
- * them later. Each new lead gets a `source_records` row with the listing
- * sealed (the agent's direct phone and email are in it) and the
- * non-contact facts in the clear, plus `mls` tags for filtering.
+ * Turns a listing search, from any source, into leads. The listing becomes
+ * the lead's canonical address and, when the source knows it, the owner of
+ * record; seller contacts are never in a listing feed (only the listing
+ * agent's are), so the usual enrichment / skip-trace path fills them later.
+ * Each new lead gets a `source_records` row with the raw listing sealed (the
+ * agent's direct phone and email are in it) and the non-contact facts in the
+ * clear, plus `source:<source>`, `listing:<status>` and `stale_listing` tags.
  *
  * Dedupe reuses importCSV's (zip, normalized address) check, so re-running
  * the same search is safe: existing leads are reported as duplicates, not
- * recreated.
+ * recreated, and a listing already attached to a lead is not attached twice.
  */
 @Injectable()
-export class MlsImportService {
-  private readonly logger = new Logger(MlsImportService.name);
+export class ListingImportService {
+  private readonly logger = new Logger(ListingImportService.name);
 
   constructor(
     private prisma: PrismaService,
     private leads: LeadsService,
-    private mls: MlsService,
+    private sources: ListingSourceService,
   ) {}
 
   async importListings(
-    criteria: MlsSearchCriteria,
+    source: ListingSource,
+    criteria: ListingSearchCriteria,
     accountId: string,
     userId: string,
-  ): Promise<MlsImportResult> {
-    const search = await this.mls.searchListings(criteria, {
+  ): Promise<ListingImportResult> {
+    const search = await this.sources.search(source, criteria, {
       accountId,
       actor: 'user',
       userId,
@@ -61,33 +92,35 @@ export class MlsImportService {
       city: l.address.city || undefined,
       state: l.address.state || undefined,
       zip: l.address.postalCode,
-      notes: describe(l),
+      owner: l.ownerName || undefined,
+      notes: describe(source, l),
     }));
 
     const imported = await this.leads.importCSV(rows, accountId, userId);
 
     // importCSV uses createMany (no ids back); find the leads these rows
     // produced or matched by the same key it deduped on, then attach the
-    // provenance row and tags. Leads that already had an mls source record
-    // for this listing key are left alone.
-    const attached = await this.attachSourceRecords(accountId, usable);
+    // provenance row and tags.
+    const attached = await this.attachSourceRecords(source, accountId, usable);
 
     this.logger.log(
-      `MLS import for ${accountId}: ${usable.length} listings, ${imported.created} new leads, ${attached} source records`,
+      `${LISTING_SOURCE_LABEL[source]} import for ${accountId}: ${usable.length} listings, ${imported.created} new leads, ${attached} source records`,
     );
     return {
+      source,
+      feed: search.feed,
       searched: search.listings.length,
       total: search.total,
       created: imported.created,
       duplicates: imported.duplicates,
       errors: imported.errors,
-      dialect: search.dialect,
     };
   }
 
   private async attachSourceRecords(
+    source: ListingSource,
     accountId: string,
-    listings: MlsListing[],
+    listings: Listing[],
   ): Promise<number> {
     if (listings.length === 0) return 0;
     const zips = Array.from(new Set(listings.map((l) => l.address.postalCode)));
@@ -127,7 +160,7 @@ export class MlsImportService {
       const existing = await this.prisma.sourceRecord.findFirst({
         where: {
           leadId: lead.id,
-          provider: 'mls',
+          provider: source,
           requestHash: listing.listingKey,
         },
         select: { id: true },
@@ -137,11 +170,12 @@ export class MlsImportService {
       await this.prisma.sourceRecord.create({
         data: {
           leadId: lead.id,
-          provider: 'mls',
-          endpoint: 'Property',
+          provider: source,
+          endpoint: SOURCE_ENDPOINT[source],
           requestHash: listing.listingKey,
           // The listing agent's direct contacts live in the raw record.
           response: sealJson(listing.raw, {
+            source,
             listingKey: listing.listingKey,
             mlsId: listing.mlsId,
             status: listing.status,
@@ -156,14 +190,19 @@ export class MlsImportService {
             city: listing.address.city,
             postalCode: listing.address.postalCode,
           }) as Prisma.InputJsonObject,
-          trustWeight: 0.9,
+          trustWeight: SOURCE_TRUST[source],
         },
       });
 
       const tags = new Set(lead.tags);
-      tags.add('mls');
-      tags.add(`mls:${listing.status.toLowerCase().replace(/\s+/g, '_')}`);
-      if ((listing.daysOnMarket ?? 0) >= 90) tags.add('stale_listing');
+      tags.add(`source:${source}`);
+      if (LISTING_FEEDS.has(source)) {
+        tags.add(`listing:${slug(listing.status)}`);
+      }
+      for (const signal of listing.signals ?? []) tags.add(signal);
+      if ((listing.daysOnMarket ?? 0) >= STALE_LISTING_DAYS) {
+        tags.add('stale_listing');
+      }
       await this.prisma.lead.update({
         where: { id: lead.id },
         data: { tags: Array.from(tags) },
@@ -178,7 +217,12 @@ function key(zip: string, address: string, zipForNormalize?: string): string {
   return `${zip.trim()}|${normalizeAddress(address, undefined, undefined, zipForNormalize).toLowerCase()}`;
 }
 
-function describe(l: MlsListing): string {
+function slug(status: string): string {
+  return status.toLowerCase().replace(/\s+/g, '_');
+}
+
+function describe(source: ListingSource, l: Listing): string {
+  if (l.summary) return `${LISTING_SOURCE_LABEL[source]} record: ${l.summary}`;
   const bits = [
     l.mlsId ? `MLS# ${l.mlsId}` : null,
     l.status,
@@ -189,5 +233,5 @@ function describe(l: MlsListing): string {
     l.bathrooms != null ? `${l.bathrooms}ba` : null,
     l.livingArea != null ? `${l.livingArea} sqft` : null,
   ].filter(Boolean);
-  return `MLS listing: ${bits.join(' · ')}`;
+  return `${LISTING_SOURCE_LABEL[source]} listing: ${bits.join(' · ')}`;
 }

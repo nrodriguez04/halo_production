@@ -31,6 +31,8 @@ export interface MlsListing {
     email: string | null;
     office: string | null;
   } | null;
+  /** Owner of record when the source carries it (Realie does). Public record, not contact PII. */
+  ownerName?: string | null;
   raw: unknown;
 }
 

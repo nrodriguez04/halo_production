@@ -61,7 +61,7 @@ const usd = (n: number | null | undefined) => (n != null ? `$${n.toFixed(2)}` : 
 
 const PROVIDER_COLORS: Record<string, string> = {
   attom: 'bg-blue-500',
-  propertyradar: 'bg-violet-500',
+  realie: 'bg-violet-500',
   google_geocoding: 'bg-emerald-500',
   rentcast: 'bg-amber-500',
   twilio: 'bg-red-500',
@@ -71,7 +71,7 @@ const PROVIDER_COLORS: Record<string, string> = {
 
 const PROVIDER_LABELS: Record<string, string> = {
   attom: 'ATTOM',
-  propertyradar: 'PropertyRadar',
+  realie: 'Realie',
   google_geocoding: 'Google Geocoding',
   rentcast: 'RentCast',
   twilio: 'Twilio',

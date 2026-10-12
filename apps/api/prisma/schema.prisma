@@ -851,7 +851,7 @@ model IntegrationUsageAggregate {
 model IntegrationFeatureFlag {
   id        String   @id @default(cuid())
   accountId String   // 'GLOBAL' for org-wide defaults
-  flag      String   // e.g. 'provider.propertyradar', 'provider.openai'
+  flag      String   // e.g. 'provider.realie', 'provider.openai'
   enabled   Boolean  @default(false)
   reason    String?
   enabledAt DateTime?

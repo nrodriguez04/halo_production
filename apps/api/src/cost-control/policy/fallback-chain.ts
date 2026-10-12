@@ -17,7 +17,6 @@ const FALLBACK_CHAINS: Record<string, string[]> = {
   // so fail closed instead of silently calling the capped provider.
   batch_skiptrace: [],
   datazapp: [],
-  propertyradar: [],
 
   // Email — fall back to SMTP if the primary provider is over budget
   sendgrid: ['smtp'],

@@ -10,7 +10,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
-import { MlsImportService } from './mls-import.service';
+import { ListingImportService } from './listing-import.service';
+import { LISTING_SOURCES } from '../integrations/listings/listing-source.types';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import {
@@ -27,30 +28,40 @@ import {
 
 const LeadCreateInputSchema = LeadCreateSchema.omit({ status: true });
 
-const MlsImportSchema = z
-  .object({
-    city: z.string().trim().min(1).optional(),
-    state: z.string().trim().length(2).optional(),
-    postalCode: z.string().trim().min(3).optional(),
-    status: z.array(z.string().trim().min(1)).max(5).optional(),
-    minPrice: z.number().nonnegative().optional(),
-    maxPrice: z.number().nonnegative().optional(),
-    minDaysOnMarket: z.number().int().nonnegative().optional(),
-    propertyType: z.string().trim().min(1).optional(),
-    limit: z.number().int().min(1).max(200).default(50),
-    offset: z.number().int().nonnegative().default(0),
-  })
+const ListingCriteriaSchema = z.object({
+  city: z.string().trim().min(1).optional(),
+  state: z.string().trim().length(2).optional(),
+  postalCode: z.string().trim().min(3).optional(),
+  status: z.array(z.string().trim().min(1)).max(5).optional(),
+  minPrice: z.number().nonnegative().optional(),
+  maxPrice: z.number().nonnegative().optional(),
+  minDaysOnMarket: z.number().int().nonnegative().optional(),
+  propertyType: z.string().trim().min(1).optional(),
+  transferredWithinDays: z.number().int().positive().max(3650).optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+const requireArea = {
+  check: (c: { city?: string; postalCode?: string }) =>
+    Boolean(c.city || c.postalCode),
+  message: 'city or postalCode is required',
+};
+const ListingImportSchema = ListingCriteriaSchema.extend({
+  source: z.enum(LISTING_SOURCES).default('mls'),
+})
   .strict()
-  .refine((c) => c.city || c.postalCode, {
-    message: 'city or postalCode is required',
-  });
+  .refine(requireArea.check, { message: requireArea.message });
+const MlsImportSchema = ListingCriteriaSchema.strict().refine(
+  requireArea.check,
+  { message: requireArea.message },
+);
 
 @Controller('leads')
 @UseGuards(AuthGuard)
 export class LeadsController {
   constructor(
     private readonly leadsService: LeadsService,
-    private readonly mlsImport: MlsImportService,
+    private readonly listingImport: ListingImportService,
   ) {}
 
   @Post()
@@ -148,9 +159,25 @@ export class LeadsController {
   }
 
   /**
-   * Pull listings from the configured MLS feed into leads. Dedupes against
-   * existing leads; safe to re-run with the same criteria.
+   * Pull records from a configured source (MLS feed, RentCast or Realie
+   * county records) into leads. Dedupes against existing leads; safe to re-run.
    */
+  @Post('import/listings')
+  async importListings(
+    @Body() body: unknown,
+    @CurrentAccountId() accountId: string,
+    @CurrentUserId() userId: string,
+  ) {
+    const { source, ...criteria } = ListingImportSchema.parse(body);
+    return this.listingImport.importListings(
+      source,
+      criteria,
+      accountId,
+      userId,
+    );
+  }
+
+  /** The MLS feed only; kept for callers of the original route. */
   @Post('import/mls')
   async importMls(
     @Body() body: unknown,
@@ -158,7 +185,12 @@ export class LeadsController {
     @CurrentUserId() userId: string,
   ) {
     const criteria = MlsImportSchema.parse(body);
-    return this.mlsImport.importListings(criteria, accountId, userId);
+    return this.listingImport.importListings(
+      'mls',
+      criteria,
+      accountId,
+      userId,
+    );
   }
 
   @Post('merge')

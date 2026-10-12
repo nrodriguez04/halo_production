@@ -36,17 +36,20 @@ const PROVIDERS = [
       { action: 'rent_estimate', unitCostUsd: 0.05, unit: 'per_call' },
       { action: 'listings', unitCostUsd: 0.05, unit: 'per_call' },
       { action: 'property', unitCostUsd: 0.05, unit: 'per_call' },
+      { action: 'search_listings', unitCostUsd: 0.05, unit: 'per_call' },
     ],
   },
   {
-    key: 'propertyradar',
-    displayName: 'PropertyRadar',
+    key: 'realie',
+    displayName: 'Realie (county records)',
     category: 'property_data',
-    enabled: false, // disabled by default, behind feature flag
-    rateLimitPerMin: 60,
+    enabled: true,
+    rateLimitPerMin: 300,
     pricing: [
-      { action: 'property_lookup', unitCostUsd: 0.02, unit: 'per_call' },
-      { action: 'append_contacts', unitCostUsd: 0.1, unit: 'per_record' },
+      // One token per successful call whatever the page size, priced at
+      // the Tier 1 marginal token. Empty results (404) are free.
+      { action: 'search_properties', unitCostUsd: 0.05, unit: 'per_call' },
+      { action: 'address_lookup', unitCostUsd: 0.05, unit: 'per_call' },
     ],
   },
 
@@ -498,4 +501,44 @@ function currentPeriod(period: string) {
   else if (period === 'month') resetsAt.setMonth(resetsAt.getMonth() + 1);
   else resetsAt.setDate(resetsAt.getDate() + 1);
   return { startedAt, resetsAt };
+}
+
+/**
+ * Add pricing rules for actions the seed knows but an existing provider row
+ * lacks (a feature shipped after the database was first seeded). Rules that
+ * already exist, operator-tuned or not, are never touched; use
+ * seedCostGovernanceReferenceData to reset a provider. Returns the count added.
+ */
+export async function seedMissingPricingRules(
+  prisma: PrismaClient,
+): Promise<number> {
+  let added = 0;
+  for (const p of PROVIDERS) {
+    const provider = await prisma.integrationProvider.findUnique({
+      where: { key: p.key },
+      select: { id: true },
+    });
+    if (!provider) continue;
+    const existing = new Set(
+      (
+        await prisma.providerPricingRule.findMany({
+          where: { providerId: provider.id },
+          select: { action: true },
+        })
+      ).map((r) => r.action),
+    );
+    const missing = p.pricing.filter((r) => !existing.has(r.action));
+    if (missing.length === 0) continue;
+    await prisma.providerPricingRule.createMany({
+      data: missing.map((r) => ({
+        providerId: provider.id,
+        action: r.action,
+        unitCostUsd: r.unitCostUsd,
+        unit: r.unit,
+        pricePer: 1,
+      })),
+    });
+    added += missing.length;
+  }
+  return added;
 }

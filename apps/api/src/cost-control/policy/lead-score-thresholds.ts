@@ -26,7 +26,6 @@ const THRESHOLDS: Record<string, ScoreThreshold> = {
   // Skip trace — only worth it on serious leads
   'batch_skiptrace.append_contacts': { minScore: 60, minExpectedRoiUsd: 5000 },
   'datazapp.append_contacts': { minScore: 60, minExpectedRoiUsd: 5000 },
-  'propertyradar.append_contacts': { minScore: 60, minExpectedRoiUsd: 5000 },
 
   // Comms — only when contact confidence is high
   'twilio.send_sms': { minScore: 70 },

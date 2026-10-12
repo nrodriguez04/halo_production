@@ -367,7 +367,7 @@ async function main() {
   const providers = [
     { provider: 'attom', costPerCall: 0.10, endpoints: ['property_expanded_profile', 'assessment'] },
     { provider: 'google_geocoding', costPerCall: 0.005, endpoints: ['geocode'] },
-    { provider: 'propertyradar', costPerCall: 0.02, endpoints: ['properties', 'contacts', 'import'] },
+    { provider: 'realie', costPerCall: 0.05, endpoints: ['public/property/search', 'public/property/address'] },
     { provider: 'rentcast', costPerCall: 0.05, endpoints: ['listings_sale', 'properties', 'avm_value'] },
   ];
   const providerIds = new Map<string, string>();

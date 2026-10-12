@@ -19,9 +19,10 @@ const CACHE_TTL: Record<string, number> = {
 
   'batch_skiptrace.append_contacts': 60 * 60 * 24 * 90, // 90d
   'datazapp.append_contacts': 60 * 60 * 24 * 90,
-  'propertyradar.append_contacts': 60 * 60 * 24 * 90,
-  'propertyradar.property_lookup': 60 * 60 * 24 * 30,
   'mls.search_listings': 60 * 15, // 15m: a page refresh must not re-query the feed
+  'rentcast.search_listings': 60 * 60 * 12, // 12h: repeating a pull is free
+  'realie.search_properties': 60 * 60 * 12, // 12h: one token per page
+  'realie.address_lookup': 60 * 60 * 24 * 30,
 
   // Side effects + non-deterministic — never cache
   'twilio.send_sms': 0,
@@ -42,7 +43,12 @@ export function responseContainsContacts(
   provider: string,
   action: string,
 ): boolean {
-  return action === 'append_contacts' || provider === 'mls';
+  // Listing searches carry the listing agent's direct phone and email.
+  return (
+    action === 'append_contacts' ||
+    action === 'search_listings' ||
+    provider === 'mls'
+  );
 }
 
 export function defaultCacheTtlSec(provider: string, action: string): number {

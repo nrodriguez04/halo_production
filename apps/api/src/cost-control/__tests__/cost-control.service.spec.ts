@@ -115,10 +115,10 @@ describe('IntegrationCostControlService', () => {
             enabled: true,
             rateLimitPerMin: 60,
           };
-        if (args.where.key === 'propertyradar')
+        if (args.where.key === 'skiptrace_c')
           return {
             id: 'p_pr',
-            key: 'propertyradar',
+            key: 'skiptrace_c',
             enabled: true,
             rateLimitPerMin: 60,
           };
@@ -351,9 +351,9 @@ describe('IntegrationCostControlService', () => {
     // meaningful: preflight must honour the accumulated tried-set rather than
     // restarting from a fresh one on every downgrade.
     const chains: Record<string, string[]> = {
-      batch_skiptrace: ['datazapp', 'propertyradar'],
-      datazapp: ['batch_skiptrace', 'propertyradar'],
-      propertyradar: ['batch_skiptrace', 'datazapp'],
+      batch_skiptrace: ['datazapp', 'skiptrace_c'],
+      datazapp: ['batch_skiptrace', 'skiptrace_c'],
+      skiptrace_c: ['batch_skiptrace', 'datazapp'],
     };
     const hasSpy = jest
       .spyOn(fallbackChain, 'hasFallback')
@@ -402,7 +402,7 @@ describe('IntegrationCostControlService', () => {
       budgets.findApplicable.mock.calls.map(
         ([intent]: [CostIntent<unknown, unknown>]) => intent.provider,
       ),
-    ).toEqual(['batch_skiptrace', 'datazapp', 'propertyradar']);
+    ).toEqual(['batch_skiptrace', 'datazapp', 'skiptrace_c']);
 
     hasSpy.mockRestore();
     nextSpy.mockRestore();

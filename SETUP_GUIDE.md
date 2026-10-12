@@ -15,7 +15,7 @@ This guide walks you through setting up every external service, configuring envi
 7. [ATTOM (Property Data)](#7-attom-property-data)
 8. [Google Geocoding](#8-google-geocoding)
 9. [RentCast (Rental Data)](#9-rentcast-rental-data)
-10. [PropertyRadar (Property Intelligence)](#10-propertyradar-property-intelligence)
+10. [Realie (County Records)](#10-realie-county-records)
 11. [OpenAI (AI/LLM)](#11-openai-aillm)
 12. [Agent Runtime](#12-agent-runtime)
 13. [Environment Files](#13-environment-files)
@@ -326,29 +326,25 @@ RENTCAST_API_KEY=your_rentcast_api_key
 
 ---
 
-## 10. PropertyRadar (Property Intelligence)
+## 10. Realie (County Records)
 
-PropertyRadar provides property data, skip tracing (phone/email lookup), liens, and comparables.
+Realie (realie.ai) is the public-records source: owner of record and mailing
+address, assessed and market values, sale history, mortgages, liens,
+foreclosures and tax status for every US parcel. It has no MLS listing data;
+RentCast and the MLS feed cover listings.
 
-### Step 1: Get a PropertyRadar API account
+1. Sign up at https://app.realie.ai, open **Usage -> API access** and copy the key.
+2. Add a payment method under **Billing**. The Free plan's 25 tokens a month
+   cover a smoke test; every successful call is one token and a 404 is free.
+3. Save the key on **Admin -> Integrations -> Realie**, or set it in env:
 
-Go to [propertyradar.com](https://www.propertyradar.com) and sign up. API access requires a paid plan.
-
-### Step 2: Get your API key
-
-From your PropertyRadar account settings, generate an API key/Bearer token.
-
-### Step 3: Set environment variables
-
-```
-# apps/api/.env.local AND apps/worker/.env.local
-PROPERTYRADAR_API_KEY=your_api_key
-PROPERTYRADAR_BASE_URL=https://api.propertyradar.com/v1
+```bash
+# apps/api/.env.local
+REALIE_API_KEY=your-key
 ```
 
-**Cost:** ~$0.02 per call. Used for property search, contact lookup (skip tracing), and enrichment.
-
----
+Used by **Leads -> Import listings -> Realie county records** (absentee owners
+and recent transfers by city or ZIP). See `docs/integrations/listing-sources.md`.
 
 ## 11. OpenAI (AI/LLM)
 
@@ -470,8 +466,7 @@ ATTOM_API_KEY=your_key
 ATTOM_BASE_URL=https://api.gateway.attomdata.com
 GOOGLE_GEOCODING_API_KEY=your_key
 RENTCAST_API_KEY=your_key
-PROPERTYRADAR_API_KEY=your_key
-PROPERTYRADAR_BASE_URL=https://api.propertyradar.com/v1
+REALIE_API_KEY=your_key
 
 # Storage (MinIO defaults work for local dev)
 S3_ENDPOINT=http://localhost:9000
@@ -560,7 +555,7 @@ TWILIO_ACCOUNT_SID=xxx
 TWILIO_PHONE_NUMBER=+15551234567
 ATTOM_API_KEY=xxx
 GOOGLE_GEOCODING_API_KEY=xxx
-PROPERTYRADAR_API_KEY=xxx
+REALIE_API_KEY=xxx
 RENTCAST_API_KEY=xxx
 OPENAI_API_KEY=xxx
 SENDGRID_API_KEY=xxx

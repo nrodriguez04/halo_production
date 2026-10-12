@@ -35,7 +35,7 @@ Estimated all-in monthly cost at launch: **~$6–7/mo**.
 - [ ] **SendGrid** (or Resend) for outbound email
 - [ ] **Twilio** — provision a live number for prod
 - [ ] **DocuSign** — sandbox until ready, then production
-- [ ] Provider API keys: ATTOM, RentCast, PropertyRadar, Google Geocoding, OpenAI
+- [ ] Provider API keys: ATTOM, RentCast, Realie, Google Geocoding, OpenAI
 
 ### 0.2 Generate prod secrets locally
 
@@ -243,7 +243,7 @@ DOCUSIGN_CLIENT_SECRET=
 DOCUSIGN_ACCOUNT_ID=
 DOCUSIGN_CONNECT_SECRET=
 ATTOM_API_KEY=
-PROPERTYRADAR_API_KEY=
+REALIE_API_KEY=
 GOOGLE_GEOCODING_API_KEY=
 RENTCAST_API_KEY=
 

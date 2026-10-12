@@ -80,10 +80,10 @@ describe('ResponseCacheService contact payloads', () => {
     expect(responseContainsContacts('batch_skiptrace', 'append_contacts')).toBe(
       true,
     );
-    expect(responseContainsContacts('propertyradar', 'append_contacts')).toBe(
+    expect(responseContainsContacts('batch_skiptrace', 'append_contacts')).toBe(
       true,
     );
-    expect(responseContainsContacts('propertyradar', 'property_lookup')).toBe(
+    expect(responseContainsContacts('batch_skiptrace', 'property_lookup')).toBe(
       false,
     );
   });
