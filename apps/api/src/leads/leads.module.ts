@@ -10,6 +10,6 @@ import { ListingImportService } from './listing-import.service';
   imports: [TimelineModule, ListingsModule],
   controllers: [LeadsController],
   providers: [LeadsService, ListingImportService, PrismaService],
-  exports: [LeadsService],
+  exports: [LeadsService, ListingImportService],
 })
 export class LeadsModule {}
