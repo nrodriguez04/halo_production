@@ -150,7 +150,14 @@ const INTEGRATIONS: IntegrationDef[] = [
     provider: 'sendgrid',
     category: 'messaging',
     name: 'SendGrid',
-    keys: [{ keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' }],
+    keys: [
+      { keyName: 'SENDGRID_API_KEY', label: 'API Key', placeholder: 'SG.xxxxx' },
+      {
+        keyName: 'SENDGRID_INBOUND_TOKEN',
+        label: 'Inbound Parse Token',
+        placeholder: 'Random token placed in the Inbound Parse webhook URL',
+      },
+    ],
   },
   {
     provider: 'rentcast',

@@ -22,6 +22,8 @@ export interface SendEmailInput {
   html?: string;
   /** Extra headers, e.g. List-Unsubscribe / List-Unsubscribe-Post. */
   headers?: Record<string, string>;
+  /** Where replies go (the Inbound Parse subdomain); docs/integrations/email-inbound.md. */
+  replyTo?: string;
   messageId?: string;
 }
 
@@ -114,6 +116,7 @@ export class EmailSendService {
       body: JSON.stringify({
         personalizations: [{ to: [{ email: input.to }] }],
         from: { email: from },
+        ...(input.replyTo ? { reply_to: { email: input.replyTo } } : {}),
         subject: input.subject,
         content,
         ...(input.headers ? { headers: input.headers } : {}),
@@ -152,6 +155,7 @@ export class EmailSendService {
       body: JSON.stringify({
         from: input.from,
         to: input.to,
+        ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         subject: input.subject,
         text: input.text,
         html: input.html,
@@ -169,6 +173,7 @@ export class EmailSendService {
     const result = await this.smtp.sendMail({
       from: input.from,
       to: input.to,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
       subject: input.subject,
       text: input.text,
       html: input.html,

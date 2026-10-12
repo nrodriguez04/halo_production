@@ -214,6 +214,7 @@ export class MessageDispatchService {
         html: email.html,
         headers: email.headers,
         messageId: message.id,
+        ...(settings.replyTo ? { replyTo: settings.replyTo } : {}),
       },
       ctx,
     );

@@ -15,6 +15,7 @@ import { ControlPlaneModule } from './control-plane/control-plane.module';
 import { UnderwritingModule } from './underwriting/underwriting.module';
 import { TwilioModule } from './webhooks/twilio/twilio.module';
 import { DocuSignModule } from './webhooks/docusign/docusign.module';
+import { InboundEmailModule } from './webhooks/email/inbound-email.module';
 import { AttomModule } from './integrations/attom/attom.module';
 import { GeocodingModule } from './integrations/geocoding/geocoding.module';
 import { DocuSignIntegrationModule } from './integrations/docusign/docusign.module';
@@ -75,6 +76,7 @@ import { AuditModule } from './audit/audit.module';
     UnderwritingModule,
     TwilioModule,
     DocuSignModule,
+    InboundEmailModule,
     AttomModule,
     GeocodingModule,
     DocuSignIntegrationModule,

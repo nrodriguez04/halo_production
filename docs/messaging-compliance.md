@@ -77,6 +77,8 @@ recipient is known.
 |---|---|
 | `PUBLIC_API_URL` | base of unsubscribe links, e.g. `https://api.haloacquisitions.com/api` |
 | `EMAIL_FROM` | sender (falls back to `SENDGRID_FROM_EMAIL`) |
+| `EMAIL_REPLY_TO` | Reply-To on every email: a mailbox on the Inbound Parse subdomain, so replies reach the api ([integrations/email-inbound.md](integrations/email-inbound.md)) |
+| `INBOUND_EMAIL_TOKEN` | env fallback for the Inbound Parse token (`SENDGRID_INBOUND_TOKEN` on the Integrations page) |
 | `EMAIL_POSTAL_ADDRESS` | physical address in every email footer |
 | `MESSAGING_BRAND_NAME` | brand in replies, footers and the unsubscribe page |
 | `MESSAGING_HELP_CONTACT` | contact named in the HELP reply |

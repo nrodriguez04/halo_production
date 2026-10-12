@@ -31,6 +31,8 @@ export interface EmailSettings {
   postalAddress: string;
   publicApiUrl: string;
   from: string;
+  /** Reply-To for the inbound-email webhook's subdomain, when configured. */
+  replyTo: string | null;
 }
 
 /**
@@ -60,6 +62,7 @@ export function emailSettings(
     postalAddress: postalAddress as string,
     publicApiUrl: publicApiUrl as string,
     from: from as string,
+    replyTo: env.EMAIL_REPLY_TO?.trim() || null,
   };
 }
 

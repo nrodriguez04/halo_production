@@ -40,6 +40,9 @@ const envSchema = z.object({
   // Advanced Opt-Out; the opt-out is recorded either way.
   PUBLIC_API_URL: z.string().url().optional(),
   EMAIL_FROM: z.string().optional(),
+  // Replies land on the inbound-email webhook's subdomain (docs/integrations/email-inbound.md)
+  EMAIL_REPLY_TO: z.string().optional(),
+  INBOUND_EMAIL_TOKEN: z.string().optional(),
   EMAIL_POSTAL_ADDRESS: z.string().optional(),
   MESSAGING_BRAND_NAME: z.string().optional(),
   MESSAGING_HELP_CONTACT: z.string().optional(),
