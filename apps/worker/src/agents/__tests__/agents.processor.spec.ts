@@ -1,0 +1,224 @@
+import type { AgentDecision, AgentJobPayload } from '@halo/shared';
+
+const mockPrisma = { automationRun: { findFirst: jest.fn() } };
+jest.mock('../../prisma-client', () => ({ prisma: mockPrisma }));
+
+const mockGetControlPlane = jest.fn();
+jest.mock('../../control-plane', () => ({
+  getControlPlane: (...args: unknown[]) => mockGetControlPlane(...args),
+}));
+
+const mockOpenAgentRun = jest.fn();
+const mockRecordAgentDecision = jest.fn();
+jest.mock('../../internal-api.client', () => {
+  const actual = jest.requireActual('../../internal-api.client');
+  return {
+    ...actual,
+    openAgentRun: (...args: unknown[]) => mockOpenAgentRun(...args),
+    recordAgentDecision: (...args: unknown[]) => mockRecordAgentDecision(...args),
+  };
+});
+
+const mockLoadLeadContext = jest.fn();
+jest.mock('../agent-context', () => ({
+  loadLeadContext: (...args: unknown[]) => mockLoadLeadContext(...args),
+}));
+
+const mockAgentRun = jest.fn();
+jest.mock('../lead-analyst.agent', () => {
+  const actual = jest.requireActual('../lead-analyst.agent');
+  return {
+    ...actual,
+    LeadAnalystAgent: jest.fn().mockImplementation(() => ({ run: mockAgentRun })),
+  };
+});
+
+import {
+  CostBlockedError,
+  IntegrationUnavailableError,
+  InternalApiError,
+} from '../../internal-api.client';
+import { AgentOutputError, LeadAnalystAgent } from '../lead-analyst.agent';
+import { AgentsProcessor } from '../agents.processor';
+
+const job = (data: Partial<AgentJobPayload> = {}) =>
+  ({
+    data: {
+      agent: 'lead_analyst',
+      accountId: 'acct',
+      entityType: 'lead',
+      entityId: 'lead-1',
+      trigger: 'lifecycle',
+      triggerEventId: 'enriched:job-1',
+      ...data,
+    },
+  }) as any;
+
+const decision = (actions: AgentDecision['actions']): AgentDecision => ({
+  agent: 'lead_analyst',
+  promptVersion: 'lead_analyst.v1',
+  model: 'gpt-4o',
+  recommendation: 'hold',
+  summary: 's',
+  rationale: 'r',
+  hardRule: null,
+  actions,
+});
+const ungated = decision([
+  { type: 'set_lead_score', score: 40 },
+  { type: 'append_note', note: 'n' },
+]);
+const gated = decision([
+  { type: 'set_lead_score', score: 80 },
+  { type: 'transition_lead', to: 'qualified', reason: 'r', gated: true },
+]);
+
+describe('AgentsProcessor', () => {
+  const processor = new AgentsProcessor();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetControlPlane.mockResolvedValue({
+      enabled: true,
+      aiEnabled: true,
+      agentAutonomy: 'draft_only',
+      agentModels: { mid: 'gpt-4o' },
+    });
+    mockPrisma.automationRun.findFirst.mockResolvedValue(null);
+    mockOpenAgentRun.mockResolvedValue({ id: 'run-1' });
+    mockRecordAgentDecision.mockResolvedValue({});
+    mockLoadLeadContext.mockResolvedValue({ lead: { id: 'lead-1' } });
+    mockAgentRun.mockResolvedValue({ decision: ungated, costUsd: 0.01 });
+  });
+
+  it('does nothing when AI is off for the tenant', async () => {
+    mockGetControlPlane.mockResolvedValue({ enabled: true, aiEnabled: false });
+    await expect(processor.process(job())).resolves.toEqual({
+      skipped: 'ai disabled for tenant',
+    });
+    expect(mockOpenAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('skips agents that are not released yet', async () => {
+    await expect(processor.process(job({ agent: 'deal_underwriter' }))).resolves.toEqual({
+      skipped: 'agent deal_underwriter is not released yet',
+    });
+    expect(mockOpenAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('does not open a second run while one is open for the same entity', async () => {
+    mockPrisma.automationRun.findFirst.mockResolvedValue({ id: 'run-0' });
+    await expect(processor.process(job())).resolves.toEqual({
+      skipped: 'run run-0 already open',
+    });
+    expect(mockPrisma.automationRun.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId: 'acct',
+          agentName: 'lead_analyst',
+          entityId: 'lead-1',
+          status: { in: ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] },
+        }),
+      }),
+    );
+    expect(mockOpenAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('lets a manual run through even when another run is open', async () => {
+    mockPrisma.automationRun.findFirst.mockResolvedValue({ id: 'run-0' });
+    await processor.process(job({ trigger: 'manual', triggerEventId: 'manual:1' }));
+    expect(mockPrisma.automationRun.findFirst).not.toHaveBeenCalled();
+    expect(mockOpenAgentRun).toHaveBeenCalled();
+  });
+
+  it('opens the run first, runs the agent with tenant models, and records a completed decision', async () => {
+    const result = await processor.process(job());
+
+    expect(mockOpenAgentRun).toHaveBeenCalledWith('acct', {
+      agent: 'lead_analyst',
+      entityType: 'lead',
+      entityId: 'lead-1',
+      trigger: 'lifecycle',
+      triggerEventId: 'enriched:job-1',
+      actorId: null,
+    });
+    expect(mockLoadLeadContext).toHaveBeenCalledWith('lead-1', 'acct');
+    expect(LeadAnalystAgent).toHaveBeenCalledWith({ models: { mid: 'gpt-4o' } });
+    expect(mockAgentRun).toHaveBeenCalledWith({ lead: { id: 'lead-1' } }, 'acct', 'run-1');
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'COMPLETED',
+      decision: ungated,
+      costUsd: 0.01,
+    });
+    expect(result).toEqual({ runId: 'run-1', status: 'COMPLETED', recommendation: 'hold' });
+  });
+
+  it('reports AWAITING_APPROVAL when any action is gated', async () => {
+    mockAgentRun.mockResolvedValue({ decision: gated, costUsd: 0.02 });
+    const result = await processor.process(job());
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'AWAITING_APPROVAL',
+      decision: gated,
+      costUsd: 0.02,
+    });
+    expect(result.status).toBe('AWAITING_APPROVAL');
+  });
+
+  it('fails the run when the lead is gone', async () => {
+    mockLoadLeadContext.mockResolvedValue(null);
+    await expect(processor.process(job())).resolves.toEqual({ runId: 'run-1', status: 'FAILED' });
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'FAILED',
+      error: 'Lead lead-1 not found',
+    });
+    expect(mockAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('records a budget block as cancelled with a blocked decision, not as a failure', async () => {
+    mockAgentRun.mockRejectedValue(
+      new CostBlockedError('HARD_CAP', 'openai', 'monthly cap for agent:lead_analyst reached'),
+    );
+    const result = await processor.process(job());
+    expect(result).toEqual({ runId: 'run-1', status: 'CANCELLED', skipped: 'HARD_CAP' });
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith(
+      'acct',
+      'run-1',
+      expect.objectContaining({
+        status: 'CANCELLED',
+        decision: expect.objectContaining({
+          agent: 'lead_analyst',
+          recommendation: 'blocked',
+          model: null,
+          actions: [],
+          summary: 'blocked by cost control: HARD_CAP',
+        }),
+      }),
+    );
+  });
+
+  it('rethrows an api outage so BullMQ retries, without closing the run', async () => {
+    mockAgentRun.mockRejectedValue(new InternalApiError(503, 'api down'));
+    await expect(processor.process(job())).rejects.toBeInstanceOf(InternalApiError);
+    expect(mockRecordAgentDecision).not.toHaveBeenCalled();
+  });
+
+  it('fails the run with the raw reply when the model did not answer in JSON', async () => {
+    mockAgentRun.mockRejectedValue(new AgentOutputError('not JSON', 'Sorry, no.'));
+    await expect(processor.process(job())).resolves.toEqual({ runId: 'run-1', status: 'FAILED' });
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'FAILED',
+      error: 'not JSON: Sorry, no.',
+    });
+  });
+
+  it('fails the run with the provider reason when the provider is unavailable', async () => {
+    mockAgentRun.mockRejectedValue(
+      new IntegrationUnavailableError('openai', 'REJECTED_CREDENTIALS', 'bad key'),
+    );
+    await processor.process(job());
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'FAILED',
+      error: 'openai unavailable (REJECTED_CREDENTIALS): bad key',
+    });
+  });
+});

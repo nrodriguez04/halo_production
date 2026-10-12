@@ -5,6 +5,7 @@ import { CommunicationsProcessor } from './communications.processor';
 import { UnderwritingProcessor } from './underwriting.processor';
 import { MarketingProcessor } from './marketing.processor';
 import { VideoProcessor } from './video.processor';
+import { AgentsProcessor } from '../agents/agents.processor';
 
 @Module({
   providers: [
@@ -14,6 +15,7 @@ import { VideoProcessor } from './video.processor';
     UnderwritingProcessor,
     MarketingProcessor,
     VideoProcessor,
+    AgentsProcessor,
   ],
   exports: [PrismaService],
 })

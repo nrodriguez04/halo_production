@@ -18,6 +18,8 @@ import { IntegrationSecretsService } from '../../integration-secrets/integration
 
 export interface AnthropicChatInput {
   model: string;
+  /** Workflow-scoped budget bucket (e.g. agent:lead_analyst); see cost-control hints. */
+  workflow?: string;
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
   temperature?: number;
   maxTokens?: number;
@@ -113,6 +115,7 @@ export class AnthropicService {
         tokensOut: input.estimatedTokensOut ?? input.maxTokens ?? 1024,
       },
       context: ctx,
+      hints: input.workflow ? { workflow: input.workflow } : undefined,
       execute: () => this.complete(input),
       computeActualCostUsd: (result) =>
         priceFromTokens(input.model, result.tokensIn, result.tokensOut),

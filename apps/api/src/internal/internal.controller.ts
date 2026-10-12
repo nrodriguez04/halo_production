@@ -1,4 +1,10 @@
 import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import type { AgentDecision } from '@halo/shared';
+import {
+  AgentOrchestrationService,
+  type DecisionReport,
+  type OpenRunInput,
+} from '../agent/agent-orchestration.service';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentAccountId } from '../auth/decorators';
 import { InternalAuthGuard } from './internal-auth.guard';
@@ -12,6 +18,8 @@ import {
   CostAttributionDto,
   EnrichmentAddressDto,
   SkipTraceLeadDto,
+  AgentRunOpenDto,
+  AgentDecisionDto,
 } from './dto/internal.dto';
 import { MessageDispatchService } from '../communications/message-dispatch.service';
 import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
@@ -49,6 +57,7 @@ export class InternalController {
     private readonly geocoding: GeocodingService,
     private readonly attom: AttomService,
     private readonly prisma: PrismaService,
+    private readonly agents: AgentOrchestrationService,
   ) {}
 
   private context(accountId: string, dto: CostAttributionDto): CostContext {
@@ -76,6 +85,7 @@ export class InternalController {
       messages: dto.messages,
       temperature: dto.temperature,
       maxTokens: dto.maxTokens,
+      workflow: dto.workflow,
     };
     const result =
       aiProviderForModel(dto.model) === 'anthropic'
@@ -195,5 +205,30 @@ export class InternalController {
       });
     }
     return { sourceRecordId, costUsd: out.costUsd, cached: out.cached };
+  }
+
+  /** Opens the ledger row for an agent run before the worker does any work. */
+  @Post('agent/runs')
+  openAgentRun(
+    @CurrentAccountId() accountId: string,
+    @Body() dto: AgentRunOpenDto,
+  ) {
+    return this.agents.openRun(accountId, dto as OpenRunInput);
+  }
+
+  /** The worker's decision for a run; applied within the tenant's autonomy tier. */
+  @Post('agent/runs/:id/decision')
+  recordAgentDecision(
+    @CurrentAccountId() accountId: string,
+    @Param('id') id: string,
+    @Body() dto: AgentDecisionDto,
+  ) {
+    const report: DecisionReport = {
+      status: dto.status,
+      decision: dto.decision as unknown as AgentDecision | undefined,
+      costUsd: dto.costUsd,
+      error: dto.error,
+    };
+    return this.agents.recordDecision(accountId, id, report);
   }
 }

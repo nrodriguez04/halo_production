@@ -5,6 +5,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -15,6 +16,8 @@ import {
 
 /** Entity ids so spend can be attributed on the cost dashboards. */
 export class CostAttributionDto {
+  /** Workflow-scoped budget bucket, e.g. agent:lead_analyst. */
+  @IsOptional() @IsString() @MaxLength(80) workflow?: string;
   @IsOptional() @IsString() leadId?: string;
   @IsOptional() @IsString() propertyId?: string;
   @IsOptional() @IsString() dealId?: string;
@@ -65,4 +68,40 @@ export class EnrichmentAddressDto extends CostAttributionDto {
 /** The worker names the lead; the api reads its address and owner itself. */
 export class SkipTraceLeadDto {
   @IsString() @MaxLength(64) leadId!: string;
+}
+
+// ----------------------------------------------------------------- agents
+
+export class AgentRunOpenDto {
+  @IsIn([
+    'lead_analyst',
+    'deal_underwriter',
+    'outreach_drafter',
+    'disposition_matcher',
+  ])
+  agent!:
+    | 'lead_analyst'
+    | 'deal_underwriter'
+    | 'outreach_drafter'
+    | 'disposition_matcher';
+
+  @IsIn(['lead', 'deal', 'message'])
+  entityType!: 'lead' | 'deal' | 'message';
+
+  @IsString() @MaxLength(64) entityId!: string;
+
+  @IsIn(['lifecycle', 'inbound', 'sweep', 'manual'])
+  trigger!: 'lifecycle' | 'inbound' | 'sweep' | 'manual';
+
+  @IsOptional() @IsString() @MaxLength(120) triggerEventId?: string;
+  @IsOptional() @IsString() @MaxLength(64) actorId?: string | null;
+}
+
+export class AgentDecisionDto {
+  @IsIn(['COMPLETED', 'AWAITING_APPROVAL', 'FAILED', 'CANCELLED'])
+  status!: 'COMPLETED' | 'AWAITING_APPROVAL' | 'FAILED' | 'CANCELLED';
+
+  @IsOptional() @IsObject() decision?: Record<string, unknown>;
+  @IsOptional() @IsNumber() @Min(0) costUsd?: number;
+  @IsOptional() @IsString() @MaxLength(2000) error?: string;
 }

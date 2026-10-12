@@ -8,6 +8,7 @@ const mockPrisma = {
   sourceRecord: { findFirst: jest.fn() },
   integrationCostEvent: { findFirst: jest.fn() },
 };
+jest.mock('../../agents/agents-queue', () => ({ enqueueAgentJob: jest.fn() }));
 jest.mock('../../prisma-client', () => ({ prisma: mockPrisma }));
 
 const mockGeocode = jest.fn();

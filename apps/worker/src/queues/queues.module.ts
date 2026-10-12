@@ -30,6 +30,10 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
         // don't block flyer / buyer-blast workflows.
         name: 'marketing-video',
       },
+      {
+        // Every agent (docs/agent-design.md); the processor dispatches on payload.agent.
+        name: 'agents',
+      },
     ),
   ],
   exports: [BullModule],
