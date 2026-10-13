@@ -40,6 +40,7 @@ describe('agent golden set, recorded replies', () => {
     expect(counts.deal_underwriter).toBeGreaterThanOrEqual(10);
     expect(counts.outreach_drafter).toBeGreaterThanOrEqual(15);
     expect(counts.disposition_matcher).toBeGreaterThanOrEqual(8);
+    expect(counts.buyer_responder).toBeGreaterThanOrEqual(12);
   });
 
   for (const file of files) {
@@ -198,6 +199,43 @@ describe('grading', () => {
     expect(failures(r)).toContain(
       'detail: MAO = ARV x 0.70 - repairs - the deal fee (MAO 78400, formula gives 73400 with a 15000 fee)',
     );
+  });
+
+  it("flags a buyer reply that shows the seller's price or accepts an offer", async () => {
+    const responder = fileOf('buyer_responder');
+    const c = caseOf(responder, 'offer-below-asking');
+    const original = c.reply as {
+      reply: { body: string; subject: string | null };
+    };
+    const leak = {
+      ...original,
+      reply: {
+        ...original.reply,
+        body: 'We are into this one at $72,000 ourselves, so $70,000 is tight.',
+      },
+    };
+    const leaked = await offline(responder, { ...c, reply: leak });
+    expect(failures(leaked).join('\n')).toContain(
+      "email: never the seller's price",
+    );
+
+    const accept = {
+      ...original,
+      reply: {
+        ...original.reply,
+        body: 'Deal. We accept $70,000, it is yours.',
+      },
+    };
+    const accepted = await offline(responder, { ...c, reply: accept });
+    expect(failures(accepted).join('\n')).toContain(
+      'email: never accepts an offer or agrees to terms',
+    );
+  });
+
+  it("lets a buyer reply repeat the buyer's own figures", async () => {
+    const responder = fileOf('buyer_responder');
+    const r = await offline(responder, caseOf(responder, 'offer-below-asking'));
+    expect(r.passed).toBe(true);
   });
 
   it('asks a live backend once per model case and adds up the cost', async () => {

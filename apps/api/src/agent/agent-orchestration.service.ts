@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -751,6 +752,15 @@ export class AgentOrchestrationService {
           userId,
         );
       }
+      if (action.recipientType === 'buyer') {
+        return await this.createBuyerReplyDraft(
+          accountId,
+          run,
+          agent,
+          action,
+          userId,
+        );
+      }
       const target = await this.draftTarget(accountId, run, userId);
       const hasContact =
         action.channel === 'sms'
@@ -785,6 +795,10 @@ export class AgentOrchestrationService {
         detail: `message:${draft.message.id}`,
       };
     } catch (err) {
+      // A compliance refusal (DNC, missing consent, quiet hours) leaves the
+      // run open with the reason, like the Texas disclosure gate, so it can
+      // be approved again once resolved. Anything else is a failed step.
+      if (err instanceof ForbiddenException) throw err;
       return { action, result: 'failed', detail: (err as Error).message };
     }
   }
@@ -1105,6 +1119,77 @@ export class AgentOrchestrationService {
         `messages:${messageIds.join(',')}` +
         (skipped.length ? `; skipped ${skipped.join('; ')}` : ''),
     };
+  }
+
+  /**
+   * A reply to a buyer (Buyer Responder): one message to the address the
+   * buyer wrote from, else the buyer's own on file, created through the
+   * communications service so DNC, consent, quiet hours and the Texas
+   * disclosure gate apply as to any buyer message, and it lands in the
+   * approval queue like the blast.
+   */
+  private async createBuyerReplyDraft(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    agent: AgentName,
+    action: Extract<AgentAction, { type: 'draft_message' }>,
+    userId: string,
+  ): Promise<AppliedAction> {
+    if (run.entityType !== 'deal' || !run.entityId) {
+      throw new Error('no deal on this run');
+    }
+    if (!action.buyerId) throw new Error('a buyer draft needs a buyer');
+    const buyer = await this.prisma.buyer.findFirst({
+      where: { id: action.buyerId, accountId },
+      select: { id: true, name: true, emailEnc: true, phoneEnc: true },
+    });
+    if (!buyer) throw new Error('buyer not found');
+    const inbound = action.inReplyToMessageId
+      ? await this.prisma.message.findFirst({
+          where: {
+            id: action.inReplyToMessageId,
+            accountId,
+            direction: 'inbound',
+          },
+          select: { channel: true, counterpartyEnc: true },
+        })
+      : null;
+    const wroteFrom =
+      inbound && inbound.channel === action.channel
+        ? openCounterparty(inbound)
+        : null;
+    const sealed = action.channel === 'sms' ? buyer.phoneEnc : buyer.emailEnc;
+    const address = wroteFrom ?? (sealed ? openValue(sealed) : null);
+    if (!address) {
+      return {
+        action,
+        result: 'skipped',
+        detail: `${buyer.name} has no ${action.channel === 'sms' ? 'phone' : 'email'} on file`,
+      };
+    }
+    const message = await this.communications.create({
+      accountId,
+      dealId: run.entityId,
+      channel: action.channel,
+      direction: 'outbound',
+      content: action.content,
+      metadata: {
+        ...(action.channel === 'sms' ? { phone: address } : { email: address }),
+        recipientType: 'buyer',
+        buyerId: buyer.id,
+        buyerName: buyer.name,
+        type: 'buyer_reply',
+        subject: action.subject,
+        inReplyToMessageId: action.inReplyToMessageId,
+        agentName: agent,
+        automationRunId: run.id,
+        approvedRunBy: userId,
+      },
+      source: 'agent',
+      agentName: agent,
+      automationRunId: run.id,
+    } as Parameters<CommunicationsService['create']>[0]);
+    return { action, result: 'applied', detail: `message:${message.id}` };
   }
 
   /**

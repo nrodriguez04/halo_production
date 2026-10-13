@@ -1,10 +1,10 @@
 # Agent evaluation: the golden set
 
-Each agent (Lead Analyst, Deal Underwriter, Outreach Drafter, Disposition Matcher) has a golden set: situations with the decision a person would accept. Every change runs the set in CI, so a prompt edit, a rule change or a refactor that changes what an agent decides fails the build before it reaches a seller. This is design doc §8 ([agent-design.md](agent-design.md)).
+Each agent (Lead Analyst, Deal Underwriter, Outreach Drafter, Disposition Matcher, Buyer Responder) has a golden set: situations with the decision a person would accept. Every change runs the set in CI, so a prompt edit, a rule change or a refactor that changes what an agent decides fails the build before it reaches a seller. This is design doc §8 ([agent-design.md](agent-design.md)).
 
 | | |
 |---|---|
-| Cases | `apps/worker/eval/golden/<agent>.json`: 31 leads, 12 deals for the Underwriter, 23 seller conversations, 12 buyer matches |
+| Cases | `apps/worker/eval/golden/<agent>.json`: 31 leads, 12 deals for the Underwriter, 23 seller conversations, 12 buyer matches, 15 buyer replies |
 | Engine | `apps/worker/eval/golden-eval.ts` (cases, checks, report), `run-eval.ts` (command line), `chat-backends.ts` (live model backends) |
 | Prompt lock | `apps/worker/eval/prompt-lock.json` |
 | Tests | `apps/worker/eval/__tests__/` (runs in the worker's `npm test`) |
@@ -51,6 +51,7 @@ Every check is one of three kinds.
 | Lead Analyst | drafts for a lead that is not qualified; a qualified lead scored under 60 (skip trace only runs at 60 or more, so it would never get a phone number); a model transition that does not wait for a person; a first touch that says how the lead was found (foreclosure, tax delinquency, liens, probate, an expired, withdrawn or canceled listing); a licensed-agent claim; a text over 320 characters |
 | Deal Underwriter | a MAO above the ARV; an offer range above the MAO; an "offer" with no positive MAO; numbers without the deal snapshot that guards a person's edits; any contact with anyone |
 | Outreach Drafter | a reply after an opt-out or a wrong number; a dollar amount other than the offer a person entered; a reply on another channel than the seller used; a deal move that does not match the reply; an unsure opt-out applied without a person; a text over 320 characters or an email over 150 words |
+| Buyer Responder | a reply after an opt-out or a wrong person; a draft to anyone but the buyer who wrote, on another channel or not linked to their message; the seller's price in a reply, or any figure other than the buyer price, ARV, repairs, the as-is value or the buyer's own numbers; accepting an offer or agreeing to terms; moving a deal; an unsure opt-out applied without a person |
 | Disposition Matcher | a buyer without an email, twice, or past the cap of 10; a blast to anyone but the shortlist; the seller's price (the offer, the contract price or the MAO) in a blast, or any figure other than the buyer price, ARV, repairs and the as-is value; "market" with nobody shortlisted |
 
 **Detail**: the actions the decision carries (for example `transition_deal:negotiating`), the model tier the agent asked for, the Matcher's buy-box candidate order, words a draft must mention, and whether the Underwriter's MAO follows ARV x 0.70 - repairs - the deal's fee.
@@ -75,11 +76,11 @@ npm run agents:eval -- --live --via openai       # straight to OpenAI with OPENA
 npm run agents:eval -- --live --models mid=claude-sonnet-5-5,strong=claude-opus-5-5
 ```
 
-The same cases, asked of the real model. Rule cases still never reach it. An agent passes when every rule case passes, no decision breaks a safety check, and the share of model cases whose decision agrees is at or above the file's `liveThreshold` (Lead Analyst 80%, Deal Underwriter 75%, Outreach Drafter 80%, Disposition Matcher 80%). Details are reported, not gated.
+The same cases, asked of the real model. Rule cases still never reach it. An agent passes when every rule case passes, no decision breaks a safety check, and the share of model cases whose decision agrees is at or above the file's `liveThreshold` (Lead Analyst 80%, Deal Underwriter 75%, Outreach Drafter 80%, Disposition Matcher 80%, Buyer Responder 80%). Details are reported, not gated.
 
 - `--via api` (the default) needs the worker's `INTERNAL_API_BASE_URL` and `INTERNAL_API_TOKEN` (read from `apps/worker/.env.local`) and a tenant (`--account` or `EVAL_ACCOUNT_ID`). Spend goes through that tenant's cost control and ledger like any agent call, but outside the agents' own budget buckets (the eval uses the workflow `agent:eval`). Claude tiers need this backend.
 - `--via openai` sends what the api's OpenAI adapter sends and only reaches OpenAI models.
-- About 45 model calls, roughly $0.30 at the default tiers (gpt-4o). `--max-cost-usd` (default 2) stops the run, and three failed calls in a row stop it too.
+- About 55 model calls, roughly $0.35 at the default tiers (gpt-4o). `--max-cost-usd` (default 2) stops the run, and three failed calls in a row stop it too.
 
 ## Changing a prompt
 

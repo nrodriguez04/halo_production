@@ -373,6 +373,13 @@ const BUDGET_TEMPLATES = [
   },
   {
     scope: 'workflow',
+    scopeRef: 'agent:buyer_responder',
+    period: 'month',
+    hardCapUsd: 25,
+    softCapUsd: 20,
+  },
+  {
+    scope: 'workflow',
     scopeRef: 'skip_trace_pipeline',
     period: 'day',
     hardCapUsd: 25,

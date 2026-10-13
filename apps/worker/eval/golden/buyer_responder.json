@@ -1,0 +1,843 @@
+{
+  "agent": "buyer_responder",
+  "liveThreshold": 0.8,
+  "notes": "Cash buyers replying about a marketed deal, with the classification and reply a person would send. Opt-out and wrong-person phrases, opted-out buyers and deals that are gone are rules. Only the buyer price, ARV and repairs may be quoted; offers are never accepted by the agent. Synthetic data.",
+  "bases": {
+    "reply": {
+      "trigger": "inbound",
+      "deal": {
+        "id": "deal-golden",
+        "stage": "marketing",
+        "arv": 172000,
+        "repairEstimate": 32000,
+        "mao": 78400,
+        "offerAmount": 72000,
+        "contractPrice": null,
+        "assignmentPrice": null,
+        "assignmentFee": null
+      },
+      "defaultAssignmentFee": 10000,
+      "property": {
+        "address": "2418 Pecan Grove Dr",
+        "city": "Memphis",
+        "state": "TN",
+        "zip": "38116",
+        "estimatedValue": 142000
+      },
+      "buyer": {
+        "id": "b-riverbend",
+        "name": "Riverbend Renovations",
+        "preferences": {
+          "locations": [
+            "Memphis"
+          ],
+          "priceRange": {
+            "min": 50000,
+            "max": 120000
+          },
+          "propertyTypes": [
+            "single_family"
+          ]
+        },
+        "engagementScore": 8,
+        "hasEmail": true,
+        "hasPhone": true
+      },
+      "compliance": {
+        "optedOut": false
+      },
+      "thread": [
+        {
+          "id": "msg-blast-1",
+          "direction": "outbound",
+          "channel": "email",
+          "status": "delivered",
+          "at": "2026-10-09T15:00:00.000Z",
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        {
+          "id": "msg-buyer-in-1",
+          "direction": "inbound",
+          "channel": "email",
+          "status": "delivered",
+          "at": "2026-10-09T18:20:00.000Z",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Is this still available?"
+        }
+      ],
+      "inbound": {
+        "id": "msg-buyer-in-1",
+        "channel": "email",
+        "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+        "content": "Is this still available?",
+        "at": "2026-10-09T18:20:00.000Z"
+      },
+      "team": {
+        "name": "Halo Home Buyers"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-unsubscribe",
+      "title": "Unsubscribe: recorded at once, no reply",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Please unsubscribe me from these emails."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Please unsubscribe me from these emails.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "opt_out_phrase",
+        "recommendation": "opt_out",
+        "actions": [
+          "classify_inbound:opt_out:rule",
+          "record_opt_out:autonomous"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-stop-sending-deals",
+      "title": "Stop sending me deals",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Stop sending me deals, I am out of the market for now."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Stop sending me deals, I am out of the market for now.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "opt_out_phrase",
+        "recommendation": "opt_out",
+        "actions": [
+          "record_opt_out:autonomous"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-wrong-person",
+      "title": "Not the buyer we think: classified, no reply",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "You have the wrong person, I am not an investor."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "You have the wrong person, I am not an investor.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "wrong_person_phrase",
+        "recommendation": "wrong_number",
+        "actions": [
+          "classify_inbound:wrong_number:rule"
+        ],
+        "noActions": [
+          "draft_message",
+          "record_opt_out"
+        ]
+      }
+    },
+    {
+      "id": "rule-opted-out-buyer",
+      "title": "A buyer on the do-not-contact list gets no reply",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Is this still available?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Is this still available?",
+          "at": "2026-10-09T18:20:00.000Z"
+        },
+        "compliance": {
+          "optedOut": true
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "opted_out",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-deal-assigned",
+      "title": "Deal already assigned: a courtesy reply from a template, no model",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Is this still available? I can close fast."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Is this still available? I can close fast.",
+          "at": "2026-10-09T18:20:00.000Z"
+        },
+        "deal": {
+          "stage": "assigned"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "deal_unavailable",
+        "recommendation": "unavailable",
+        "actions": [
+          "draft_message:email:buyer"
+        ],
+        "mentions": [
+          "no longer available"
+        ]
+      }
+    },
+    {
+      "id": "rule-unknown-buyer",
+      "title": "A reply not tied to a buyer on file is left for a person",
+      "base": "reply",
+      "context": {
+        "buyer": null
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_buyer",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "interested-walkthrough",
+      "title": "Wants to walk it: ask for times, mention proof of funds",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Interested. Can I walk it this week?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Interested. Can I walk it this week?",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "interested",
+        "confidence": 0.9,
+        "reply": {
+          "body": "Thanks for the quick reply. We can set up a walkthrough of 2418 Pecan Grove Dr. What days and times work best for you this week? To hold the deal for you we will need proof of funds and an earnest money deposit.",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000"
+        },
+        "offer": null,
+        "rationale": "The buyer wants to see the property."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "interested",
+        "tier": "mid",
+        "actions": [
+          "classify_inbound:interested:model",
+          "draft_message:email:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ],
+        "mentions": [
+          "proof of funds"
+        ]
+      }
+    },
+    {
+      "id": "question-rents-comps",
+      "title": "Asks for rents and comps the context does not have: promise to send, invent nothing",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "What would it rent for? Do you have any recent comps?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "What would it rent for? Do you have any recent comps?",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "question",
+        "confidence": 0.85,
+        "reply": {
+          "body": "Good questions. We do not have rent figures or comparable sales in hand yet; we will send what we have. The asking price is $82,000, with an estimated ARV of $172,000 and about $32,000 in repairs.",
+          "subject": null
+        },
+        "offer": null,
+        "rationale": "The buyer asked for rents and comps, which are not in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "question"
+        ],
+        "actions": [
+          "draft_message:email:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "offer-below-asking",
+      "title": "A lower offer: thank them, take it to the team, never accept or counter",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "I'd do $70k cash and close in 10 days."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "I'd do $70k cash and close in 10 days.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "offer",
+        "confidence": 0.92,
+        "reply": {
+          "body": "Thanks for the offer of $70,000 with a 10-day close. We will review it with the team and get back to you shortly.",
+          "subject": null
+        },
+        "offer": {
+          "amount": 70000,
+          "terms": "cash, close in 10 days"
+        },
+        "rationale": "The buyer offered below the asking price."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "offer"
+        ],
+        "actions": [
+          "classify_inbound:offer:model",
+          "draft_message:email:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "offer-at-asking",
+      "title": "Takes it at the asking price: next steps, but a person confirms",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "We'll take it at $82k. Send over the contract."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "We'll take it at $82k. Send over the contract.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "offer",
+        "confidence": 0.9,
+        "reply": {
+          "body": "Thank you. Someone from our team will confirm and send the next steps today. To reserve the deal we will need proof of funds and an earnest money deposit.",
+          "subject": null
+        },
+        "offer": {
+          "amount": 82000,
+          "terms": "at asking, wants the contract"
+        },
+        "rationale": "The buyer wants it at the asking price; a person must confirm and send the assignment."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "offer",
+          "interested"
+        ],
+        "actions": [
+          "draft_message:email:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ],
+        "mentions": [
+          "proof of funds"
+        ]
+      }
+    },
+    {
+      "id": "not-interested",
+      "title": "Passes: at most a courteous line",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Pass, too far north of where we buy."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Pass, too far north of where we buy.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "not_interested",
+        "confidence": 0.9,
+        "reply": {
+          "body": "Understood, thanks for letting us know.",
+          "subject": null
+        },
+        "offer": null,
+        "rationale": "The buyer passed on location."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "not_interested"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "model-opt-out-paraphrase",
+      "title": "An opt-out the phrase rules miss",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "I'm no longer buying, please don't send more."
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "I'm no longer buying, please don't send more.",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "opt_out",
+        "confidence": 0.85,
+        "reply": null,
+        "offer": null,
+        "rationale": "The buyer asked not to receive more deals."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "opt_out"
+        ],
+        "actions": [
+          "classify_inbound:opt_out:model",
+          "record_opt_out"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "sms-still-available",
+      "title": "A buyer who texts gets a text back",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": null,
+            "content": "Still available?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "sms",
+          "subject": null,
+          "content": "Still available?",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "question",
+        "confidence": 0.8,
+        "reply": {
+          "body": "Yes, 2418 Pecan Grove Dr is still available at $82,000. Would you like to set up a walkthrough?",
+          "subject": null
+        },
+        "offer": null,
+        "rationale": "The buyer asked if the deal is still available."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "question",
+          "interested"
+        ],
+        "actions": [
+          "draft_message:sms:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "asking-price-set-on-deal",
+      "title": "A price a person set is the one quoted",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "What is your bottom line on this one?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "What is your bottom line on this one?",
+          "at": "2026-10-09T18:20:00.000Z"
+        },
+        "deal": {
+          "assignmentPrice": 89500
+        }
+      },
+      "reply": {
+        "intent": "question",
+        "confidence": 0.8,
+        "reply": {
+          "body": "The asking price is $89,500. If you would like to make an offer, send it over and the team will review it.",
+          "subject": null
+        },
+        "offer": null,
+        "rationale": "The buyer asked about price flexibility; only the asking price may be stated."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "question",
+          "offer"
+        ],
+        "actions": [
+          "draft_message:email:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast"
+        ],
+        "mentions": [
+          "$89,500"
+        ]
+      }
+    },
+    {
+      "id": "reply-not-json",
+      "title": "A reply in prose is rejected",
+      "base": "reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-blast-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T15:00:00.000Z",
+            "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          },
+          {
+            "id": "msg-buyer-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-09T18:20:00.000Z",
+            "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+            "content": "Interested. Can I walk it this week?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-buyer-in-1",
+          "channel": "email",
+          "subject": "Re: Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "content": "Interested. Can I walk it this week?",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": "Sure, tell them we can do Thursday.",
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    }
+  ]
+}

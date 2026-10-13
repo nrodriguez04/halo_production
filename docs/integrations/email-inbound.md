@@ -53,9 +53,11 @@ Test it: send yourself a draft from a deal, reply to it, and watch
 - **Auto-replies and bounces** (`Auto-Submitted`, `Precedence: bulk`,
   "Automatic reply", "Undeliverable", ...) are recorded with
   `autoReply: true` and never answered.
-- **A buyer replying** to a buyer blast is recorded on the deal we last
-  emailed them about with a `BUYER_REPLIED` timeline event; no draft is
-  produced for buyers yet.
+- **A buyer replying** to a buyer blast is recorded on the deal of the
+  email they answered (matched by subject, else the deal we last emailed
+  them about) with a `BUYER_REPLIED` timeline event, and the Buyer
+  Responder drafts the answer for approval (docs/agent-design.md s3.5).
+  Out-of-office replies are recorded and never answered.
 - **Unknown senders** are stored under the `unknown` tenant where no tenant
   sees them; a sender that matches more than one tenant fails closed the
   same way.

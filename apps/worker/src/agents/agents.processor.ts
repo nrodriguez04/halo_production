@@ -23,6 +23,8 @@ import { loadOutreachContext } from './outreach-context';
 import { OutreachDrafterAgent } from './outreach-drafter.agent';
 import { loadDispositionContext } from './disposition-context';
 import { DispositionMatcherAgent } from './disposition-matcher.agent';
+import { loadBuyerReplyContext } from './buyer-context';
+import { BuyerResponderAgent } from './buyer-responder.agent';
 import {
   AgentOutputError,
   LeadAnalystAgent,
@@ -40,7 +42,8 @@ const RELEASED = new Set<AgentJobPayload['agent']>([
   'lead_analyst',
   'deal_underwriter',
   'outreach_drafter',
-'disposition_matcher',
+  'disposition_matcher',
+  'buyer_responder',
 ]);
 
 type AgentRunResult = LeadAnalystResult & { context: object };
@@ -162,6 +165,12 @@ export class AgentsProcessor extends WorkerHost {
       const ctx = await loadDispositionContext(p.entityId, p.accountId);
       if (!ctx) return null;
       const agent = new DispositionMatcherAgent({ models });
+      return withContext(ctx, agent.run(ctx, p.accountId, runId));
+    }
+    if (p.agent === 'buyer_responder') {
+      const ctx = await loadBuyerReplyContext(p);
+      if (!ctx) return null;
+      const agent = new BuyerResponderAgent({ models });
       return withContext(ctx, agent.run(ctx, p.accountId, runId));
     }
     if (p.agent === 'outreach_drafter') {
