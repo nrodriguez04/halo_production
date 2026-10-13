@@ -1,0 +1,2008 @@
+{
+  "agent": "lead_analyst",
+  "liveThreshold": 0.8,
+  "notes": "Enriched leads with the score and recommendation a person would accept. Rule cases never reach the model. Synthetic data: no real owners or properties.",
+  "bases": {
+    "absentee": {
+      "lead": {
+        "id": "lead-golden",
+        "status": "enriched",
+        "score": null,
+        "tags": [
+          "owner:absentee"
+        ],
+        "address": {
+          "street": "2418 Pecan Grove Dr",
+          "city": "Memphis",
+          "state": "TN",
+          "zip": "38116"
+        },
+        "ownerName": "M. Johnson",
+        "createdAt": "2026-10-02T15:00:00.000Z",
+        "daysInStatus": 1,
+        "hasPhone": false,
+        "hasEmail": false,
+        "dealCount": 0
+      },
+      "properties": [
+        {
+          "address": "2418 Pecan Grove Dr",
+          "city": "Memphis",
+          "state": "TN",
+          "zip": "38116",
+          "estimatedValue": 142000,
+          "salePrice": 104000
+        }
+      ],
+      "sources": [
+        {
+          "provider": "attom",
+          "endpoint": "property/detailowner",
+          "summary": {
+            "propertyType": "SFR",
+            "yearBuilt": 1967,
+            "beds": 3,
+            "baths": 1.5,
+            "sqft": 1320,
+            "assessedValue": 35500,
+            "marketValue": 142000,
+            "lastSaleAmount": 104000,
+            "lastSaleDate": "2017-05-22",
+            "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+            "ownerOccupied": false
+          }
+        }
+      ],
+      "enrichment": {
+        "stage": "completed",
+        "totalCostUsd": 0.35
+      },
+      "dnc": false,
+      "consents": {
+        "sms": false,
+        "email": false
+      },
+      "timeline": [
+        {
+          "at": "2026-10-03T09:12:00.000Z",
+          "type": "lead.status.enriched"
+        },
+        {
+          "at": "2026-10-02T15:00:00.000Z",
+          "type": "lead.created"
+        }
+      ]
+    },
+    "occupied": {
+      "lead": {
+        "id": "lead-golden",
+        "status": "enriched",
+        "score": null,
+        "tags": [
+          "owner:occupied"
+        ],
+        "address": {
+          "street": "2418 Pecan Grove Dr",
+          "city": "Memphis",
+          "state": "TN",
+          "zip": "38116"
+        },
+        "ownerName": "M. Johnson",
+        "createdAt": "2026-10-02T15:00:00.000Z",
+        "daysInStatus": 1,
+        "hasPhone": false,
+        "hasEmail": false,
+        "dealCount": 0
+      },
+      "properties": [
+        {
+          "address": "2418 Pecan Grove Dr",
+          "city": "Memphis",
+          "state": "TN",
+          "zip": "38116",
+          "estimatedValue": 142000,
+          "salePrice": 104000
+        }
+      ],
+      "sources": [
+        {
+          "provider": "attom",
+          "endpoint": "property/detailowner",
+          "summary": {
+            "propertyType": "SFR",
+            "yearBuilt": 1967,
+            "beds": 3,
+            "baths": 1.5,
+            "sqft": 1320,
+            "assessedValue": 35500,
+            "marketValue": 142000,
+            "lastSaleAmount": 104000,
+            "lastSaleDate": "2017-05-22",
+            "absenteeIndicator": "OWNER OCCUPIED",
+            "ownerOccupied": true
+          }
+        }
+      ],
+      "enrichment": {
+        "stage": "completed",
+        "totalCostUsd": 0.35
+      },
+      "dnc": false,
+      "consents": {
+        "sms": false,
+        "email": false
+      },
+      "timeline": [
+        {
+          "at": "2026-10-03T09:12:00.000Z",
+          "type": "lead.status.enriched"
+        },
+        {
+          "at": "2026-10-02T15:00:00.000Z",
+          "type": "lead.created"
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-dnc",
+      "title": "A do-not-call contact is disqualified before any model call",
+      "base": "absentee",
+      "context": {
+        "dnc": true
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "dnc",
+        "recommendation": "disqualified",
+        "score": {
+          "min": 5,
+          "max": 5
+        },
+        "actions": [
+          "set_lead_score",
+          "transition_lead:disqualified:autonomous"
+        ],
+        "noActions": [
+          "draft_message",
+          "transition_lead:qualified"
+        ]
+      }
+    },
+    {
+      "id": "rule-dnc-beats-strong-signals",
+      "title": "Do-not-call wins over tax delinquency and an expired listing",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "tax:delinquent",
+            "source:rentcast",
+            "listing:expired"
+          ]
+        },
+        "dnc": true
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "dnc",
+        "recommendation": "disqualified",
+        "noActions": [
+          "draft_message",
+          "transition_lead:qualified"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-street",
+      "title": "No street address: nothing to contact or value",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": ""
+          }
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_address",
+        "recommendation": "disqualified",
+        "actions": [
+          "transition_lead:disqualified:autonomous"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-zip",
+      "title": "No ZIP: the address is not usable",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "zip": ""
+          }
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_address",
+        "recommendation": "disqualified"
+      }
+    },
+    {
+      "id": "rule-vacant-land",
+      "title": "Vacant land is outside single-family and small multifamily",
+      "base": "absentee",
+      "context": {
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 21000,
+            "salePrice": 9000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "VACANT LAND (NEC)",
+              "assessedValue": 5200,
+              "marketValue": 21000,
+              "lastSaleAmount": 9000,
+              "lastSaleDate": "2011-08-01",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "property_type",
+        "recommendation": "disqualified",
+        "score": {
+          "min": 5,
+          "max": 5
+        }
+      }
+    },
+    {
+      "id": "rule-commercial-listing",
+      "title": "Any source calling the property commercial disqualifies it",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:active"
+          ]
+        },
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 142000,
+              "lastSaleAmount": 104000,
+              "lastSaleDate": "2017-05-22",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-55210",
+              "mlsId": null,
+              "status": "Active",
+              "listPrice": 389000,
+              "daysOnMarket": 41,
+              "propertyType": "Commercial",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-09-01",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "property_type",
+        "recommendation": "disqualified"
+      }
+    },
+    {
+      "id": "rule-owner-occupied-no-distress",
+      "title": "Owner-occupied with no distress is held, not scored by a model",
+      "base": "occupied",
+      "context": {},
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "owner_occupied_no_distress",
+        "recommendation": "hold",
+        "score": {
+          "min": 40,
+          "max": 40
+        },
+        "noActions": [
+          "transition_lead",
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-owner-occupied-active-listing",
+      "title": "An active listing is not a distress signal for an owner-occupant",
+      "base": "occupied",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:occupied",
+            "source:rentcast",
+            "listing:active"
+          ]
+        },
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 142000,
+              "lastSaleAmount": 104000,
+              "lastSaleDate": "2017-05-22",
+              "absenteeIndicator": "OWNER OCCUPIED",
+              "ownerOccupied": true
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-60311",
+              "mlsId": null,
+              "status": "Active",
+              "listPrice": 149900,
+              "daysOnMarket": 12,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-09-25",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "owner_occupied_no_distress",
+        "recommendation": "hold",
+        "noActions": [
+          "transition_lead",
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "expired-listing-long-hold",
+      "title": "Absentee owner, listing expired after 199 days, 22 years of ownership",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:expired",
+            "stale_listing"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 142000,
+            "salePrice": 58000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 142000,
+              "lastSaleAmount": 58000,
+              "lastSaleDate": "2004-03-18",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-77120",
+              "mlsId": null,
+              "status": "Expired",
+              "listPrice": 154900,
+              "daysOnMarket": 199,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-02-10",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 86,
+        "recommendation": "qualified",
+        "rationale": "Absentee owner; the listing ran 199 days at $154,900 without selling; bought in 2004 for $58,000 against a $142,000 market value, so equity is likely high.",
+        "signals": [
+          "absentee owner",
+          "listing expired after 199 days",
+          "long ownership, likely high equity"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Just reply here if you would like to talk.",
+        "first_touch_email": {
+          "subject": "Cash offer for 2418 Pecan Grove Dr",
+          "body": "Hello,\n\nMy name is Sam and I buy houses in Memphis for cash. I would like to make you an offer on 2418 Pecan Grove Dr. We buy as-is, so there is nothing to repair or clean out, and you pick the closing date. There are no fees or commissions on your side. If you are open to a short conversation, just reply to this email.\n\nThanks,\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "tier": "mid",
+        "score": {
+          "min": 70,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Pecan Grove"
+        ]
+      }
+    },
+    {
+      "id": "tax-delinquent-absentee",
+      "title": "Tax-delinquent absentee owner is a very strong signal on its own",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "907 Hollins Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38107"
+          },
+          "tags": [
+            "owner:absentee",
+            "tax:delinquent",
+            "source:realie"
+          ]
+        },
+        "properties": [
+          {
+            "address": "907 Hollins Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38107",
+            "estimatedValue": 118000,
+            "salePrice": 47000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1951,
+              "beds": 2,
+              "baths": 1,
+              "sqft": 1150,
+              "assessedValue": 29500,
+              "marketValue": 118000,
+              "lastSaleAmount": 47000,
+              "lastSaleDate": "2009-11-03",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "realie",
+            "endpoint": "public/property/search",
+            "summary": {
+              "source": "realie",
+              "listingKey": "re-907hollins",
+              "mlsId": null,
+              "status": "Off Market",
+              "listPrice": null,
+              "daysOnMarket": null,
+              "propertyType": "Single Family",
+              "bedrooms": 2,
+              "bathrooms": 1,
+              "livingArea": 1150,
+              "yearBuilt": 1951,
+              "listDate": null,
+              "city": "Memphis",
+              "postalCode": "38107"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 88,
+        "recommendation": "qualified",
+        "rationale": "Absentee owner with delinquent property taxes, which is one of the strongest motivation signals; owned since 2009 with a large gap between the $47,000 purchase and the $118,000 value.",
+        "signals": [
+          "tax delinquent",
+          "absentee owner",
+          "likely equity"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. I'm interested in buying 907 Hollins Ave for cash, as-is. Would you be open to an offer? Reply here and I can share more.",
+        "first_touch_email": {
+          "subject": "907 Hollins Ave",
+          "body": "Hello,\n\nI buy houses in Memphis and I am interested in 907 Hollins Ave. I can make a cash offer, buy it in its current condition and close when it suits you. There is no cost to you and no obligation. Would you be open to a quick call or a reply by email?\n\nBest regards,\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 70,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Hollins"
+        ]
+      }
+    },
+    {
+      "id": "pre-foreclosure-absentee",
+      "title": "A foreclosure filing on an absentee-owned house",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "3627 Faronia Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116"
+          },
+          "tags": [
+            "owner:absentee",
+            "foreclosure",
+            "source:realie"
+          ]
+        },
+        "properties": [
+          {
+            "address": "3627 Faronia Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 126000,
+            "salePrice": 89000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1971,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1260,
+              "assessedValue": 31500,
+              "marketValue": 126000,
+              "lastSaleAmount": 89000,
+              "lastSaleDate": "2019-02-15",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 90,
+        "recommendation": "qualified",
+        "rationale": "A foreclosure filing is on record for an absentee-owned house; that is a very strong signal by itself, and the owner may need a quick sale.",
+        "signals": [
+          "foreclosure filing",
+          "absentee owner"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a fast cash offer on 3627 Faronia Rd? We buy as-is and can close quickly or on your schedule. Reply if you would like to talk.",
+        "first_touch_email": {
+          "subject": "Offer on 3627 Faronia Rd",
+          "body": "Hello,\n\nMy name is Sam and I buy houses in Memphis. I would like to make you a cash offer on 3627 Faronia Rd. We can close quickly or on the date you choose, and we buy as-is. There are no fees on your side. If an offer would help, reply to this email and I will call you.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 70,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Faronia"
+        ]
+      }
+    },
+    {
+      "id": "owner-occupied-pre-foreclosure",
+      "title": "Owner-occupied but in foreclosure: the rule must not hold it",
+      "base": "occupied",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:occupied",
+            "foreclosure",
+            "source:realie"
+          ]
+        }
+      },
+      "reply": {
+        "score": 74,
+        "recommendation": "qualified",
+        "rationale": "Owner-occupied, but a foreclosure filing is on record, which is a very strong motivation signal on its own.",
+        "signals": [
+          "foreclosure filing"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. If you have thought about selling 2418 Pecan Grove Dr, I can make a fair cash offer and work around your timeline. Would you like to talk?",
+        "first_touch_email": {
+          "subject": "A cash offer for your home",
+          "body": "Hello,\n\nI buy houses in Memphis and wanted to ask whether you would consider selling 2418 Pecan Grove Dr. I can make a cash offer, buy the house as it is and let you choose the timing. There are no fees and no obligation. If it would help to talk it through, just reply to this email.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 60,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Pecan Grove"
+        ]
+      }
+    },
+    {
+      "id": "withdrawn-long-hold",
+      "title": "Listing withdrawn after 121 days, owned since 1996",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "3150 Kimball Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38111"
+          },
+          "tags": [
+            "owner:absentee",
+            "source:mls",
+            "listing:withdrawn",
+            "stale_listing"
+          ]
+        },
+        "properties": [
+          {
+            "address": "3150 Kimball Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38111",
+            "estimatedValue": 188000,
+            "salePrice": 42000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1948,
+              "beds": 3,
+              "baths": 2,
+              "sqft": 1540,
+              "assessedValue": 47000,
+              "marketValue": 188000,
+              "lastSaleAmount": 42000,
+              "lastSaleDate": "1996-07-09",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "mls",
+            "endpoint": "Property",
+            "summary": {
+              "source": "mls",
+              "listingKey": "mls-10293847",
+              "mlsId": "MLS-10293847",
+              "status": "Withdrawn",
+              "listPrice": 179000,
+              "daysOnMarket": 121,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 2,
+              "livingArea": 1540,
+              "yearBuilt": 1948,
+              "listDate": "2026-05-01",
+              "city": "Memphis",
+              "postalCode": "38111"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 84,
+        "recommendation": "qualified",
+        "rationale": "The owner tried to sell and pulled the listing after 121 days; absentee, owned since 1996 for $42,000 against a $188,000 value, so equity is high.",
+        "signals": [
+          "listing withdrawn",
+          "absentee owner",
+          "30 years of ownership"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Are you still thinking about selling 3150 Kimball Ave? I can make a cash offer, buy as-is and close on your timeline. Reply here if you are open to it.",
+        "first_touch_email": {
+          "subject": "3150 Kimball Ave",
+          "body": "Hello,\n\nI am Sam with Halo Home Buyers. We buy houses in Memphis for cash and would like to make you an offer on 3150 Kimball Ave. We buy as-is and let you pick the closing date. No agents and no commissions are involved. If you would like to hear a number, just reply.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 65,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Kimball"
+        ]
+      }
+    },
+    {
+      "id": "recent-market-sale",
+      "title": "Bought four months ago at market value: no discount in sight",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "recent_transfer"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 152000,
+            "salePrice": 149000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 152000,
+              "lastSaleAmount": 149000,
+              "lastSaleDate": "2026-06-02",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 22,
+        "recommendation": "disqualified",
+        "rationale": "Bought four months ago at full market value; there is no equity and no sign the new owner would sell at a discount.",
+        "signals": [
+          "recent sale at market value"
+        ],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "disqualified",
+          "hold"
+        ],
+        "score": {
+          "min": 0,
+          "max": 45
+        },
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "active-listing-full-price",
+      "title": "Listed nine days ago with an agent at market value",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:active"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 158000,
+            "salePrice": 104000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 158000,
+              "lastSaleAmount": 104000,
+              "lastSaleDate": "2017-05-22",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-81442",
+              "mlsId": null,
+              "status": "Active",
+              "listPrice": 159900,
+              "daysOnMarket": 9,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-09-28",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 34,
+        "recommendation": "hold",
+        "rationale": "Freshly listed with an agent at about market value; nothing suggests the owner would take a discounted cash offer yet. Worth another look if the listing goes stale.",
+        "signals": [
+          "absentee owner",
+          "active listing at market value"
+        ],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "hold",
+          "disqualified"
+        ],
+        "score": {
+          "min": 0,
+          "max": 50
+        },
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "stale-listing-below-market",
+      "title": "On the market 168 days, priced under value, absentee owner",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:active",
+            "stale_listing"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 158000,
+            "salePrice": 104000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 158000,
+              "lastSaleAmount": 104000,
+              "lastSaleDate": "2017-05-22",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-70019",
+              "mlsId": null,
+              "status": "Active",
+              "listPrice": 139900,
+              "daysOnMarket": 168,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-04-22",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 78,
+        "recommendation": "qualified",
+        "rationale": "Absentee owner whose listing has sat 168 days and is now priced about $18,000 under the $158,000 value; long market time plus a below-value price point to a motivated seller.",
+        "signals": [
+          "absentee owner",
+          "168 days on market",
+          "priced under value"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is with no repairs or showings, on your timeline. Reply here if you would like to talk.",
+        "first_touch_email": {
+          "subject": "Cash offer, 2418 Pecan Grove Dr",
+          "body": "Hello,\n\nI buy houses in Memphis and would like to make a cash offer on 2418 Pecan Grove Dr. We buy as-is, so there are no repairs, showings or open houses, and you choose the closing date. If you would like to see what we can offer, reply to this email.\n\nThanks,\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 60,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ]
+      }
+    },
+    {
+      "id": "absentee-only",
+      "title": "Absentee alone, bought in 2017: promising, not enough",
+      "base": "absentee",
+      "context": {},
+      "reply": {
+        "score": 52,
+        "recommendation": "hold",
+        "rationale": "Absentee owner, but bought in 2017 for $104,000 against a $142,000 value, so equity is moderate and there is no other motivation signal on file.",
+        "signals": [
+          "absentee owner"
+        ],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "hold",
+        "score": {
+          "min": 25,
+          "max": 65
+        },
+        "noActions": [
+          "draft_message",
+          "transition_lead"
+        ]
+      }
+    },
+    {
+      "id": "liens-absentee",
+      "title": "Liens recorded against an absentee-owned house",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "1874 Netherwood Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38114"
+          },
+          "tags": [
+            "owner:absentee",
+            "lien",
+            "source:realie"
+          ]
+        },
+        "properties": [
+          {
+            "address": "1874 Netherwood Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38114",
+            "estimatedValue": 96000,
+            "salePrice": 38000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1939,
+              "beds": 2,
+              "baths": 1,
+              "sqft": 1080,
+              "assessedValue": 24000,
+              "marketValue": 96000,
+              "lastSaleAmount": 38000,
+              "lastSaleDate": "2008-06-30",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 76,
+        "recommendation": "qualified",
+        "rationale": "Liens are recorded against an absentee-owned house bought in 2008 for $38,000 and now worth about $96,000: two strong signals.",
+        "signals": [
+          "liens",
+          "absentee owner",
+          "likely equity"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you be open to a cash offer on 1874 Netherwood Ave? We buy houses in any condition and can close when it works for you. Just reply here.",
+        "first_touch_email": {
+          "subject": "Cash offer for 1874 Netherwood Ave",
+          "body": "Hello,\n\nMy name is Sam and I buy houses in Memphis. I would like to make a cash offer on 1874 Netherwood Ave. We buy in any condition and you pick the closing date, with no fees on your side. If you would like to talk about it, please reply to this email.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 60,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Netherwood"
+        ]
+      }
+    },
+    {
+      "id": "out-of-state-long-hold",
+      "title": "Out-of-state owner since 1988 with very high equity",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "4431 Sequoia Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38117"
+          },
+          "tags": [
+            "owner:absentee",
+            "owner:out_of_state"
+          ],
+          "ownerName": "R. Alvarez"
+        },
+        "properties": [
+          {
+            "address": "4431 Sequoia Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38117",
+            "estimatedValue": 214000,
+            "salePrice": 39000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1962,
+              "beds": 3,
+              "baths": 2,
+              "sqft": 1680,
+              "assessedValue": 53500,
+              "marketValue": 214000,
+              "lastSaleAmount": 39000,
+              "lastSaleDate": "1988-09-14",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 79,
+        "recommendation": "qualified",
+        "rationale": "Owner lives out of state and has held the house since 1988; bought for $39,000 and now worth about $214,000, so it is likely free and clear.",
+        "signals": [
+          "out-of-state owner",
+          "38 years of ownership",
+          "high equity"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 4431 Sequoia Rd? We buy as-is and can handle everything for you. Reply here if you would like to talk.",
+        "first_touch_email": {
+          "subject": "4431 Sequoia Rd",
+          "body": "Hello,\n\nI am Sam with Halo Home Buyers in Memphis. I would like to make you a cash offer on 4431 Sequoia Rd. We buy as-is and can manage the whole sale for you, on the closing date that suits you. There is no obligation. If you are open to it, just reply to this email.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 60,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Sequoia"
+        ]
+      }
+    },
+    {
+      "id": "no-data",
+      "title": "Enrichment found nothing: no record, no value, no signals",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": []
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": null,
+            "salePrice": null
+          }
+        ],
+        "sources": [],
+        "enrichment": null
+      },
+      "reply": {
+        "score": 30,
+        "recommendation": "hold",
+        "rationale": "No property record, valuation or ownership data came back, so there is nothing to score yet; re-run after enrichment returns data.",
+        "signals": [],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "hold",
+          "disqualified"
+        ],
+        "score": {
+          "min": 0,
+          "max": 50
+        },
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "duplex-tax-delinquent",
+      "title": "Tax-delinquent absentee owner of a duplex (small multifamily is in scope)",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "1544 Oakwood St",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38104"
+          },
+          "tags": [
+            "owner:absentee",
+            "tax:delinquent"
+          ]
+        },
+        "properties": [
+          {
+            "address": "1544 Oakwood St",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38104",
+            "estimatedValue": 164000,
+            "salePrice": 71000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "DUPLEX (2 UNITS, ANY COMBINATION)",
+              "yearBuilt": 1928,
+              "beds": 4,
+              "baths": 2,
+              "sqft": 2210,
+              "assessedValue": 41000,
+              "marketValue": 164000,
+              "lastSaleAmount": 71000,
+              "lastSaleDate": "2006-04-12",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 85,
+        "recommendation": "qualified",
+        "rationale": "Absentee owner of a duplex with delinquent taxes; owned since 2006 for $71,000 against a $164,000 value.",
+        "signals": [
+          "tax delinquent",
+          "absentee owner",
+          "small multifamily"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on the duplex at 1544 Oakwood St? We buy as-is, tenants in place are fine, and you pick the closing date. Reply here if you would like to talk.",
+        "first_touch_email": {
+          "subject": "Cash offer for 1544 Oakwood St",
+          "body": "Hello,\n\nI buy small rental properties in Memphis and would like to make a cash offer on 1544 Oakwood St. We buy as-is, existing tenants are not a problem, and the closing date is up to you. There are no fees on your side. If you would like to hear more, just reply to this email.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 70,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Oakwood"
+        ]
+      }
+    },
+    {
+      "id": "new-build-investor",
+      "title": "Built in 2023 and bought by an investor LLC at market value",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "ownerName": "Bluff City Rentals LLC"
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 241000,
+            "salePrice": 236000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 2023,
+              "beds": 3,
+              "baths": 2,
+              "sqft": 1760,
+              "assessedValue": 60250,
+              "marketValue": 241000,
+              "lastSaleAmount": 236000,
+              "lastSaleDate": "2023-11-30",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 18,
+        "recommendation": "disqualified",
+        "rationale": "Built in 2023 and bought by an investor LLC at market value; no equity, no distress and nothing that suggests a discounted sale.",
+        "signals": [
+          "investor owner",
+          "new construction"
+        ],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "disqualified",
+          "hold"
+        ],
+        "score": {
+          "min": 0,
+          "max": 45
+        },
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "canceled-listing",
+      "title": "Listing canceled after 134 days, absentee owner since 2001",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "2960 Cherry Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38118"
+          },
+          "tags": [
+            "owner:absentee",
+            "source:mls",
+            "listing:canceled",
+            "stale_listing"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2960 Cherry Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38118",
+            "estimatedValue": 171000,
+            "salePrice": 79000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1975,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1480,
+              "assessedValue": 42750,
+              "marketValue": 171000,
+              "lastSaleAmount": 79000,
+              "lastSaleDate": "2001-10-05",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "mls",
+            "endpoint": "Property",
+            "summary": {
+              "source": "mls",
+              "listingKey": "mls-10311902",
+              "mlsId": "MLS-10311902",
+              "status": "Canceled",
+              "listPrice": 214900,
+              "daysOnMarket": 134,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1480,
+              "yearBuilt": 1975,
+              "listDate": "2026-03-15",
+              "city": "Memphis",
+              "postalCode": "38118"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 82,
+        "recommendation": "qualified",
+        "rationale": "The owner listed at $214,900, well over the $171,000 value, and canceled after 134 days; absentee and owned since 2001, so a cash buyer is a natural next step.",
+        "signals": [
+          "listing canceled",
+          "absentee owner",
+          "25 years of ownership"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2960 Cherry Rd? No repairs, no showings, and you choose the closing date. Reply here if you would like to talk.",
+        "first_touch_email": {
+          "subject": "2960 Cherry Rd",
+          "body": "Hello,\n\nMy name is Sam. I buy houses in Memphis for cash and would like to make an offer on 2960 Cherry Rd. There are no repairs, showings or commissions, and you choose when to close. If you are interested, reply to this email and I will follow up.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 65,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Cherry"
+        ]
+      }
+    },
+    {
+      "id": "auction-buy-rental",
+      "title": "Bought cheaply in a distressed sale in 2012, now a high-equity rental",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "1290 Waverly Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38106"
+          },
+          "tags": [
+            "owner:absentee",
+            "distressed_sale",
+            "source:realie"
+          ]
+        },
+        "properties": [
+          {
+            "address": "1290 Waverly Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38106",
+            "estimatedValue": 165000,
+            "salePrice": 31000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1958,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1250,
+              "assessedValue": 41250,
+              "marketValue": 165000,
+              "lastSaleAmount": 31000,
+              "lastSaleDate": "2012-02-14",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 71,
+        "recommendation": "qualified",
+        "rationale": "Absentee owner who bought in a distressed sale in 2012 for $31,000; the house is now worth about $165,000, so equity is high and a landlord exit is plausible.",
+        "signals": [
+          "absentee owner",
+          "high equity",
+          "bought in a distressed sale"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider selling 1290 Waverly Ave for cash? We buy as-is, tenants included, and close on your timeline. Reply here if you would like to talk.",
+        "first_touch_email": {
+          "subject": "Offer on 1290 Waverly Ave",
+          "body": "Hello,\n\nI buy rental houses in Memphis and would like to make you a cash offer on 1290 Waverly Ave. We buy as-is, a tenant in place is fine, and you choose the closing date. There is no obligation. If you are open to it, please reply to this email.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "qualified",
+          "hold"
+        ],
+        "score": {
+          "min": 50,
+          "max": 100
+        }
+      }
+    },
+    {
+      "id": "occupied-tax-delinquent-long-hold",
+      "title": "Owner-occupied since 1979 with delinquent taxes",
+      "base": "occupied",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "3381 Spottswood Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38111"
+          },
+          "tags": [
+            "owner:occupied",
+            "tax:delinquent"
+          ]
+        },
+        "properties": [
+          {
+            "address": "3381 Spottswood Ave",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38111",
+            "estimatedValue": 131000,
+            "salePrice": 18500
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1955,
+              "beds": 3,
+              "baths": 1,
+              "sqft": 1190,
+              "assessedValue": 32750,
+              "marketValue": 131000,
+              "lastSaleAmount": 18500,
+              "lastSaleDate": "1979-04-02",
+              "absenteeIndicator": "OWNER OCCUPIED",
+              "ownerOccupied": true
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 72,
+        "recommendation": "qualified",
+        "rationale": "Owner-occupied, but the taxes are delinquent and the house has been owned since 1979 for $18,500 against a $131,000 value: two strong signals.",
+        "signals": [
+          "tax delinquent",
+          "47 years of ownership",
+          "high equity"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. If you have ever thought about selling 3381 Spottswood Ave, I can make a fair cash offer and buy it as-is. Would you be open to a quick chat?",
+        "first_touch_email": {
+          "subject": "A cash offer for 3381 Spottswood Ave",
+          "body": "Hello,\n\nI buy houses in Memphis and wanted to ask if you would consider selling 3381 Spottswood Ave. I can make a cash offer, buy the house as it is and let you set the timing, including time to find your next place. There are no fees and no obligation. If you would like to talk, just reply.\n\nSam"
+        }
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "score": {
+          "min": 60,
+          "max": 100
+        },
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ],
+        "mentions": [
+          "Spottswood"
+        ]
+      }
+    },
+    {
+      "id": "church-building",
+      "title": "A church is out of scope even though no rule names it",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "address": {
+            "street": "600 Sycamore View Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38120"
+          },
+          "ownerName": "Grace Fellowship Church"
+        },
+        "properties": [
+          {
+            "address": "600 Sycamore View Rd",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38120",
+            "estimatedValue": 612000,
+            "salePrice": 250000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "RELIGIOUS",
+              "yearBuilt": 1972,
+              "sqft": 6400,
+              "marketValue": 612000,
+              "lastSaleAmount": 250000,
+              "lastSaleDate": "1994-01-10",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 4,
+        "recommendation": "disqualified",
+        "rationale": "A 6,400 sq ft church building, outside single-family and small multifamily; not a wholesale target.",
+        "signals": [
+          "religious use"
+        ],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "disqualified",
+        "score": {
+          "min": 0,
+          "max": 25
+        },
+        "actions": [
+          "transition_lead:disqualified:gated"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "reply-wrapped-in-prose",
+      "title": "A JSON reply inside prose and a code fence still parses",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:expired",
+            "stale_listing"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 142000,
+            "salePrice": 58000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 142000,
+              "lastSaleAmount": 58000,
+              "lastSaleDate": "2004-03-18",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-77120",
+              "mlsId": null,
+              "status": "Expired",
+              "listPrice": 154900,
+              "daysOnMarket": 199,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-02-10",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "reply": "Here is my assessment of the lead.\n\n```json\n{\"score\": 86, \"recommendation\": \"qualified\", \"rationale\": \"Absentee owner; the listing ran 199 days at $154,900 without selling; bought in 2004 for $58,000 against a $142,000 market value, so equity is likely high.\", \"signals\": [\"absentee owner\", \"listing expired after 199 days\", \"long ownership, likely high equity\"], \"first_touch_sms\": \"Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Just reply here if you would like to talk.\", \"first_touch_email\": {\"subject\": \"Cash offer for 2418 Pecan Grove Dr\", \"body\": \"Hello,\\n\\nMy name is Sam and I buy houses in Memphis for cash. I would like to make you an offer on 2418 Pecan Grove Dr. We buy as-is, so there is nothing to repair or clean out, and you pick the closing date. There are no fees or commissions on your side. If you are open to a short conversation, just reply to this email.\\n\\nThanks,\\nSam\"}}\n```\n\nLet me know if you want a different tone for the messages.",
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller",
+          "draft_message:email:seller"
+        ]
+      }
+    },
+    {
+      "id": "reply-not-json",
+      "title": "A refusal in prose fails the run instead of guessing",
+      "base": "absentee",
+      "context": {},
+      "reply": "I'm sorry, I can't score this lead without more information about the property.",
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    },
+    {
+      "id": "reply-score-out-of-range",
+      "title": "A score above 100 fails validation",
+      "base": "absentee",
+      "context": {},
+      "reply": {
+        "score": 140,
+        "recommendation": "qualified",
+        "rationale": "Very motivated seller.",
+        "signals": [],
+        "first_touch_sms": null,
+        "first_touch_email": null
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    },
+    {
+      "id": "qualified-text-only",
+      "title": "A qualified lead with no email draft gets a text draft only",
+      "base": "absentee",
+      "context": {
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:expired",
+            "stale_listing"
+          ]
+        },
+        "properties": [
+          {
+            "address": "2418 Pecan Grove Dr",
+            "city": "Memphis",
+            "state": "TN",
+            "zip": "38116",
+            "estimatedValue": 142000,
+            "salePrice": 58000
+          }
+        ],
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1967,
+              "beds": 3,
+              "baths": 1.5,
+              "sqft": 1320,
+              "assessedValue": 35500,
+              "marketValue": 142000,
+              "lastSaleAmount": 58000,
+              "lastSaleDate": "2004-03-18",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-77120",
+              "mlsId": null,
+              "status": "Expired",
+              "listPrice": 154900,
+              "daysOnMarket": 199,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1.5,
+              "livingArea": 1320,
+              "yearBuilt": 1967,
+              "listDate": "2026-02-10",
+              "city": "Memphis",
+              "postalCode": "38116"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "score": 81,
+        "recommendation": "qualified",
+        "rationale": "Expired listing after 199 days and an absentee owner with long ownership.",
+        "signals": [
+          "expired listing",
+          "absentee owner"
+        ],
+        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is on your timeline. Reply here if you would like to talk.",
+        "first_touch_email": null
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "qualified",
+        "actions": [
+          "transition_lead:qualified:gated",
+          "draft_message:sms:seller"
+        ],
+        "noActions": [
+          "draft_message:email"
+        ]
+      }
+    },
+    {
+      "id": "hold-drops-drafts",
+      "title": "Drafts the model wrote for a held lead are dropped",
+      "base": "absentee",
+      "context": {},
+      "reply": {
+        "score": 55,
+        "recommendation": "hold",
+        "rationale": "One strong signal only.",
+        "signals": [
+          "absentee owner"
+        ],
+        "first_touch_sms": "Hi, would you sell 2418 Pecan Grove Dr?",
+        "first_touch_email": {
+          "subject": "Your house",
+          "body": "Would you sell?"
+        }
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message",
+          "transition_lead"
+        ]
+      }
+    }
+  ]
+}

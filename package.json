@@ -19,7 +19,8 @@
     "db:seed": "cd apps/api && tsx prisma/seed.ts",
     "db:backfill-pii": "cd apps/api && tsx prisma/scripts/backfill-pii.ts",
     "db:studio": "cd apps/api && prisma studio",
-    "e2e": "tsx scripts/golden-e2e.ts"
+    "e2e": "tsx scripts/golden-e2e.ts",
+    "agents:eval": "cd apps/worker && tsx eval/run-eval.ts"
   },
   "devDependencies": {
     "node-fetch": "^2.7.0",

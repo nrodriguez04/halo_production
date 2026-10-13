@@ -666,12 +666,32 @@ model AutomationRun {
   parentRun  AutomationRun?  @relation("RunHierarchy", fields: [parentRunId], references: [id])
   childRuns  AutomationRun[] @relation("RunHierarchy")
   messages   Message[]       @relation("AutomationRunMessages")
+  replay     AgentRunReplay?
 
   @@index([tenantId, status])
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, source, createdAt])
   @@index([tenantId, workflowName, createdAt])
   @@map("automation_runs")
+}
+
+/// What an agent saw and what the model answered, for one run. Replays the
+/// decision exactly and seeds the agents' golden set (docs/agent-eval.md).
+/// Non-contact data only: the worker never holds phone numbers or emails.
+model AgentRunReplay {
+  runId         String   @id
+  tenantId      String
+  agent         String
+  promptVersion String?
+  context       Json
+  /// The model's raw reply; null when a rule decided.
+  reply         String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  run AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, agent, createdAt])
+  @@map("agent_run_replays")
 }
 
 model DealEconomics {

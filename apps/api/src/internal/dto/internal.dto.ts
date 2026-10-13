@@ -104,4 +104,6 @@ export class AgentDecisionDto {
   @IsOptional() @IsObject() decision?: Record<string, unknown>;
   @IsOptional() @IsNumber() @Min(0) costUsd?: number;
   @IsOptional() @IsString() @MaxLength(2000) error?: string;
+  /** What the agent saw and the model's raw reply (docs/agent-eval.md). */
+  @IsOptional() @IsObject() replay?: Record<string, unknown>;
 }

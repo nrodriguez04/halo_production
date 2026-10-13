@@ -14,6 +14,7 @@ import {
   InternalApiError,
   openAgentRun,
   recordAgentDecision,
+  type AgentReplay,
 } from '../internal-api.client';
 import { loadLeadContext } from './agent-context';
 import { loadDealContext } from './deal-context';
@@ -29,6 +30,11 @@ import {
 } from './lead-analyst.agent';
 
 const OPEN_RUN_WINDOW_MS = 10 * 60 * 1000;
+/**
+ * A context larger than this (UTF-8 bytes) is not kept with the run: the
+ * report has to stay well under the api's 512 kB request limit.
+ */
+const MAX_REPLAY_BYTES = 200_000;
 /** Agents on the frame so far (design doc s10). */
 const RELEASED = new Set<AgentJobPayload['agent']>([
   'lead_analyst',
@@ -36,6 +42,25 @@ const RELEASED = new Set<AgentJobPayload['agent']>([
   'outreach_drafter',
 'disposition_matcher',
 ]);
+
+type AgentRunResult = LeadAnalystResult & { context: object };
+
+/**
+ * The context the agent decided on and the model's raw reply, so the run
+ * can be replayed and a reviewed run can become a golden case.
+ */
+export function replayOf(
+  context: object,
+  reply: string | undefined,
+): AgentReplay | undefined {
+  if (Buffer.byteLength(JSON.stringify(context)) > MAX_REPLAY_BYTES) {
+    return undefined;
+  }
+  return {
+    context: context as Record<string, unknown>,
+    reply: reply ?? null,
+  };
+}
 
 export interface AgentJobResult {
   runId?: string;
@@ -108,6 +133,7 @@ export class AgentsProcessor extends WorkerHost {
         status,
         decision,
         costUsd,
+        replay: replayOf(result.context, result.raw),
       });
       return { runId: run.id, status, recommendation: decision.recommendation };
     } catch (err) {
@@ -120,26 +146,34 @@ export class AgentsProcessor extends WorkerHost {
     p: AgentJobPayload,
     agentModels: unknown,
     runId: string,
-  ): Promise<LeadAnalystResult | null> {
+  ): Promise<AgentRunResult | null> {
     const models = agentModels as AgentModels | null;
+    const withContext = async (
+      context: object,
+      run: Promise<LeadAnalystResult>,
+    ): Promise<AgentRunResult> => ({ ...(await run), context });
     if (p.agent === 'deal_underwriter') {
       const ctx = await loadDealContext(p.entityId, p.accountId);
       if (!ctx) return null;
-      return new DealUnderwriterAgent({ models }).run(ctx, p.accountId, runId);
+      const agent = new DealUnderwriterAgent({ models });
+      return withContext(ctx, agent.run(ctx, p.accountId, runId));
     }
     if (p.agent === 'disposition_matcher') {
       const ctx = await loadDispositionContext(p.entityId, p.accountId);
       if (!ctx) return null;
-      return new DispositionMatcherAgent({ models }).run(ctx, p.accountId, runId);
+      const agent = new DispositionMatcherAgent({ models });
+      return withContext(ctx, agent.run(ctx, p.accountId, runId));
     }
     if (p.agent === 'outreach_drafter') {
       const ctx = await loadOutreachContext(p);
       if (!ctx) return null;
-      return new OutreachDrafterAgent({ models }).run(ctx, p.accountId, runId);
+      const agent = new OutreachDrafterAgent({ models });
+      return withContext(ctx, agent.run(ctx, p.accountId, runId));
     }
     const ctx = await loadLeadContext(p.entityId, p.accountId);
     if (!ctx) return null;
-    return new LeadAnalystAgent({ models }).run(ctx, p.accountId, runId);
+    const agent = new LeadAnalystAgent({ models });
+    return withContext(ctx, agent.run(ctx, p.accountId, runId));
   }
 
   /**
