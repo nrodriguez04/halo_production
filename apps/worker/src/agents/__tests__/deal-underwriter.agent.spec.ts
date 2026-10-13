@@ -16,6 +16,7 @@ function ctx(over: Partial<DealUnderwriterContext> = {}): DealUnderwriterContext
       repairEstimate: null,
       mao: null,
       offerAmount: null,
+      assignmentFee: 12500,
       createdAt: '2026-10-01T00:00:00.000Z',
       updatedAt: '2026-10-12T10:00:00.000Z',
     },
@@ -105,6 +106,9 @@ describe('DealUnderwriterAgent.run', () => {
     });
     expect(input.messages[1].content).toContain('"address": "123 Main St"');
     expect(input.messages[1].content).not.toContain('{{dealContext}}');
+    // The MAO subtracts the tenant's (or the deal's) fee, not a fixed one.
+    expect(input.messages[1].content).toContain('"assignmentFee": 12500');
+    expect(input.messages[1].content).toContain('repairs - deal.assignmentFee');
 
     expect(res.costUsd).toBeGreaterThan(0);
     expect(res.decision).toMatchObject({

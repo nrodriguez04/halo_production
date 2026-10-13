@@ -16,6 +16,11 @@ import { LoadingState, EmptyState, ErrorState } from '@/components/states';
 import { cn } from '@/lib/utils';
 import { FileText, Brain, Clock, MapPin, Calculator } from 'lucide-react';
 import { ContractsPanel, type ContractRow } from '@/components/deals/contracts-panel';
+import {
+  BuyerPricePanel,
+  type BuyerPrice,
+  type DealPricing,
+} from '@/components/deals/buyer-price-panel';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
 const Marker = dynamic(() => import('react-map-gl/maplibre').then((m) => m.Marker), { ssr: false });
@@ -45,6 +50,9 @@ interface Deal {
   };
   contracts?: ContractRow[];
   marketingMaterials?: Array<{ id: string; type: string; createdAt: string }>;
+  economics?: DealPricing | null;
+  /** What buyers are asked to pay (never the offer to the seller). */
+  buyerPrice?: BuyerPrice | null;
 }
 
 interface TimelineEvent {
@@ -196,7 +204,7 @@ export default function DealDetailPage() {
                 { label: 'ARV', value: deal.arv },
                 { label: 'Repairs', value: deal.repairEstimate },
                 { label: 'MAO', value: deal.mao },
-                { label: 'Offer', value: deal.offerAmount, highlight: true },
+                { label: 'Offer to seller', value: deal.offerAmount, highlight: true },
               ].map((f) => (
                 <div key={f.label} className="space-y-1">
                   <p className="text-caption uppercase tracking-wider text-muted-foreground">{f.label}</p>
@@ -211,6 +219,12 @@ export default function DealDetailPage() {
                 </div>
               ))}
             </div>
+            <BuyerPricePanel
+              dealId={deal.id}
+              buyerPrice={deal.buyerPrice}
+              pricing={deal.economics}
+              onSaved={() => setReloadKey((k) => k + 1)}
+            />
           </CardContent>
         </Card>
 

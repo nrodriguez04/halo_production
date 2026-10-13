@@ -34,7 +34,12 @@ export class DealEconomicsService {
       throw new NotFoundException(`Deal ${dealId} not found`);
     }
 
-    const computed = this.computeMetrics(data);
+    // Derived numbers come from everything on file, so updating one field
+    // (the buyer price from the deal page) keeps revenue and costs intact.
+    const existing = await this.prisma.dealEconomics.findUnique({
+      where: { dealId },
+    });
+    const computed = this.computeMetrics({ ...(existing ?? {}), ...data });
 
     const economics = await this.prisma.dealEconomics.upsert({
       where: { dealId },

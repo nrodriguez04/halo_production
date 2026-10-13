@@ -29,6 +29,7 @@ const UpdateControlPlaneSchema = z
       .optional(),
     autoEnrichEnabled: z.boolean().optional(),
     autoEnrichDailyCap: z.number().int().min(0).max(1000).optional(),
+    defaultAssignmentFee: z.number().int().min(0).max(1_000_000).optional(),
   })
   .strict();
 

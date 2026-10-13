@@ -6,7 +6,12 @@ import {
   TimelineEntityType,
 } from '@prisma/client';
 import * as crypto from 'crypto';
-import { assertPolicy, prompts, renderPrompt } from '@halo/shared';
+import {
+  assertPolicy,
+  buyerAskingPrice,
+  prompts,
+  renderPrompt,
+} from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { aiSpendSince } from '../ai-spend';
 import { getControlPlane } from '../control-plane';
@@ -41,11 +46,12 @@ export class MarketingProcessor extends WorkerHost {
     try {
       const deal = await prisma.deal.findFirst({
         where: { id: dealId, accountId: tenantId },
-        include: { property: true, underwritingResult: true },
+        include: { property: true, underwritingResult: true, economics: true },
       });
       if (!deal) {
         throw new Error(`Deal ${dealId} not found in tenant ${tenantId}`);
       }
+      const askingPrice = await this.askingPrice(deal, tenantId);
 
       const controlPlane = await this.getControlPlane(tenantId);
       const todayCost = await this.getTodayCost(tenantId);
@@ -75,8 +81,8 @@ export class MarketingProcessor extends WorkerHost {
 
       const result =
         type === 'GENERATE_FLYER_DRAFT'
-          ? await this.generateFlyer(dealId, deal)
-          : await this.generateBuyerBlast(dealId, deal, buyerIds);
+          ? await this.generateFlyer(dealId, deal, askingPrice)
+          : await this.generateBuyerBlast(dealId, deal, buyerIds, askingPrice);
 
       const resultHash = crypto
         .createHash('sha256')
@@ -159,14 +165,43 @@ export class MarketingProcessor extends WorkerHost {
     }
   }
 
-  private async generateFlyer(dealId: string, deal: any) {
+  /**
+   * What buyers are asked to pay (packages/shared buyerAskingPrice). Flyers
+   * and blasts go to buyers, so the offer made to the seller never goes in.
+   */
+  private async askingPrice(deal: any, tenantId: string) {
+    const cp = await prisma.controlPlane.findUnique({
+      where: { accountId: tenantId },
+      select: { defaultAssignmentFee: true },
+    });
+    return (
+      buyerAskingPrice(
+        {
+          assignmentPrice: deal.economics?.assignmentPrice,
+          contractPrice: deal.economics?.contractPrice,
+          assignmentFee: deal.economics?.assignmentFee,
+          offerAmount: deal.offerAmount,
+          mao: deal.mao,
+          arv: deal.arv,
+          repairEstimate: deal.repairEstimate,
+        },
+        cp?.defaultAssignmentFee,
+      )?.price ?? null
+    );
+  }
+
+  private async generateFlyer(
+    dealId: string,
+    deal: any,
+    askingPrice: number | null,
+  ) {
     const dealData = {
       address: deal.property?.address,
       city: deal.property?.city,
       state: deal.property?.state,
       arv: deal.arv,
       repairEstimate: deal.repairEstimate,
-      offerAmount: deal.offerAmount,
+      askingPrice,
     };
 
     const prompt = renderPrompt(prompts.marketing.flyer, {
@@ -216,6 +251,7 @@ export class MarketingProcessor extends WorkerHost {
     dealId: string,
     deal: any,
     buyerIds: string[],
+    askingPrice: number | null,
   ) {
     const buyers = await prisma.buyer.findMany({
       where: {
@@ -230,7 +266,7 @@ export class MarketingProcessor extends WorkerHost {
           address: deal.property?.address,
           arv: deal.arv,
           repairEstimate: deal.repairEstimate,
-          offerAmount: deal.offerAmount,
+          askingPrice,
         },
         null,
         2,

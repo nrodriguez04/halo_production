@@ -12,6 +12,7 @@ export * from './utils/compliance';
 export * from './utils/redact';
 export * from './utils/budget-period';
 export * from './utils/ai-providers';
+export * from './utils/buyer-price';
 
 // Policy and state machine
 export * from './policy';

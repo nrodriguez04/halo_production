@@ -4,7 +4,7 @@ Each agent (Lead Analyst, Deal Underwriter, Outreach Drafter, Disposition Matche
 
 | | |
 |---|---|
-| Cases | `apps/worker/eval/golden/<agent>.json`: 31 leads, 11 deals for the Underwriter, 23 seller conversations, 10 buyer matches |
+| Cases | `apps/worker/eval/golden/<agent>.json`: 31 leads, 12 deals for the Underwriter, 23 seller conversations, 12 buyer matches |
 | Engine | `apps/worker/eval/golden-eval.ts` (cases, checks, report), `run-eval.ts` (command line), `chat-backends.ts` (live model backends) |
 | Prompt lock | `apps/worker/eval/prompt-lock.json` |
 | Tests | `apps/worker/eval/__tests__/` (runs in the worker's `npm test`) |
@@ -51,9 +51,9 @@ Every check is one of three kinds.
 | Lead Analyst | drafts for a lead that is not qualified; a qualified lead scored under 60 (skip trace only runs at 60 or more, so it would never get a phone number); a model transition that does not wait for a person; a first touch that says how the lead was found (foreclosure, tax delinquency, liens, probate, an expired, withdrawn or canceled listing); a licensed-agent claim; a text over 320 characters |
 | Deal Underwriter | a MAO above the ARV; an offer range above the MAO; an "offer" with no positive MAO; numbers without the deal snapshot that guards a person's edits; any contact with anyone |
 | Outreach Drafter | a reply after an opt-out or a wrong number; a dollar amount other than the offer a person entered; a reply on another channel than the seller used; a deal move that does not match the reply; an unsure opt-out applied without a person; a text over 320 characters or an email over 150 words |
-| Disposition Matcher | a buyer without an email, twice, or past the cap of 10; a blast to anyone but the shortlist; a figure in the blast that is not one of the deal's numbers; "market" with nobody shortlisted |
+| Disposition Matcher | a buyer without an email, twice, or past the cap of 10; a blast to anyone but the shortlist; the seller's price (the offer, the contract price or the MAO) in a blast, or any figure other than the buyer price, ARV, repairs and the as-is value; "market" with nobody shortlisted |
 
-**Detail**: the actions the decision carries (for example `transition_deal:negotiating`), the model tier the agent asked for, the Matcher's buy-box candidate order, words a draft must mention.
+**Detail**: the actions the decision carries (for example `transition_deal:negotiating`), the model tier the agent asked for, the Matcher's buy-box candidate order, words a draft must mention, and whether the Underwriter's MAO follows ARV x 0.70 - repairs - the deal's fee.
 
 ## Two ways to run it
 

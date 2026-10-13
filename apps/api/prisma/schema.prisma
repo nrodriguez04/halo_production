@@ -407,6 +407,10 @@ model ControlPlane {
   /// New leads moved to enriching automatically, up to autoEnrichDailyCap per UTC day.
   autoEnrichEnabled  Boolean @default(true)
   autoEnrichDailyCap Int     @default(20)
+  /// Wholesale fee in dollars: added to the seller price to get the buyers'
+  /// price, subtracted in the Underwriter's MAO. A deal's own fee
+  /// (deal_economics.assignmentFee) overrides it.
+  defaultAssignmentFee Int @default(10000)
   updatedAt DateTime @updatedAt
   updatedBy String?
 

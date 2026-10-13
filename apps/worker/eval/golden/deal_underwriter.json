@@ -11,6 +11,7 @@
         "repairEstimate": null,
         "mao": null,
         "offerAmount": null,
+        "assignmentFee": 10000,
         "createdAt": "2026-10-04T16:00:00.000Z",
         "updatedAt": "2026-10-06T10:30:00.000Z"
       },
@@ -158,6 +159,39 @@
         "confidence": {
           "min": 0.4,
           "max": 0.85
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "tenant-fee",
+      "title": "A $15,000 fee comes off the MAO instead of the default $10,000",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "assignmentFee": 15000
+        }
+      },
+      "reply": {
+        "arv": 172000,
+        "repair_estimate": 32000,
+        "mao": 73400,
+        "offer_low": 60000,
+        "offer_high": 70000,
+        "confidence": 0.55,
+        "recommendation": "offer",
+        "rationale": "Same ranch as before: about $172,000 renovated with $32,000 of repairs. With the $15,000 fee, MAO = 172,000 x 0.70 - 32,000 - 15,000 = 73,400.",
+        "comps_summary": "No comparable sales in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "offer",
+        "mao": {
+          "min": 55000,
+          "max": 90000
         },
         "actions": [
           "set_deal_economics",

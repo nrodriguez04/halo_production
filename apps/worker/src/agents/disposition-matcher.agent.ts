@@ -1,13 +1,16 @@
 import {
   AGENT_TIER,
+  BUYER_PRICE_BASIS_LABEL,
   DISPOSITION_MATCHER_PROMPT_VERSION,
   agentWorkflow,
+  buyerAskingPrice,
   parseDispositionMatcherOutput,
   prompts,
   resolveAgentModel,
   type AgentAction,
   type AgentDecision,
   type AgentModels,
+  type BuyerPrice,
   type BuyerShortlistEntry,
   type DispositionMatcherOutput,
 } from '@halo/shared';
@@ -43,13 +46,13 @@ const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.map(norm).filter(Boolean) : [];
 
-/** The figure a buyer would compare against their price range. */
-export function targetPrice(ctx: DispositionContext): number | null {
-  const d = ctx.deal;
-  if (d.offerAmount != null) return d.offerAmount;
-  if (d.mao != null) return d.mao;
-  if (d.arv != null) return Math.round(d.arv * 0.7);
-  return null;
+/**
+ * What buyers are asked to pay: the seller-side price plus the assignment
+ * fee, or the price a person set (packages/shared buyerAskingPrice). The
+ * seller-side figures themselves never reach a buyer.
+ */
+export function buyerPrice(ctx: DispositionContext): BuyerPrice | null {
+  return buyerAskingPrice(ctx.deal, ctx.defaultAssignmentFee);
 }
 
 /**
@@ -61,7 +64,7 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
   const city = norm(ctx.property?.city);
   const state = norm(ctx.property?.state);
   const zip = norm(ctx.property?.zip);
-  const price = targetPrice(ctx);
+  const price = buyerPrice(ctx)?.price ?? null;
 
   const scored = ctx.buyers.map((buyer): ScoredBuyer => {
     const notes: string[] = [];
@@ -179,6 +182,7 @@ export function decisionFromOutput(
   model: string,
   candidates: ScoredBuyer[],
   consideredCount: number,
+  price: BuyerPrice | null = null,
 ): AgentDecision {
   const byId = new Map(candidates.map((c) => [c.buyer.id, c]));
   const seen = new Set<string>();
@@ -213,9 +217,12 @@ export function decisionFromOutput(
   }
   const strong = shortlist.filter((b) => b.fit === 'strong').length;
   const recommendation = shortlist.length > 0 ? 'market' : 'hold';
+  const asking = price
+    ? ` at ${money(price.price)} (${BUYER_PRICE_BASIS_LABEL[price.basis]})`
+    : '';
   const summary =
     shortlist.length > 0
-      ? `market: ${shortlist.length} of ${consideredCount} buyers shortlisted (${strong} strong)${out.blast ? '; blast drafted' : ''}`
+      ? `market${asking}: ${shortlist.length} of ${consideredCount} buyers shortlisted (${strong} strong)${out.blast ? '; blast drafted' : ''}`
       : `hold: no buyer fits (${consideredCount} considered)`;
   return {
     agent: 'disposition_matcher',
@@ -259,10 +266,22 @@ export class DispositionMatcherAgent {
       AGENT_TIER.disposition_matcher,
       this.opts.models,
     );
+    const price = buyerPrice(ctx);
+    // The asking price is the only price the model sees. The offer made to
+    // the seller, the contract price, the MAO and the Underwriter's offer
+    // range stay out of its view, so none of them can reach a buyer.
     const modelContext = {
-      deal: { ...ctx.deal, targetPrice: targetPrice(ctx) },
+      deal: {
+        id: ctx.deal.id,
+        stage: ctx.deal.stage,
+        askingPrice: price?.price ?? null,
+        arv: ctx.deal.arv,
+        repairEstimate: ctx.deal.repairEstimate,
+      },
       property: ctx.property,
-      underwriting: ctx.underwriting,
+      underwriting: ctx.underwriting
+        ? { confidence: ctx.underwriting.confidence }
+        : null,
       team: ctx.team,
       priorBlasts: ctx.priorBlasts,
       candidates: candidates.map((c) => ({
@@ -276,7 +295,7 @@ export class DispositionMatcherAgent {
         notes: c.notes,
       })),
       figures: {
-        target: money(targetPrice(ctx)),
+        askingPrice: money(price?.price ?? null),
         arv: money(ctx.deal.arv),
         repairs: money(ctx.deal.repairEstimate),
       },
@@ -317,6 +336,7 @@ export class DispositionMatcherAgent {
         completion.model,
         candidates,
         candidates.length,
+        price,
       ),
       costUsd,
       raw: completion.content,

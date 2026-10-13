@@ -137,6 +137,21 @@ describe('ControlPlaneService', () => {
       expect(status.globallyConstrained).toBe(false);
       expect(status.enabled).toBe(true);
     });
+
+    it("leaves the tenant's assignment fee alone: it is a business number, not a switch", async () => {
+      stub(
+        row('tenant-a', { defaultAssignmentFee: 15000 }),
+        row('GLOBAL', { defaultAssignmentFee: 5000 }),
+      );
+      expect((await service.getStatus('tenant-a')).defaultAssignmentFee).toBe(
+        15000,
+      );
+    });
+  });
+
+  it('reads the default assignment fee for a tenant without a row on the send path', async () => {
+    const status = await service.getStatus('tenant-new', { provision: false });
+    expect(status.defaultAssignmentFee).toBe(10000);
   });
 
   describe('derived helpers respect the master switch', () => {

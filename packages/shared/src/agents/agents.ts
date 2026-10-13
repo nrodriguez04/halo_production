@@ -249,7 +249,7 @@ export function parseLeadAnalystOutput(text: string): LeadAnalystOutput | null {
 
 // -------------------------------------------------------------- Deal Underwriter
 
-export const DEAL_UNDERWRITER_PROMPT_VERSION = 'deal_underwriter.v1';
+export const DEAL_UNDERWRITER_PROMPT_VERSION = 'deal_underwriter.v2';
 
 const money = z.number().min(0).max(100_000_000).nullable().default(null);
 
@@ -362,7 +362,7 @@ export interface BuyerShortlistEntry {
   ruleScore: number;
 }
 
-export const DISPOSITION_MATCHER_PROMPT_VERSION = 'disposition_matcher.v1';
+export const DISPOSITION_MATCHER_PROMPT_VERSION = 'disposition_matcher.v2';
 
 export const DispositionMatcherOutputSchema = z.object({
   shortlist: z

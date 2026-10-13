@@ -4,8 +4,8 @@ import { AgentOutputError } from '../lead-analyst.agent';
 import {
   DispositionMatcherAgent,
   decideByRule,
+  buyerPrice,
   scoreBuyers,
-  targetPrice,
 } from '../disposition-matcher.agent';
 
 function buyer(over: Partial<DispositionBuyer> & { id: string; name: string }): DispositionBuyer {
@@ -51,7 +51,11 @@ function ctx(over: Partial<DispositionContext> = {}): DispositionContext {
       repairEstimate: 30000,
       mao: 115000,
       offerAmount: 120000,
+      contractPrice: null,
+      assignmentPrice: null,
+      assignmentFee: null,
     },
+    defaultAssignmentFee: 10000,
     property: { address: '654 Birch Rd', city: 'Memphis', state: 'TN', zip: '38103', estimatedValue: 200000 },
     underwriting: { confidence: 0.7, offerRange: { low: 100000, high: 115000 }, rationale: 'r' },
     buyers: [sarah, lisa, open, noEmail],
@@ -70,17 +74,35 @@ const reply = (o: Record<string, unknown> = {}) =>
         { buyer_id: 'b-open', fit: 'possible', reason: 'No stated box' },
         { buyer_id: 'b-ghost', fit: 'strong', reason: 'not a candidate' },
       ],
-      blast: { subject: 'Memphis SFH under contract', body: '654 Birch Rd, Memphis. Asking $120,000. ARV $220,000, repairs $30,000. Reply if interested.' },
+      blast: { subject: 'Memphis SFH under contract', body: '654 Birch Rd, Memphis. Asking $130,000. ARV $220,000, repairs $30,000. Reply if interested.' },
       rationale: 'Sarah fits on location, price and responsiveness.',
       ...o,
     }),
   );
 
 describe('Disposition Matcher scoring', () => {
-  it('uses the offer amount, then MAO, then 70% of ARV as the price to match', () => {
-    expect(targetPrice(ctx())).toBe(120000);
-    expect(targetPrice(ctx({ deal: { ...ctx().deal, offerAmount: null } }))).toBe(115000);
-    expect(targetPrice(ctx({ deal: { ...ctx().deal, offerAmount: null, mao: null } }))).toBe(154000);
+  it('prices buyers at the seller-side figure plus the fee, never at the seller figure itself', () => {
+    const deal = ctx().deal;
+    expect(buyerPrice(ctx())).toEqual({ price: 130000, basis: 'offer', sellerPrice: 120000, fee: 10000 });
+    expect(buyerPrice(ctx({ deal: { ...deal, offerAmount: null } }))).toMatchObject({ price: 125000, basis: 'mao' });
+    expect(buyerPrice(ctx({ deal: { ...deal, offerAmount: null, mao: null } }))).toMatchObject({
+      price: 124000,
+      basis: 'arv',
+    });
+  });
+
+  it('uses the asking price a person set, the contract price and the deal or tenant fee', () => {
+    const deal = ctx().deal;
+    expect(buyerPrice(ctx({ deal: { ...deal, assignmentPrice: 139000 } }))).toMatchObject({
+      price: 139000,
+      basis: 'asking_price',
+    });
+    expect(buyerPrice(ctx({ deal: { ...deal, contractPrice: 118000 } }))).toMatchObject({
+      price: 128000,
+      basis: 'contract_price',
+    });
+    expect(buyerPrice(ctx({ defaultAssignmentFee: 15000 }))?.price).toBe(135000);
+    expect(buyerPrice(ctx({ deal: { ...deal, assignmentFee: 5000 }, defaultAssignmentFee: 15000 }))?.price).toBe(125000);
   });
 
   it('scores location, price range, engagement and replies, and excludes buyers with no email', () => {
@@ -126,12 +148,17 @@ describe('DispositionMatcherAgent.run', () => {
     expect(user).toContain('"buyer_id": "b-sarah"');
     expect(user).not.toContain('b-noemail');
     expect(user).toContain('shortlist at most 10 buyers');
+    // The buyers' price only: the seller offer, the MAO and the offer range stay out.
+    expect(user).toContain('"askingPrice": 130000');
+    expect(user).not.toContain('120000');
+    expect(user).not.toContain('115000');
+    expect(user).not.toContain('offerRange');
 
     expect(res.costUsd).toBeGreaterThan(0);
     expect(res.decision).toMatchObject({
       agent: 'disposition_matcher',
       recommendation: 'market',
-      summary: 'market: 2 of 3 buyers shortlisted (1 strong); blast drafted',
+      summary: 'market at $130,000 (offer to the seller + fee): 2 of 3 buyers shortlisted (1 strong); blast drafted',
     });
     expect(res.decision.actions).toEqual([
       {
@@ -147,7 +174,7 @@ describe('DispositionMatcherAgent.run', () => {
         type: 'queue_buyer_blast',
         buyerIds: ['b-sarah', 'b-open'],
         subject: 'Memphis SFH under contract',
-        body: '654 Birch Rd, Memphis. Asking $120,000. ARV $220,000, repairs $30,000. Reply if interested.',
+        body: '654 Birch Rd, Memphis. Asking $130,000. ARV $220,000, repairs $30,000. Reply if interested.',
         gated: true,
       },
     ]);

@@ -10,8 +10,12 @@
         "arv": 172000,
         "repairEstimate": 32000,
         "mao": 78400,
-        "offerAmount": 72000
+        "offerAmount": 72000,
+        "contractPrice": null,
+        "assignmentPrice": null,
+        "assignmentFee": null
       },
+      "defaultAssignmentFee": 10000,
       "property": {
         "address": "2418 Pecan Grove Dr",
         "city": "Memphis",
@@ -306,7 +310,7 @@
     },
     {
       "id": "memphis-ranking",
-      "title": "Memphis buyers in range who replied before lead the shortlist",
+      "title": "Memphis buyers in range who replied before lead the shortlist, priced at the offer plus the fee",
       "base": "deal",
       "context": {},
       "reply": {
@@ -322,19 +326,19 @@
             "reason": "Targets 38116 rentals up to $90,000 and has replied before."
           },
           {
+            "buyer_id": "b-delta",
+            "fit": "possible",
+            "reason": "Memphis buyer whose $80,000 to $140,000 range covers the price."
+          },
+          {
             "buyer_id": "b-volunteer",
             "fit": "possible",
             "reason": "Statewide buyer whose range covers the price; no replies yet."
-          },
-          {
-            "buyer_id": "b-delta",
-            "fit": "possible",
-            "reason": "Memphis buyer; the price is just under their stated minimum."
           }
         ],
         "blast": {
-          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
-          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
         },
         "rationale": "Two Memphis buyers fit location and price and have replied before; two more are reasonable backups."
       },
@@ -346,8 +350,8 @@
           "top": [
             "b-riverbend",
             "b-midsouth",
-            "b-volunteer",
-            "b-delta"
+            "b-delta",
+            "b-volunteer"
           ],
           "exclude": [
             "b-cashkings"
@@ -369,7 +373,8 @@
           "queue_buyer_blast"
         ],
         "mentions": [
-          "Pecan Grove"
+          "Pecan Grove",
+          "$82,000"
         ]
       }
     },
@@ -407,8 +412,8 @@
           }
         ],
         "blast": {
-          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
-          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
         },
         "rationale": "Best fits first."
       },
@@ -832,8 +837,8 @@
           }
         ],
         "blast": {
-          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
-          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
         },
         "rationale": "Every candidate fits."
       },
@@ -1076,7 +1081,7 @@
     },
     {
       "id": "target-price-from-arv",
-      "title": "With no offer or MAO the target is 70% of ARV, which reorders the buyers",
+      "title": "With no seller figure the buyers' price is 70% of ARV less repairs, which reorders the buyers",
       "base": "deal",
       "context": {
         "deal": {
@@ -1165,12 +1170,12 @@
           {
             "buyer_id": "b-volunteer",
             "fit": "strong",
-            "reason": "Buys statewide in Tennessee and the $125,000 price is inside their range."
+            "reason": "Buys statewide in Tennessee and the $135,000 price is inside their range."
           }
         ],
         "blast": {
           "subject": "Off-market Nashville deal: 1215 Lischey Ave",
-          "body": "Off-market deal in Nashville (37207): 1215 Lischey Ave.\n\nAsking: $125,000\nEstimated ARV: $265,000\nEstimated repairs: $45,000\n\nSold as-is. Reply to this email for details or to schedule a walkthrough.\n\nHalo Home Buyers"
+          "body": "Off-market deal in Nashville (37207): 1215 Lischey Ave.\n\nAsking: $135,000\nEstimated ARV: $265,000\nEstimated repairs: $45,000\n\nSold as-is. Reply to this email for details or to schedule a walkthrough.\n\nHalo Home Buyers"
         },
         "rationale": "Only the statewide buyer covers Nashville; the Memphis buyers name Memphis only."
       },
@@ -1193,6 +1198,111 @@
         },
         "mentions": [
           "Lischey"
+        ]
+      }
+    },
+    {
+      "id": "asking-price-set-on-deal",
+      "title": "A price a person set on the deal is the one buyers see",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "assignmentPrice": 89500
+        }
+      },
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-riverbend",
+            "fit": "strong",
+            "reason": "Memphis buyer in range who has replied before."
+          },
+          {
+            "buyer_id": "b-midsouth",
+            "fit": "strong",
+            "reason": "Buys in 38116 up to $90,000."
+          },
+          {
+            "buyer_id": "b-delta",
+            "fit": "possible",
+            "reason": "Memphis buyer; the price is inside their range."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $89,500",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $89,500\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "Three Memphis buyers cover $89,500; two have replied before."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "candidates": {
+          "top": [
+            "b-riverbend",
+            "b-midsouth",
+            "b-delta"
+          ]
+        },
+        "shortlist": {
+          "include": [
+            "b-riverbend",
+            "b-midsouth"
+          ],
+          "exclude": [
+            "b-lonestar"
+          ]
+        },
+        "actions": [
+          "queue_buyer_blast"
+        ],
+        "mentions": [
+          "$89,500"
+        ]
+      }
+    },
+    {
+      "id": "contract-price-and-deal-fee",
+      "title": "The signed contract price plus this deal's own fee",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "contractPrice": 70000,
+          "assignmentFee": 15000
+        }
+      },
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-riverbend",
+            "fit": "strong",
+            "reason": "Memphis buyer in range who has replied before."
+          },
+          {
+            "buyer_id": "b-midsouth",
+            "fit": "strong",
+            "reason": "Buys in 38116 up to $90,000."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $85,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $85,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "Two Memphis buyers fit $85,000 and have replied before."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "shortlist": {
+          "include": [
+            "b-riverbend"
+          ]
+        },
+        "actions": [
+          "queue_buyer_blast"
+        ],
+        "mentions": [
+          "$85,000"
         ]
       }
     },
@@ -1264,8 +1374,8 @@
           }
         ],
         "blast": {
-          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
-          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $82,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $82,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
         },
         "rationale": "The Dallas buyer neither buys in Memphis nor at this price."
       },

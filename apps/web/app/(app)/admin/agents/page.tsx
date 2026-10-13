@@ -119,6 +119,8 @@ interface ControlPlane {
   aiEnabled: boolean;
   agentAutonomy: string;
   agentModels: AgentModels | null;
+  /** Wholesale fee: added to the seller price for buyers, subtracted in the MAO. */
+  defaultAssignmentFee?: number;
   globallyConstrained?: boolean;
 }
 
@@ -390,6 +392,7 @@ export default function AgentsPage() {
 
   const [autonomy, setAutonomy] = useState('draft_only');
   const [models, setModels] = useState<AgentModels>({});
+  const [fee, setFee] = useState('10000');
   const [queueLeadId, setQueueLeadId] = useState('');
   const [queueAgent, setQueueAgent] = useState<AgentName>('lead_analyst');
   const queueEntityType: 'lead' | 'deal' = queueAgent === 'lead_analyst' ? 'lead' : 'deal';
@@ -398,6 +401,7 @@ export default function AgentsPage() {
     if (!controlPlane) return;
     setAutonomy(controlPlane.agentAutonomy ?? 'draft_only');
     setModels(controlPlane.agentModels ?? {});
+    setFee(String(controlPlane.defaultAssignmentFee ?? 10000));
   }, [controlPlane]);
 
   const invalidateRuns = () => queryClient.invalidateQueries({ queryKey: ['/agent/runs'] });
@@ -467,9 +471,15 @@ export default function AgentsPage() {
       const v = models[tier]?.trim();
       if (v) cleaned[tier] = v;
     });
+    const feeValue = Number(fee.replace(/[$,\s]/g, ''));
+    if (!Number.isInteger(feeValue) || feeValue < 0 || feeValue > 1_000_000) {
+      toast.error('The assignment fee must be a whole dollar amount');
+      return;
+    }
     settingsMutation.mutate({
       agentAutonomy: autonomy,
       agentModels: Object.keys(cleaned).length ? cleaned : null,
+      defaultAssignmentFee: feeValue,
     });
   };
 
@@ -588,6 +598,23 @@ export default function AgentsPage() {
                   uses cheap. Blank means the platform default. A model starting with
                   &quot;claude-&quot; routes to Anthropic and needs that key configured.
                 </p>
+                <div className="space-y-1">
+                  <label className="text-caption font-medium text-foreground" htmlFor="assignment-fee">
+                    Assignment fee ($)
+                  </label>
+                  <Input
+                    id="assignment-fee"
+                    inputMode="numeric"
+                    className="max-w-[12rem]"
+                    value={fee}
+                    onChange={(e) => setFee(e.target.value)}
+                  />
+                  <p className="text-caption text-muted-foreground">
+                    Your fee on a typical assignment. Buyers are offered the seller price plus this,
+                    and the Underwriter subtracts it from the MAO. A deal can set its own on the
+                    deal page.
+                  </p>
+                </div>
                 <Button size="sm" onClick={saveSettings} disabled={settingsMutation.isPending}>
                   Save settings
                 </Button>
