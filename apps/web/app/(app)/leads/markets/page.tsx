@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/page-header';
+import { AutoEnrichCard } from '@/components/leads/auto-enrich-card';
 import { LoadingState, EmptyState, ErrorState, SkeletonTable } from '@/components/states';
 import { Globe, Play, Plus, Trash2 } from 'lucide-react';
 
@@ -263,6 +264,8 @@ export default function MarketsPage() {
           </>
         }
       />
+
+      <AutoEnrichCard />
 
       {markets.isPending ? (
         <LoadingState skeleton>

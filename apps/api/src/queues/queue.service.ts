@@ -86,4 +86,50 @@ export class QueueService {
         : this.marketingQueue;
     return queue.add(payload.type, payload);
   }
+
+  /**
+   * Jobs that landed in a failed set after `sinceMs`, per queue. BullMQ only
+   * moves a job there once its retries are used up.
+   */
+  async failedJobsSince(sinceMs: number): Promise<
+    Record<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        failedReason: string | null;
+        finishedOn: number | null;
+      }>
+    >
+  > {
+    const queues: Record<string, Queue> = {
+      'lead-enrichment': this.leadEnrichmentQueue,
+      communications: this.communicationsQueue,
+      underwriting: this.underwritingQueue,
+      marketing: this.marketingQueue,
+      'marketing-video': this.marketingVideoQueue,
+      agents: this.agentsQueue,
+    };
+    const out: Record<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        failedReason: string | null;
+        finishedOn: number | null;
+      }>
+    > = {};
+    for (const [name, queue] of Object.entries(queues)) {
+      const failed = await queue.getFailed(0, 50);
+      out[name] = failed
+        .filter((j) => (j.finishedOn ?? j.timestamp ?? 0) > sinceMs)
+        .map((j) => ({
+          id: String(j.id),
+          name: j.name,
+          failedReason: j.failedReason ?? null,
+          finishedOn: j.finishedOn ?? null,
+        }));
+    }
+    return out;
+  }
 }

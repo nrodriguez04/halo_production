@@ -3,7 +3,7 @@ import { DocuSignService } from '../docusign.service';
 const prisma = { contract: { findUnique: jest.fn(), update: jest.fn() } };
 const timeline = { appendEvent: jest.fn() };
 const deals = { updateStage: jest.fn() };
-const integration = { storeSignedCopy: jest.fn() };
+const integration = { onEnvelopeCompleted: jest.fn() };
 
 const service = () =>
   new DocuSignService(
@@ -29,9 +29,9 @@ describe('DocuSign webhook', () => {
     prisma.contract.update.mockResolvedValue({});
     timeline.appendEvent.mockResolvedValue({});
     deals.updateStage.mockResolvedValue({});
-    integration.storeSignedCopy.mockResolvedValue({
-      documentId: 'doc-signed',
-      alreadyStored: false,
+    integration.onEnvelopeCompleted.mockResolvedValue({
+      signedDocumentId: 'doc-signed',
+      movedToMarketing: true,
     });
   });
 
@@ -52,14 +52,10 @@ describe('DocuSign webhook', () => {
         },
       },
     });
-    expect(integration.storeSignedCopy).toHaveBeenCalledWith('c1', 'acct');
-    expect(deals.updateStage).toHaveBeenCalledWith(
-      'deal-1',
-      'acct',
-      'marketing',
-      null,
-      'webhook',
-    );
+    expect(integration.onEnvelopeCompleted).toHaveBeenCalledWith('c1', 'acct', {
+      actorId: null,
+      actorType: 'webhook',
+    });
     expect(timeline.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: 'DEAL',
@@ -73,17 +69,25 @@ describe('DocuSign webhook', () => {
     );
   });
 
-  it('keeps the webhook green when the signed copy cannot be stored yet', async () => {
-    integration.storeSignedCopy.mockRejectedValue(
-      new Error('DocuSign download failed'),
-    );
+  it('delegates completion to the contract service, which tolerates a failed download', async () => {
+    integration.onEnvelopeCompleted.mockResolvedValue({
+      signedDocumentId: null,
+      movedToMarketing: true,
+    });
     await expect(
       service().handleWebhook({
         event: 'envelope-completed',
         data: { envelopeId: 'env-1' },
       }),
-    ).resolves.toMatchObject({ message: 'Webhook processed' });
-    expect(deals.updateStage).toHaveBeenCalled();
+    ).resolves.toMatchObject({
+      message: 'Webhook processed',
+      status: 'completed',
+    });
+    expect(timeline.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ signedDocumentId: null }),
+      }),
+    );
   });
 
   it('records a decline without touching the deal', async () => {
@@ -96,7 +100,7 @@ describe('DocuSign webhook', () => {
         data: expect.objectContaining({ status: 'declined' }),
       }),
     );
-    expect(integration.storeSignedCopy).not.toHaveBeenCalled();
+    expect(integration.onEnvelopeCompleted).not.toHaveBeenCalled();
     expect(deals.updateStage).not.toHaveBeenCalled();
   });
 

@@ -59,14 +59,28 @@ export default function MarketingPage() {
     }
   };
 
+  // The Disposition Matcher ranks the buyer list for this deal and drafts
+  // the blast; the blast waits for approval on Admin > Agents, and each
+  // email then goes through the approval queue. (This used to call the old
+  // single-message blast with an empty buyer list, which the api refused.)
   const sendBuyerBlast = async (dealId: string) => {
     setGenerating({ dealId, kind: 'blast' });
     try {
-      await apiJson(`/marketing/buyer-blast/${dealId}`, {
+      const res = await apiJson<{ queued: boolean }>('/agent/runs', {
         method: 'POST',
-        body: JSON.stringify({ buyerIds: [] }),
+        body: JSON.stringify({
+          agent: 'disposition_matcher',
+          entityType: 'deal',
+          entityId: dealId,
+        }),
       });
-      toast.success('Buyer blast queued');
+      if (res.queued) {
+        toast.success('Matching buyers', {
+          description: 'Review the shortlist and the blast on Admin > Agents.',
+        });
+      } else {
+        toast.error('Not queued', { description: 'Automation is switched off on the Control Plane.' });
+      }
     } catch (err: any) {
       toast.error('Buyer blast failed', { description: err?.message });
     } finally {
@@ -182,7 +196,7 @@ export default function MarketingPage() {
                           Buyer Blast
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Email all matching buyers</TooltipContent>
+                      <TooltipContent>Rank matching buyers and draft a blast for approval</TooltipContent>
                     </Tooltip>
                   </div>
                 </CardContent>

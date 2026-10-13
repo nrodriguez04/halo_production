@@ -37,6 +37,8 @@ const lifecycle = { transition: jest.fn() };
 const queues = { enqueueAgent: jest.fn() };
 const timeline = { appendEvent: jest.fn() };
 const agentService = { draftMessage: jest.fn() };
+const disclosure = { assertEquitableInterest: jest.fn() };
+const skipTrace = { traceLead: jest.fn() };
 
 const service = () =>
   new AgentOrchestrationService(
@@ -50,6 +52,8 @@ const service = () =>
     agentService as any,
     optOut as any,
     communications as any,
+    disclosure as any,
+    skipTrace as any,
   );
 
 const baseRun = {
@@ -142,6 +146,16 @@ describe('AgentOrchestrationService', () => {
     prisma.message.update.mockResolvedValue({});
     deals.updateStage.mockResolvedValue({});
     prisma.marketingMaterial.create.mockResolvedValue({});
+    disclosure.assertEquitableInterest.mockResolvedValue({
+      required: false,
+      satisfied: true,
+      state: null,
+    });
+    skipTrace.traceLead.mockResolvedValue({
+      status: 'matched',
+      phones: [{}],
+      emails: [],
+    });
     optOut.recordPhoneOptOut.mockResolvedValue({
       accountIds: ['acct'],
       consentsRevoked: 1,
@@ -1170,6 +1184,103 @@ describe('AgentOrchestrationService', () => {
         ),
       });
       expect(automation.completeRun).toHaveBeenCalled();
+    });
+  });
+
+  describe('gaps closed after the audit', () => {
+    const flush = () => new Promise((r) => setImmediate(r));
+
+    it('skip traces a lead right after the Lead Analyst scores it high enough', async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        canonicalPhoneHash: null,
+        canonicalEmailHash: null,
+      });
+      await service().recordDecision('acct', 'run-1', {
+        status: 'AWAITING_APPROVAL',
+        decision: qualified,
+        costUsd: 0.01,
+      });
+      await flush();
+      await flush();
+      expect(skipTrace.traceLead).toHaveBeenCalledWith({
+        accountId: 'acct',
+        leadId: 'lead-1',
+        actor: 'system',
+        automated: true,
+      });
+      expect(timeline.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'SKIP_TRACE_AFTER_SCORE',
+          entityId: 'lead-1',
+        }),
+      );
+    });
+
+    it('does not skip trace a disqualified, low-scored, or already-reachable lead', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: ruleDisqualify,
+      });
+      const low: AgentDecision = {
+        ...qualified,
+        recommendation: 'hold',
+        actions: [{ type: 'set_lead_score', score: 40 }],
+      };
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: low,
+      });
+      prisma.lead.findFirst.mockResolvedValue({
+        canonicalPhoneHash: 'ph',
+        canonicalEmailHash: null,
+      });
+      await service().recordDecision('acct', 'run-1', {
+        status: 'AWAITING_APPROVAL',
+        decision: qualified,
+      });
+      await flush();
+      await flush();
+      expect(skipTrace.traceLead).not.toHaveBeenCalled();
+    });
+
+    it('keeps the run open when a Texas buyer blast lacks the equitable-interest notice', async () => {
+      const blast = {
+        type: 'queue_buyer_blast',
+        buyerIds: ['b1'],
+        subject: 's',
+        body: 'b',
+        gated: true,
+      };
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...baseRun,
+        entityType: 'deal',
+        entityId: 'deal-1',
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          agent: 'disposition_matcher',
+          recommendation: 'market',
+          summary: 's',
+          actions: [blast],
+          outcomes: [{ action: blast, result: 'pending' }],
+        },
+      });
+      disclosure.assertEquitableInterest.mockRejectedValue(
+        Object.assign(
+          new Error('Texas requires the equitable-interest disclosure'),
+          { status: 403 },
+        ),
+      );
+
+      await expect(
+        service().approve('acct', 'run-1', 'user-1'),
+      ).rejects.toThrow(/equitable-interest disclosure/);
+      expect(disclosure.assertEquitableInterest).toHaveBeenCalledWith(
+        'acct',
+        'deal-1',
+        'marketing this deal to buyers',
+      );
+      expect(communications.create).not.toHaveBeenCalled();
+      expect(automation.approveRun).not.toHaveBeenCalled();
     });
   });
 });

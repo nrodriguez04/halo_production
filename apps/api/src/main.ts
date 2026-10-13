@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 config({ path: resolve(__dirname, '..', '.env.local') });
 
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger as NestLogger } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import * as express from 'express';
@@ -11,6 +11,8 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { validateEnv } from './env';
 import { isDevAuthBypassEnabled, devBypassAccountId } from './auth/dev-bypass';
+import { AlertingExceptionFilter } from './alerts/alerting-exception.filter';
+import { OpsAlertService } from './alerts/ops-alert.service';
 
 async function bootstrap() {
   validateEnv();
@@ -33,6 +35,14 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   app.useLogger(app.get(Logger));
+  // Default Nest error responses, zod failures as 400s, and an operational
+  // alert for unexpected errors (alerts/alerting-exception.filter.ts).
+  app.useGlobalFilters(
+    new AlertingExceptionFilter(
+      app.get(HttpAdapterHost).httpAdapter,
+      app.get(OpsAlertService),
+    ),
+  );
 
   const httpAdapter = app.getHttpAdapter().getInstance() as express.Application;
   httpAdapter.disable('x-powered-by');

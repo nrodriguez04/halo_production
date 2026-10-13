@@ -62,6 +62,11 @@ const envSchema = z.object({
   SOURCING_RUN_HOUR_UTC: z.string().optional(),
   // Agent sweep (docs/agent-design.md s4): on | off, hour (UTC), stale days
   AGENT_SWEEP: z.string().optional(),
+  // Auto-enrichment scheduler (on | off); the cap is on the control plane
+  AUTO_ENRICH: z.string().optional(),
+  // Operational alerts (alerts/ops-alert.service.ts) and the failed-jobs watcher
+  ALERT_WEBHOOK_URL: z.string().optional(),
+  FAILED_JOBS_WATCH: z.string().optional(),
   AGENT_SWEEP_HOUR_UTC: z.string().optional(),
   AGENT_SWEEP_STALE_DAYS: z.string().optional(),
   // Outreach Drafter (docs/agent-design.md s3.3): follow-up cadence and cap

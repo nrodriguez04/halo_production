@@ -12,12 +12,19 @@ import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { TwilioSendService } from '../../integrations/twilio-send/twilio-send.service';
 import { EmailSendService } from '../../integrations/email/email-send.service';
 import { IntegrationUnavailableException } from '../../integrations/integration-unavailable.exception';
+import { DealsService } from '../../deals/deals.service';
+import { DisclosureGateService } from '../../compliance/disclosure-gate.service';
 import { counterpartyColumns } from '../message-counterparty';
 import { verifyUnsubscribeToken } from '../unsubscribe-token';
 
 describe('MessageDispatchService', () => {
   let service: MessageDispatchService;
-  let prisma: { message: { findFirst: jest.Mock } };
+  let prisma: {
+    message: { findFirst: jest.Mock };
+    deal: { findFirst: jest.Mock };
+  };
+  let deals: { updateStage: jest.Mock };
+  let disclosure: { assertEquitableInterest: jest.Mock };
   let compliance: { getFacts: jest.Mock };
   let controlPlane: { getStatus: jest.Mock };
   let twilio: { sendSms: jest.Mock };
@@ -38,7 +45,16 @@ describe('MessageDispatchService', () => {
     };
     delete process.env.SENDGRID_FROM_EMAIL;
 
-    prisma = { message: { findFirst: jest.fn() } };
+    prisma = {
+      message: { findFirst: jest.fn() },
+      deal: { findFirst: jest.fn().mockResolvedValue({ stage: 'contacted' }) },
+    };
+    deals = { updateStage: jest.fn().mockResolvedValue({}) };
+    disclosure = {
+      assertEquitableInterest: jest
+        .fn()
+        .mockResolvedValue({ required: false, satisfied: true }),
+    };
     compliance = {
       getFacts: jest.fn().mockResolvedValue({ isDnc: false, hasConsent: true }),
     };
@@ -68,6 +84,8 @@ describe('MessageDispatchService', () => {
         { provide: ControlPlaneService, useValue: controlPlane },
         { provide: TwilioSendService, useValue: twilio },
         { provide: EmailSendService, useValue: email },
+        { provide: DealsService, useValue: deals },
+        { provide: DisclosureGateService, useValue: disclosure },
       ],
     }).compile();
     service = module.get(MessageDispatchService);
@@ -373,5 +391,60 @@ describe('MessageDispatchService', () => {
         noProviderCalled();
       },
     );
+  });
+
+  describe('deal stage and buyer disclosure', () => {
+    it('moves a new deal to contacted after the first message reaches the seller', async () => {
+      prisma.message.findFirst.mockResolvedValue(approved());
+      prisma.deal.findFirst.mockResolvedValue({ stage: 'new' });
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(deals.updateStage).toHaveBeenCalledWith(
+        'deal-1',
+        'tenant-1',
+        'contacted',
+        null,
+        'system',
+      );
+    });
+
+    it('leaves deals past new alone and never fails a delivered send over the stage', async () => {
+      prisma.message.findFirst.mockResolvedValue(approved());
+      prisma.deal.findFirst.mockResolvedValue({ stage: 'negotiating' });
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(deals.updateStage).not.toHaveBeenCalled();
+
+      prisma.deal.findFirst.mockResolvedValue({ stage: 'new' });
+      deals.updateStage.mockRejectedValue(new Error('race'));
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).resolves.toMatchObject({ channel: 'sms' });
+    });
+
+    it('blocks a buyer message for a Texas deal without the notice, before any provider call', async () => {
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          leadId: null,
+          metadata: { recipientType: 'buyer', type: 'buyer_blast' },
+        }),
+      );
+      disclosure.assertEquitableInterest.mockRejectedValue(
+        new ComplianceBlockedException(
+          'TX_EQUITABLE_INTEREST_DISCLOSURE',
+          'Texas requires the notice',
+        ),
+      );
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).rejects.toBeInstanceOf(ComplianceBlockedException);
+      expect(twilio.sendSms).not.toHaveBeenCalled();
+      expect(email.sendEmail).not.toHaveBeenCalled();
+      expect(deals.updateStage).not.toHaveBeenCalled();
+    });
+
+    it('does not consult the Texas gate for seller messages', async () => {
+      prisma.message.findFirst.mockResolvedValue(approved());
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(disclosure.assertEquitableInterest).not.toHaveBeenCalled();
+    });
   });
 });

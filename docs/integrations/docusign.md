@@ -57,8 +57,10 @@ Deal page -> Contracts -> **Send for signature**:
   `[BUYER_DATE]` (white text works) in a template and the tabs land there.
   Without anchors the signer places their own signature.
 
-Sending a deal in `negotiating` moves it to `under_contract`, which queues
-the Disposition Matcher. Every envelope goes through cost control
+Sending a deal in `negotiating` moves it to `under_contract`. Buyers are not
+ranked yet: the Disposition Matcher starts when the seller signs (see below).
+A buyer recipient on a Texas deal needs the equitable-interest disclosure on
+file first. Every envelope goes through cost control
 (`docusign` / `create_envelope`; price it on the Cost Governance page if your
 plan charges per envelope).
 
@@ -68,10 +70,11 @@ plan charges per envelope).
   the combined signed PDF in the library (`category: contract`, tags
   `signed`, `docusign`, plus the source documents' `checklist:*` tags so the
   compliance checklist counts the executed copy), and moves an
-  `under_contract` deal to `marketing`.
-- Without Connect: the **Refresh** button reads the status from DocuSign and
-  **Pull signed copy** files the PDF the same way once the envelope is
-  complete.
+  `under_contract` deal to `marketing`, which starts the Disposition Matcher.
+  A failed PDF download does not hold the deal back; pull the copy later.
+- Without Connect: the **Refresh** button reads the status from DocuSign and,
+  once the envelope is complete, does the same thing; **Pull signed copy**
+  files the PDF and moves the deal too.
 
 ## API
 

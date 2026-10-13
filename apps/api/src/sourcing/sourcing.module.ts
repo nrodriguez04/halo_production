@@ -6,12 +6,18 @@ import { PrismaService } from '../prisma.service';
 import { SourcingSchedulerService } from './sourcing-scheduler.service';
 import { SourcingController } from './sourcing.controller';
 import { SourcingService } from './sourcing.service';
+import { AutoEnrichService } from './auto-enrich.service';
 
 // ControlPlaneService comes from the global ControlPlaneModule.
 @Module({
   imports: [AuthModule, LeadsModule, AutomationModule],
   controllers: [SourcingController],
-  providers: [PrismaService, SourcingService, SourcingSchedulerService],
+  providers: [
+    PrismaService,
+    SourcingService,
+    SourcingSchedulerService,
+    AutoEnrichService,
+  ],
   exports: [SourcingService],
 })
 export class SourcingModule {}

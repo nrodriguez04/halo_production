@@ -404,6 +404,9 @@ model ControlPlane {
   agentAutonomy  String  @default("draft_only")
   /// Model per tier, e.g. {"cheap":"gpt-4o-mini","mid":"gpt-4o","strong":"claude-opus-5-5"}; null = platform default.
   agentModels    Json?
+  /// New leads moved to enriching automatically, up to autoEnrichDailyCap per UTC day.
+  autoEnrichEnabled  Boolean @default(true)
+  autoEnrichDailyCap Int     @default(20)
   updatedAt DateTime @updatedAt
   updatedBy String?
 

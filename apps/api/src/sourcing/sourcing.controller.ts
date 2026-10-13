@@ -12,6 +12,7 @@ import {
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
+import { AutoEnrichService } from './auto-enrich.service';
 import { LISTING_SOURCES } from '../integrations/listings/listing-source.types';
 import {
   SOURCING_CADENCES,
@@ -69,7 +70,10 @@ const MetrosSchema = z
 @Controller('sourcing')
 @UseGuards(AuthGuard)
 export class SourcingController {
-  constructor(private readonly sourcing: SourcingService) {}
+  constructor(
+    private readonly sourcing: SourcingService,
+    private readonly autoEnrich: AutoEnrichService,
+  ) {}
 
   @Get('markets')
   list(@CurrentAccountId() accountId: string) {
@@ -136,5 +140,17 @@ export class SourcingController {
     @Param('id') id: string,
   ) {
     return this.sourcing.runNow(accountId, id, userId);
+  }
+
+  /** Today's auto-enrichment allowance for this account. */
+  @Get('auto-enrich')
+  autoEnrichStatus(@CurrentAccountId() accountId: string) {
+    return this.autoEnrich.status(accountId);
+  }
+
+  /** Runs auto-enrichment for this account now, within today's cap. */
+  @Post('auto-enrich/run')
+  runAutoEnrich(@CurrentAccountId() accountId: string) {
+    return this.autoEnrich.runForAccount(accountId);
   }
 }

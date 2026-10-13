@@ -35,6 +35,9 @@ import { AgentService } from './agent.service';
 import { OptOutService } from '../compliance/opt-out.service';
 import { openCounterparty } from '../communications/message-counterparty';
 import { CommunicationsService } from '../communications/communications.service';
+import { DisclosureGateService } from '../compliance/disclosure-gate.service';
+import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
+import { thresholdFor } from '../cost-control/policy/lead-score-thresholds';
 import { openValue } from '../pii/contact-crypto';
 
 const TRIGGER_TYPE: Record<AgentTrigger, AutomationTriggerType> = {
@@ -93,6 +96,8 @@ export class AgentOrchestrationService {
     private agentService: AgentService,
     private optOut: OptOutService,
     private communications: CommunicationsService,
+    private disclosure: DisclosureGateService,
+    private skipTrace: LeadSkipTraceService,
   ) {}
 
   /** Queue an agent for an entity. Returns false when the control plane is off. */
@@ -165,6 +170,7 @@ export class AgentOrchestrationService {
       autonomy,
     );
     const pending = outcomes.filter((o) => o.result === 'pending');
+    this.skipTraceAfterScore(accountId, run, report.decision);
     const model = report.decision.model;
     const decisionJson = {
       ...report.decision,
@@ -227,6 +233,21 @@ export class AgentOrchestrationService {
     const pending = (decision.outcomes ?? [])
       .filter((o) => o.result === 'pending')
       .map((o) => o.action as GatedAction);
+
+    // Texas: no buyer marketing until the equitable-interest notice is on
+    // file. Checked before anything is applied, so the run stays open and
+    // can be approved again once the document is uploaded.
+    if (
+      run.entityType === 'deal' &&
+      run.entityId &&
+      pending.some((a) => a.type === 'queue_buyer_blast')
+    ) {
+      await this.disclosure.assertEquitableInterest(
+        accountId,
+        run.entityId,
+        'marketing this deal to buyers',
+      );
+    }
 
     const applied: AppliedAction[] = [];
     for (const action of pending) {
@@ -1041,6 +1062,67 @@ export class AgentOrchestrationService {
         `messages:${messageIds.join(',')}` +
         (skipped.length ? `; skipped ${skipped.join('; ')}` : ''),
     };
+  }
+
+  /**
+   * Skip trace costs money per record, so cost control only allows it for
+   * leads scored at or above its threshold, and a new lead has no score
+   * until the Lead Analyst gives it one. Right after the Analyst scores a
+   * lead high enough (and did not disqualify it), the trace runs here, so
+   * the contacts are on the lead by the time a person approves the drafts.
+   * Fire and forget: the worker's report must not wait on a provider.
+   */
+  private skipTraceAfterScore(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    decision: AgentDecision,
+  ): void {
+    if (decision.agent !== 'lead_analyst' || run.entityType !== 'lead') return;
+    if (!run.entityId || decision.recommendation === 'disqualified') return;
+    const scored = decision.actions.find(
+      (a): a is Extract<AgentAction, { type: 'set_lead_score' }> =>
+        a.type === 'set_lead_score',
+    );
+    const minScore = thresholdFor(
+      'batch_skiptrace',
+      'append_contacts',
+    ).minScore;
+    if (!scored || scored.score < minScore) return;
+    const leadId = run.entityId;
+    void (async () => {
+      try {
+        const lead = await this.prisma.lead.findFirst({
+          where: { id: leadId, accountId },
+          select: { canonicalPhoneHash: true, canonicalEmailHash: true },
+        });
+        if (!lead || lead.canonicalPhoneHash || lead.canonicalEmailHash) return;
+        const result = await this.skipTrace.traceLead({
+          accountId,
+          leadId,
+          actor: 'system',
+          automated: true,
+        });
+        await this.timeline.appendEvent({
+          tenantId: accountId,
+          entityType: TimelineEntityType.LEAD,
+          entityId: leadId,
+          eventType: 'SKIP_TRACE_AFTER_SCORE',
+          payload: {
+            automationRunId: run.id,
+            score: scored.score,
+            status: result.status,
+            phones: result.phones.length,
+            emails: result.emails.length,
+          },
+          actorId: null,
+          actorType: TimelineActorType.system,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Skip trace after scoring lead ${leadId} did not run: ${(err as Error).message}`,
+        );
+      }
+    })();
   }
 
   /** The lead's open deal, or a new one so the drafts have a home. */

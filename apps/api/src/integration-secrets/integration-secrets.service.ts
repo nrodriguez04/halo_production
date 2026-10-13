@@ -179,6 +179,9 @@ export class IntegrationSecretsService {
         case 'docusign':
           result = await this.testDocuSign();
           break;
+        case 'batch_skiptrace':
+          result = await this.testBatchSkipTrace();
+          break;
         default:
           result = { connected: false, error: `Unknown provider: ${provider}` };
       }
@@ -344,6 +347,41 @@ export class IntegrationSecretsService {
       }
       return { connected: false, error: (err as Error).message };
     }
+  }
+
+  /**
+   * Validates the key without tracing anyone: an empty request list is
+   * refused for its body (400/422) when the key is good and refused for
+   * auth (401/403) when it is not, and neither bills a record.
+   */
+  private async testBatchSkipTrace(): Promise<{
+    connected: boolean;
+    error?: string;
+  }> {
+    const key = await this.resolve(
+      'batch_skiptrace',
+      'BATCH_SKIPTRACE_API_KEY',
+    );
+    if (!key?.trim()) return { connected: false, error: 'Missing API key' };
+    const base =
+      process.env.BATCH_SKIPTRACE_BASE_URL ||
+      'https://api.batchskiptracing.com/v2';
+    const res = await fetch(`${base}/skip-tracing`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key.trim()}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests: [] }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { connected: false, error: `Key rejected (${res.status})` };
+    }
+    if (res.ok || res.status === 400 || res.status === 422) {
+      return { connected: true };
+    }
+    return { connected: false, error: `Unexpected response ${res.status}` };
   }
 
   private async testTwilio(): Promise<{ connected: boolean; error?: string }> {

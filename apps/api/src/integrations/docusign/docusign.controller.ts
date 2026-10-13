@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { TimelineActorType } from '@prisma/client';
 import { DocuSignService } from './docusign.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../../auth/decorators';
@@ -56,7 +57,17 @@ export class DocuSignController {
   async storeSigned(
     @Param('contractId') contractId: string,
     @CurrentAccountId() accountId: string,
+    @CurrentUserId() userId: string,
   ) {
-    return this.docuSignService.storeSignedCopy(contractId, accountId);
+    const stored = await this.docuSignService.storeSignedCopy(
+      contractId,
+      accountId,
+    );
+    const completed = await this.docuSignService.onEnvelopeCompleted(
+      contractId,
+      accountId,
+      { actorId: userId ?? null, actorType: TimelineActorType.user },
+    );
+    return { ...stored, movedToMarketing: completed.movedToMarketing };
   }
 }

@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { OpsAlertService } from '../alerts/ops-alert.service';
 
 // Evaluates whether a budget bucket has just crossed a threshold and
 // emits a TimelineEvent. Email at 95+% is wired through the timeline
@@ -12,7 +13,10 @@ const THRESHOLDS = [0.5, 0.8, 0.95, 1.0] as const;
 export class AlertsService {
   private readonly logger = new Logger(AlertsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly ops?: OpsAlertService,
+  ) {}
 
   /**
    * Called by `recordActual` after the bucket debit. Looks at each
@@ -61,6 +65,20 @@ export class AlertsService {
           },
         })),
       });
+      // 95% and 100% also reach the operator's alert webhook.
+      for (const e of events.filter((x) => x.threshold >= 0.95)) {
+        void this.ops?.send({
+          title: `Budget ${e.bucket.scope}:${e.bucket.scopeRef ?? 'all'} reached ${Math.round(e.threshold * 100)}%`,
+          severity: e.threshold >= 1 ? 'critical' : 'warning',
+          fingerprint: `budget:${e.bucket.id}:${e.threshold}`,
+          lines: [
+            `$${e.bucket.currentSpendUsd.toFixed(2)} of $${e.bucket.hardCapUsd.toFixed(2)} this ${e.bucket.period}.`,
+            e.threshold >= 1
+              ? 'Calls against this budget are now blocked until the period resets or the cap is raised on Cost Governance.'
+              : 'Calls will be blocked at 100%; raise the cap on Cost Governance if this is expected.',
+          ],
+        });
+      }
     } catch (err) {
       this.logger.warn(`alert evaluation failed: ${err}`);
     }

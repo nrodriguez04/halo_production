@@ -20,6 +20,9 @@ export interface ControlPlaneStatus {
   agentAutonomy: string;
   /** Model per tier; null means the platform default. */
   agentModels: Record<string, string> | null;
+  /** New leads are enriched automatically, up to the daily cap. */
+  autoEnrichEnabled: boolean;
+  autoEnrichDailyCap: number;
   updatedAt?: Date;
   updatedBy?: string | null;
   /** True when a GLOBAL row is narrowing this tenant's settings. */
@@ -74,6 +77,8 @@ export class ControlPlaneService {
         apiDailyCostCap: 0,
         agentAutonomy: 'draft_only',
         agentModels: null,
+        autoEnrichEnabled: false,
+        autoEnrichDailyCap: 0,
         globallyConstrained: !!globalRow,
       };
     }
@@ -106,6 +111,12 @@ export class ControlPlaneService {
       updatedBy: tenant.updatedBy,
       agentAutonomy: tenant.agentAutonomy,
       agentModels: tenant.agentModels as Record<string, string> | null,
+      autoEnrichEnabled:
+        tenant.autoEnrichEnabled && globalRow.autoEnrichEnabled,
+      autoEnrichDailyCap: Math.min(
+        tenant.autoEnrichDailyCap,
+        globalRow.autoEnrichDailyCap,
+      ),
       globallyConstrained: true,
     };
   }
@@ -130,6 +141,8 @@ export class ControlPlaneService {
       apiDailyCostCap?: number;
       agentAutonomy?: string;
       agentModels?: Record<string, string> | null;
+      autoEnrichEnabled?: boolean;
+      autoEnrichDailyCap?: number;
     },
     userId: string,
   ) {

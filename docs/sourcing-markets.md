@@ -27,6 +27,29 @@ morning without anyone clicking.
 - `SOURCING_SCHEDULER=off` disables the loop (tests, or a replica that should
   only serve requests).
 
+## Auto-enrichment
+
+New leads (from markets, listing imports, CSV) arrive in `new`. Every ten
+minutes the api moves the best of them to `enriching`, which queues the
+enrichment job (geocoding and the property lookup), up to the tenant's
+daily cap. Best means distress first (tax delinquency, liens, foreclosure,
+probate, vacancy), then stale or expired listings and absentee owners, then
+everything else, newest first within each tier; owner-occupied leads with no
+other signal go last.
+
+- The switch and the cap (default on, 20 leads per UTC day) are on the
+  control plane and editable on **Leads > Markets > Auto-enrichment**, which
+  also shows today's usage and has an **Enrich now** button.
+- Nothing runs when the control plane or its paid-data switch is off, and
+  every call still goes through the Cost Governance budgets.
+- Skip trace is not part of this step: it runs right after the Lead Analyst
+  scores a lead 60 or higher (cost control's skip-trace threshold), so leads
+  that are disqualified never pay for it. The skip-trace key is on
+  **Admin > Integrations > BatchSkipTracing**.
+- `AUTO_ENRICH=off` disables the loop (tests, or a replica that should only
+  serve requests). Usage is counted from the lead timeline
+  (`lead.status.enriching` events marked `autoEnrich`).
+
 ## Cost
 
 Every pull is a normal cost-governed call: RentCast bills one request per

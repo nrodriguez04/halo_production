@@ -3,6 +3,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { RedisModule } from './redis/redis.module';
+import { AlertsModule } from './alerts/alerts.module';
 import { HealthModule } from './health/health.module';
 import { LeadsModule } from './leads/leads.module';
 import { SourcingModule } from './sourcing/sourcing.module';
@@ -74,6 +75,7 @@ import { AuditModule } from './audit/audit.module';
     CommunicationsModule,
     ControlPlaneModule,
     UnderwritingModule,
+    AlertsModule,
     TwilioModule,
     DocuSignModule,
     InboundEmailModule,
