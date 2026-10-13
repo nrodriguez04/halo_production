@@ -20,6 +20,7 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import { CostBlockedException } from '../../cost-control/cost-blocked.exception';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import { openValue } from '../../pii/contact-crypto';
+import { DisclosureGateService } from '../../compliance/disclosure-gate.service';
 import {
   DocuSignAuthError,
   parseEnv,
@@ -106,6 +107,7 @@ export class DocuSignService {
     private readonly secrets: IntegrationSecretsService,
     private readonly documents: DocumentsService,
     private readonly costControl: IntegrationCostControlService,
+    private readonly disclosure: DisclosureGateService,
   ) {}
 
   // ------------------------------------------------------------ auth
@@ -252,6 +254,13 @@ export class DocuSignService {
       throw error;
     }
 
+    if (input.recipients.some((r) => r.role === 'buyer')) {
+      await this.disclosure.assertEquitableInterest(
+        accountId,
+        deal.id,
+        'sending a contract to a buyer',
+      );
+    }
     const docs = await this.loadDocuments(accountId, input.documentIds);
     const signers = await this.resolveRecipients(
       accountId,
@@ -589,6 +598,12 @@ export class DocuSignService {
       where: { id: contract.id },
       data: { status },
     });
+    if (status === 'completed') {
+      await this.onEnvelopeCompleted(contract.id, accountId, {
+        actorId: null,
+        actorType: TimelineActorType.system,
+      });
+    }
     return {
       contractId: updated.id,
       envelopeId,
@@ -596,6 +611,44 @@ export class DocuSignService {
       statusChangedAt: envelope.statusChangedDateTime ?? null,
       completedAt: envelope.completedDateTime ?? null,
     };
+  }
+
+  /**
+   * The seller signed: file the executed copy in the library (tolerating a
+   * failed download, which a person can retry) and move an under-contract
+   * deal to marketing, which starts the Disposition Matcher. The webhook,
+   * the status refresh and the manual pull all come through here.
+   */
+  async onEnvelopeCompleted(
+    contractId: string,
+    accountId: string,
+    actor: { actorId: string | null; actorType: TimelineActorType },
+  ): Promise<{ signedDocumentId: string | null; movedToMarketing: boolean }> {
+    let signedDocumentId: string | null = null;
+    try {
+      signedDocumentId = (await this.storeSignedCopy(contractId, accountId))
+        .documentId;
+    } catch (err) {
+      this.logger.warn(
+        `Signed copy for contract ${contractId} not stored: ${(err as Error).message}`,
+      );
+    }
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, deal: { accountId } },
+      select: { deal: { select: { id: true, stage: true } } },
+    });
+    let movedToMarketing = false;
+    if (contract?.deal.stage === 'under_contract') {
+      await this.dealsService.updateStage(
+        contract.deal.id,
+        accountId,
+        'marketing',
+        actor.actorId,
+        actor.actorType,
+      );
+      movedToMarketing = true;
+    }
+    return { signedDocumentId, movedToMarketing };
   }
 
   async downloadPDF(envelopeId: string, accountId: string): Promise<Buffer> {

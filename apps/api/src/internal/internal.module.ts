@@ -5,13 +5,14 @@ import { GeocodingModule } from '../integrations/geocoding/geocoding.module';
 import { AttomModule } from '../integrations/attom/attom.module';
 import { PrismaService } from '../prisma.service';
 import { MessageDispatchService } from '../communications/message-dispatch.service';
+import { DealsModule } from '../deals/deals.module';
 
 // OpenAIModule / TwilioSendModule / EmailSendModule, ComplianceModule,
 // ControlPlaneModule and SkipTraceModule are @Global, so their services
 // resolve without re-importing them here. Geocoding and ATTOM are not,
 // hence the explicit imports.
 @Module({
-  imports: [GeocodingModule, AttomModule, AgentModule],
+  imports: [GeocodingModule, AttomModule, AgentModule, DealsModule],
   controllers: [InternalController],
   providers: [PrismaService, MessageDispatchService],
 })

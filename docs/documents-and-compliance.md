@@ -53,6 +53,26 @@ The statute references are pointers for counsel to confirm, not legal
 advice. The content of each document (the actual agreement text) is yours to
 supply; Halo stores and tracks it.
 
+## Texas equitable-interest gate
+
+In Texas a wholesaler markets only an equitable interest and must give every
+prospective buyer written notice of it (Tex. Prop. Code 5.086, Tex. Occ. Code
+1101.0045). For a deal whose property is in Texas, nothing buyer-facing goes
+out until the notice is on file: an active document attached to the deal (or
+its lead) with the checklist item **Equitable interest disclosure (Texas)**.
+
+It is enforced at every buyer-facing step, with a 403
+`TX_EQUITABLE_INTEREST_DISCLOSURE` that says what to upload:
+
+- approving a Disposition Matcher buyer blast (the run stays open, so it can
+  be approved again once the document is uploaded);
+- the Marketing page's buyer blast;
+- sending any buyer email or text, at the send boundary;
+- a DocuSign envelope with a buyer recipient.
+
+The gate checks that the notice exists, not its wording; have counsel
+review the text you upload.
+
 ## API
 
 All routes are tenant-scoped under `/api/documents`:

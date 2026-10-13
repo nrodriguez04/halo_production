@@ -18,6 +18,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/page-header';
+import { AlertsCard } from '@/components/admin/alerts-card';
 import { LoadingState } from '@/components/states';
 import { cn } from '@/lib/utils';
 import { ShieldAlert } from 'lucide-react';
@@ -344,6 +345,8 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertsCard />
 
       <Dialog open={killDialog !== null} onOpenChange={(open) => !open && setKillDialog(null)}>
         <DialogContent>

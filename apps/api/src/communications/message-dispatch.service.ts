@@ -15,6 +15,9 @@ import { EmailSendService } from '../integrations/email/email-send.service';
 import { IntegrationUnavailableException } from '../integrations/integration-unavailable.exception';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
 import { messageCounterparty } from './message-counterparty';
+import { DealsService } from '../deals/deals.service';
+import { DisclosureGateService } from '../compliance/disclosure-gate.service';
+import { TimelineActorType } from '@prisma/client';
 import { composeEmail, emailSettings, withSmsOptOut } from './outbound-content';
 
 export type DispatchReceipt =
@@ -48,6 +51,8 @@ export class MessageDispatchService {
     private controlPlane: ControlPlaneService,
     private twilio: TwilioSendService,
     private email: EmailSendService,
+    private deals: DealsService,
+    private disclosure: DisclosureGateService,
   ) {}
 
   async sendApproved(
@@ -96,9 +101,53 @@ export class MessageDispatchService {
       dealId: message.dealId ?? undefined,
       automationRunId: message.automationRunId ?? undefined,
     };
-    return channel === 'sms'
-      ? this.sendSms(message, recipient, ctx)
-      : this.sendEmail(message, recipient, ctx);
+    const receipt =
+      channel === 'sms'
+        ? await this.sendSms(message, recipient, ctx)
+        : await this.sendEmail(message, recipient, ctx);
+    await this.markDealContacted(message);
+    return receipt;
+  }
+
+  /**
+   * The first message that reaches a seller moves the deal from new to
+   * contacted, which is what the follow-up sweep, the Deal Underwriter and
+   * the Outreach Drafter key off. Best effort: the send already happened.
+   */
+  private async markDealContacted(message: Message) {
+    const meta = (message.metadata ?? {}) as Record<string, unknown>;
+    if (!message.dealId || !message.leadId) return;
+    if (meta.recipientType === 'buyer' || meta.type === 'buyer_blast') return;
+    try {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: message.dealId, accountId: message.accountId },
+        select: { stage: true },
+      });
+      if (deal?.stage !== 'new') return;
+      await this.deals.updateStage(
+        message.dealId,
+        message.accountId,
+        'contacted',
+        null,
+        TimelineActorType.system,
+      );
+    } catch {
+      // A stage race or a missing deal must not turn a delivered message
+      // into a failed send.
+    }
+  }
+
+  /** Buyer marketing for a Texas deal needs the equitable-interest notice on file. */
+  private async assertBuyerDisclosure(message: Message) {
+    const meta = (message.metadata ?? {}) as Record<string, unknown>;
+    const toBuyer =
+      meta.recipientType === 'buyer' || meta.type === 'buyer_blast';
+    if (!toBuyer || !message.dealId) return;
+    await this.disclosure.assertEquitableInterest(
+      message.accountId,
+      message.dealId,
+      'marketing this deal to buyers',
+    );
   }
 
   /**
@@ -112,6 +161,7 @@ export class MessageDispatchService {
     channel: 'sms' | 'email',
     recipient: string,
   ) {
+    await this.assertBuyerDisclosure(message);
     const [controlPlane, facts] = await Promise.all([
       this.controlPlane.getStatus(message.accountId, { provision: false }),
       this.compliance.getFacts({

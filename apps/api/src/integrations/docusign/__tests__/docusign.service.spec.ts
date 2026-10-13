@@ -59,6 +59,8 @@ const costControl = {
   })),
 };
 
+const disclosure = { assertEquitableInterest: jest.fn() };
+
 const service = () =>
   new DocuSignService(
     prisma as any,
@@ -69,6 +71,7 @@ const service = () =>
     secrets as any,
     documents as any,
     costControl as any,
+    disclosure as any,
   );
 
 const deal = {
@@ -94,6 +97,10 @@ describe('DocuSignService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    disclosure.assertEquitableInterest.mockResolvedValue({
+      required: false,
+      satisfied: true,
+    });
     (global as any).fetch = fetchMock;
     mockRequestSession.mockResolvedValue(session);
     controlPlane.isDocuSignEnabled.mockResolvedValue(true);
@@ -359,5 +366,93 @@ describe('DocuSignService', () => {
       alreadyStored: true,
     });
     expect(documents.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the Texas notice before a buyer is sent a contract, and only then', async () => {
+    disclosure.assertEquitableInterest.mockRejectedValueOnce(
+      new Error('Texas requires the equitable-interest disclosure'),
+    );
+    await expect(
+      service().createEnvelope('acct', 'user-1', {
+        dealId: 'deal-1',
+        documentIds: ['doc-1'],
+        recipients: [{ role: 'buyer', buyerId: 'b1' }],
+      }),
+    ).rejects.toThrow(/equitable-interest/);
+    expect(disclosure.assertEquitableInterest).toHaveBeenCalledWith(
+      'acct',
+      'deal-1',
+      'sending a contract to a buyer',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    disclosure.assertEquitableInterest.mockClear();
+    await service().createEnvelope('acct', 'user-1', {
+      dealId: 'deal-1',
+      documentIds: ['doc-1'],
+      recipients: [{ role: 'seller' }],
+    });
+    expect(disclosure.assertEquitableInterest).not.toHaveBeenCalled();
+  });
+
+  it('on completion files the signed copy and moves an under-contract deal to marketing', async () => {
+    const svc = service();
+    jest
+      .spyOn(svc, 'storeSignedCopy')
+      .mockResolvedValue({ documentId: 'doc-signed', alreadyStored: false });
+    prisma.contract.findFirst.mockResolvedValue({
+      deal: { id: 'deal-1', stage: 'under_contract' },
+    });
+
+    await expect(
+      svc.onEnvelopeCompleted('c1', 'acct', {
+        actorId: null,
+        actorType: 'webhook' as any,
+      }),
+    ).resolves.toEqual({
+      signedDocumentId: 'doc-signed',
+      movedToMarketing: true,
+    });
+    expect(deals.updateStage).toHaveBeenCalledWith(
+      'deal-1',
+      'acct',
+      'marketing',
+      null,
+      'webhook',
+    );
+  });
+
+  it('still moves the deal when the signed copy cannot be downloaded yet, and leaves other stages alone', async () => {
+    const svc = service();
+    jest
+      .spyOn(svc, 'storeSignedCopy')
+      .mockRejectedValue(new Error('download failed'));
+    prisma.contract.findFirst.mockResolvedValue({
+      deal: { id: 'deal-1', stage: 'under_contract' },
+    });
+    await expect(
+      svc.onEnvelopeCompleted('c1', 'acct', {
+        actorId: 'user-1',
+        actorType: 'user' as any,
+      }),
+    ).resolves.toEqual({ signedDocumentId: null, movedToMarketing: true });
+
+    deals.updateStage.mockClear();
+    prisma.contract.findFirst.mockResolvedValue({
+      deal: { id: 'deal-1', stage: 'marketing' },
+    });
+    jest
+      .spyOn(svc, 'storeSignedCopy')
+      .mockResolvedValue({ documentId: 'doc-signed', alreadyStored: true });
+    await expect(
+      svc.onEnvelopeCompleted('c1', 'acct', {
+        actorId: null,
+        actorType: 'system' as any,
+      }),
+    ).resolves.toEqual({
+      signedDocumentId: 'doc-signed',
+      movedToMarketing: false,
+    });
+    expect(deals.updateStage).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationCostControlService } from '../../cost-control/cost-control.service';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
+import { IntegrationUnavailableException } from '../../integrations/integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import type {
   SkipTraceAdapter,
@@ -12,7 +14,9 @@ import type {
 // a single record and reads back phones + emails. We treat each call as
 // `per_record` pricing at the seed-configured unit cost.
 //
-// Selected via `SKIP_TRACE_PROVIDER=batch` (the default in production).
+// Selected via `SKIP_TRACE_PROVIDER=batch` (the default in production). The
+// key is resolved at call time from the Integrations page, falling back to
+// BATCH_SKIPTRACE_API_KEY in the environment.
 
 interface BatchResponse {
   record_id?: string;
@@ -28,23 +32,29 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
   private readonly baseUrl =
     process.env.BATCH_SKIPTRACE_BASE_URL ||
     'https://api.batchskiptracing.com/v2';
-  private readonly apiKey = process.env.BATCH_SKIPTRACE_API_KEY || '';
 
-  constructor(private costControl: IntegrationCostControlService) {}
+  constructor(
+    private costControl: IntegrationCostControlService,
+    private secrets: IntegrationSecretsService,
+  ) {}
 
   async appendContacts(
     input: SkipTraceInput,
     ctx?: CostContext,
     hints?: SkipTraceHints,
   ): Promise<SkipTraceResult> {
-    if (!this.apiKey) {
-      this.logger.warn('BATCH_SKIPTRACE_API_KEY missing — returning no_match');
-      return {
-        provider: this.providerKey,
-        status: 'error',
-        phones: [],
-        emails: [],
-      };
+    // Checked before checkAndCall so a missing key neither reserves budget
+    // nor hides as an "error" result: enrichment records it as not
+    // configured, which is what the operator needs to see.
+    const apiKey = await this.secrets.resolve(
+      this.providerKey,
+      'BATCH_SKIPTRACE_API_KEY',
+    );
+    if (!apiKey?.trim()) {
+      throw IntegrationUnavailableException.notConfigured(
+        this.providerKey,
+        'BATCH_SKIPTRACE_API_KEY',
+      );
     }
     if (!ctx) {
       throw new Error('BatchSkipTraceAdapter requires a CostContext');
@@ -63,7 +73,7 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
         const res = await fetch(`${this.baseUrl}/skip-tracing`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${apiKey.trim()}`,
             Accept: 'application/json',
             'Content-Type': 'application/json',
           },
@@ -81,6 +91,13 @@ export class BatchSkipTraceAdapter implements SkipTraceAdapter {
             ],
           }),
         });
+        if (res.status === 401 || res.status === 403) {
+          throw new IntegrationUnavailableException(
+            this.providerKey,
+            'REJECTED_CREDENTIALS',
+            `BatchSkipTracing rejected the key (${res.status})`,
+          );
+        }
         if (!res.ok) {
           throw new Error(
             `Batch skip-trace failed: ${res.status} ${res.statusText}`,

@@ -268,7 +268,7 @@ describe('DealsService', () => {
       });
     });
 
-    it('queues the Disposition Matcher when a deal goes under contract', async () => {
+    it('queues the Disposition Matcher when marketing starts, not when the contract is only sent', async () => {
       prisma.deal.findFirst.mockResolvedValue({
         ...existingDeal,
         stage: 'negotiating',
@@ -278,13 +278,24 @@ describe('DealsService', () => {
         stage: 'under_contract',
         updatedAt: new Date('2026-10-12T11:00:00.000Z'),
       });
-
       await service.updateStage(
         'deal-1',
         'tenant-1',
         'under_contract',
         'user-1',
       );
+      expect(queueService.enqueueAgent).not.toHaveBeenCalled();
+
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'under_contract',
+      });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'marketing',
+        updatedAt: new Date('2026-10-12T12:00:00.000Z'),
+      });
+      await service.updateStage('deal-1', 'tenant-1', 'marketing', null);
 
       expect(queueService.enqueueAgent).toHaveBeenCalledWith({
         agent: 'disposition_matcher',
@@ -292,7 +303,7 @@ describe('DealsService', () => {
         entityType: 'deal',
         entityId: 'deal-1',
         trigger: 'lifecycle',
-        triggerEventId: 'stage:under_contract:2026-10-12T11:00:00.000Z',
+        triggerEventId: 'stage:marketing:2026-10-12T12:00:00.000Z',
       });
     });
 

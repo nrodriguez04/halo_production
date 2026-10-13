@@ -57,28 +57,12 @@ export class DocuSignService {
 
     let signedDocumentId: string | null = null;
     if (status === 'completed') {
-      try {
-        const stored = await this.docusign.storeSignedCopy(
-          contract.id,
-          contract.deal.accountId,
-        );
-        signedDocumentId = stored.documentId;
-      } catch (err) {
-        // The webhook still succeeds: a person can pull the copy from the
-        // deal page, and DocuSign must not keep retrying a processed event.
-        this.logger.warn(
-          `Signed copy for envelope ${envelopeId} not stored: ${(err as Error).message}`,
-        );
-      }
-      if (contract.deal.stage === 'under_contract') {
-        await this.dealsService.updateStage(
-          contract.dealId,
-          contract.deal.accountId,
-          'marketing',
-          null,
-          TimelineActorType.webhook,
-        );
-      }
+      const done = await this.docusign.onEnvelopeCompleted(
+        contract.id,
+        contract.deal.accountId,
+        { actorId: null, actorType: TimelineActorType.webhook },
+      );
+      signedDocumentId = done.signedDocumentId;
     }
 
     await this.timelineService.appendEvent({

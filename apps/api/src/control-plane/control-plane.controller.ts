@@ -27,6 +27,8 @@ const UpdateControlPlaneSchema = z
       .strict()
       .nullable()
       .optional(),
+    autoEnrichEnabled: z.boolean().optional(),
+    autoEnrichDailyCap: z.number().int().min(0).max(1000).optional(),
   })
   .strict();
 

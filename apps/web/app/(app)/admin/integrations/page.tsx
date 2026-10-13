@@ -160,6 +160,18 @@ const INTEGRATIONS: IntegrationDef[] = [
     ],
   },
   {
+    provider: 'batch_skiptrace',
+    category: 'property',
+    name: 'BatchSkipTracing (skip trace)',
+    keys: [
+      {
+        keyName: 'BATCH_SKIPTRACE_API_KEY',
+        label: 'API Key',
+        placeholder: 'Finds seller phones and emails during enrichment',
+      },
+    ],
+  },
+  {
     provider: 'rentcast',
     category: 'property',
     name: 'RentCast',

@@ -15,6 +15,7 @@ import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import { QueueService } from '../queues/queue.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { DisclosureGateService } from '../compliance/disclosure-gate.service';
 import { aiSpendSince, startOfToday } from '../cost-control/ai-spend';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class MarketingService {
     private queueService: QueueService,
     private timelineService: TimelineService,
     private controlPlaneService: ControlPlaneService,
+    private disclosure: DisclosureGateService,
   ) {}
 
   async generateFlyer(
@@ -113,6 +115,11 @@ export class MarketingService {
     if (!deal) {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
+    await this.disclosure.assertEquitableInterest(
+      accountId,
+      dealId,
+      'marketing this deal to buyers',
+    );
 
     const controlPlane = await this.getControlPlane(accountId);
     const todayCost = await this.getTodayCost(accountId);

@@ -30,6 +30,15 @@ quiet-hours rules. Written with the fixes for the 2026-10-10 audit (commit
 The internal `sms/send` and `email/send` routes, which took any `to` and any
 body behind the shared internal token, no longer exist.
 
+Buyer messages (buyer blasts and any draft addressed to a buyer) for a Texas
+deal are also refused at the send boundary until the equitable-interest
+disclosure is on file for the deal; see
+[documents-and-compliance.md](documents-and-compliance.md#texas-equitable-interest-gate).
+
+The first message that reaches a seller moves the deal from `new` to
+`contacted`, which starts the Deal Underwriter and makes the deal eligible
+for the Outreach Drafter's follow-ups.
+
 ## Opt-outs
 
 **SMS keywords** are matched against the whole message, ignoring case,

@@ -285,7 +285,10 @@ export class DealsService {
         stage,
         updated.updatedAt,
       );
-    } else if (stage === 'under_contract') {
+    } else if (stage === 'marketing') {
+      // Marketing starts once the seller has signed (the DocuSign
+      // completion moves the deal here), so buyers are only ranked for a
+      // property that is actually under contract.
       await this.queueStageAgent(
         'disposition_matcher',
         accountId,
@@ -300,8 +303,8 @@ export class DealsService {
 
   /**
    * Stage-driven agents (design doc s3.2, s3.4): the Deal Underwriter when a
-   * deal reaches contacted or negotiating, the Disposition Matcher when it
-   * goes under contract. Queue failures are logged, never thrown: the stage
+   * deal reaches contacted or negotiating, the Disposition Matcher when
+   * marketing starts after the seller signs. Queue failures are logged, never thrown: the stage
    * change already happened.
    */
   private async queueStageAgent(

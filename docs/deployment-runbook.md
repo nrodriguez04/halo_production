@@ -147,6 +147,22 @@ Test a restore once before launch, on a scratch VM.
 - **Kill switch**: **Admin → Control Plane → Disable all automation** stops
   every side effect (sends, paid calls, agents) within one tick; drafts and
   reads keep working.
+- **Alerts**: set `ALERT_WEBHOOK_URL` in `.env` to a Slack, Discord or Teams
+  incoming webhook. The api posts unexpected errors (any 500), jobs that
+  failed after their retries (checked every 5 minutes), and budgets that
+  reach 95% or 100%; repeats are held back for 15 minutes. **Admin →
+  Control Plane → Alerts → Send test alert** checks the webhook.
+- **Downtime**: install the on-box watcher, which alerts once when the api,
+  worker or web stop answering and once when they recover:
+
+  ```bash
+  sudo crontab -e
+  */5 * * * * cd /opt/halo && scripts/deploy/healthwatch.sh 2>&1 | logger -t halo-healthwatch
+  ```
+
+  It cannot report a dead server, so also point a free external uptime
+  monitor (UptimeRobot, Better Stack) at
+  `https://api.<domain>/api/health/live`.
 - **Rotate a provider key**: enter the new value on the Integrations card
   and click Test; nothing restarts. Rotate `TWILIO_AUTH_TOKEN` there and in
   Twilio at the same time (webhook signatures depend on it).
