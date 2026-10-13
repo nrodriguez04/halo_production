@@ -177,8 +177,39 @@ describe('AgentsProcessor', () => {
       status: 'COMPLETED',
       decision: ungated,
       costUsd: 0.01,
+      replay: { context: { lead: { id: 'lead-1' } }, reply: null },
     });
     expect(result).toEqual({ runId: 'run-1', status: 'COMPLETED', recommendation: 'hold' });
+  });
+
+  it("keeps the agent's context and the model's raw reply with the decision", async () => {
+    mockAgentRun.mockResolvedValue({
+      decision: gated,
+      costUsd: 0.02,
+      raw: '{"score": 82, "recommendation": "qualified"}',
+    });
+    await processor.process(job());
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith(
+      'acct',
+      'run-1',
+      expect.objectContaining({
+        replay: {
+          context: { lead: { id: 'lead-1' } },
+          reply: '{"score": 82, "recommendation": "qualified"}',
+        },
+      }),
+    );
+  });
+
+  it('leaves out a context too large to send, but still records the decision', async () => {
+    mockLoadLeadContext.mockResolvedValue({
+      lead: { id: 'lead-1' },
+      sources: [{ summary: { remarks: 'x'.repeat(210_000) } }],
+    });
+    await processor.process(job());
+    const report = mockRecordAgentDecision.mock.calls[0][2];
+    expect(report).toMatchObject({ status: 'COMPLETED', decision: ungated });
+    expect(report.replay).toBeUndefined();
   });
 
   it('reports AWAITING_APPROVAL when any action is gated', async () => {
@@ -188,6 +219,7 @@ describe('AgentsProcessor', () => {
       status: 'AWAITING_APPROVAL',
       decision: gated,
       costUsd: 0.02,
+      replay: { context: { lead: { id: 'lead-1' } }, reply: null },
     });
     expect(result.status).toBe('AWAITING_APPROVAL');
   });
@@ -279,6 +311,7 @@ describe('AgentsProcessor', () => {
       status: 'COMPLETED',
       decision: numbers,
       costUsd: 0.05,
+      replay: { context: { deal: { id: 'deal-1' } }, reply: null },
     });
     expect(result.status).toBe('COMPLETED');
   });
@@ -329,6 +362,7 @@ describe('AgentsProcessor', () => {
       status: 'AWAITING_APPROVAL',
       decision: draft,
       costUsd: 0.004,
+      replay: { context: { inbound: { id: 'msg-1' } }, reply: null },
     });
     expect(result.status).toBe('AWAITING_APPROVAL');
   });
@@ -350,6 +384,7 @@ describe('AgentsProcessor', () => {
       status: 'COMPLETED',
       decision: ranking,
       costUsd: 0,
+      replay: { context: { deal: { id: 'deal-1' } }, reply: null },
     });
     expect(result.status).toBe('COMPLETED');
   });

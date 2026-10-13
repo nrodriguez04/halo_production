@@ -1,0 +1,1289 @@
+{
+  "agent": "disposition_matcher",
+  "liveThreshold": 0.8,
+  "notes": "Deals in marketing with the buyers a person would send the blast to. Buy-box scoring is deterministic; the model shortlists and writes the blast. Synthetic buyers.",
+  "bases": {
+    "deal": {
+      "deal": {
+        "id": "deal-golden",
+        "stage": "marketing",
+        "arv": 172000,
+        "repairEstimate": 32000,
+        "mao": 78400,
+        "offerAmount": 72000
+      },
+      "property": {
+        "address": "2418 Pecan Grove Dr",
+        "city": "Memphis",
+        "state": "TN",
+        "zip": "38116",
+        "estimatedValue": 142000
+      },
+      "underwriting": {
+        "confidence": 0.55,
+        "offerRange": {
+          "low": 62000,
+          "high": 74000
+        },
+        "rationale": "ARV from the assessor value and an unsold $154,900 listing; moderate repairs."
+      },
+      "buyers": [
+        {
+          "id": "b-riverbend",
+          "name": "Riverbend Renovations",
+          "preferences": {
+            "locations": [
+              "Memphis"
+            ],
+            "priceRange": {
+              "min": 50000,
+              "max": 120000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 8,
+          "lastContacted": "2026-09-20T15:00:00.000Z",
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 4,
+            "replies": 2,
+            "lastReplyAt": "2026-09-21T14:00:00.000Z"
+          }
+        },
+        {
+          "id": "b-midsouth",
+          "name": "Mid-South Rentals",
+          "preferences": {
+            "locations": [
+              "38116",
+              "38118"
+            ],
+            "priceRange": {
+              "min": 40000,
+              "max": 90000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 5,
+          "lastContacted": "2026-09-20T15:00:00.000Z",
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 3,
+            "replies": 1,
+            "lastReplyAt": "2026-09-21T14:00:00.000Z"
+          }
+        },
+        {
+          "id": "b-volunteer",
+          "name": "Volunteer Capital",
+          "preferences": {
+            "locations": [
+              "TN"
+            ],
+            "priceRange": {
+              "min": 60000,
+              "max": 250000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 6,
+          "lastContacted": "2026-09-20T15:00:00.000Z",
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 3,
+            "replies": 0,
+            "lastReplyAt": null
+          }
+        },
+        {
+          "id": "b-delta",
+          "name": "Delta Home Partners",
+          "preferences": {
+            "locations": [
+              "Memphis"
+            ],
+            "priceRange": {
+              "min": 80000,
+              "max": 140000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 3,
+          "lastContacted": "2026-09-20T15:00:00.000Z",
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 1,
+            "replies": 0,
+            "lastReplyAt": null
+          }
+        },
+        {
+          "id": "b-bluff",
+          "name": "Bluff City Holdings",
+          "preferences": {
+            "locations": [
+              "Memphis"
+            ],
+            "priceRange": {
+              "min": 150000,
+              "max": 300000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 4,
+          "lastContacted": null,
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 0,
+            "replies": 0,
+            "lastReplyAt": null
+          }
+        },
+        {
+          "id": "b-northgate",
+          "name": "Northgate Property Group",
+          "preferences": null,
+          "engagementScore": 0,
+          "lastContacted": null,
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 0,
+            "replies": 0,
+            "lastReplyAt": null
+          }
+        },
+        {
+          "id": "b-lonestar",
+          "name": "Lone Star Flips",
+          "preferences": {
+            "locations": [
+              "Dallas",
+              "Fort Worth"
+            ],
+            "priceRange": {
+              "min": 150000,
+              "max": 400000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 7,
+          "lastContacted": null,
+          "hasEmail": true,
+          "hasPhone": true,
+          "history": {
+            "sent": 0,
+            "replies": 0,
+            "lastReplyAt": null
+          }
+        },
+        {
+          "id": "b-cashkings",
+          "name": "Cash Kings Investments",
+          "preferences": {
+            "locations": [
+              "Memphis"
+            ],
+            "priceRange": {
+              "min": 50000,
+              "max": 100000
+            },
+            "propertyTypes": [
+              "single_family"
+            ]
+          },
+          "engagementScore": 9,
+          "lastContacted": null,
+          "hasEmail": false,
+          "hasPhone": true,
+          "history": {
+            "sent": 0,
+            "replies": 0,
+            "lastReplyAt": null
+          }
+        }
+      ],
+      "priorBlasts": [],
+      "team": {
+        "name": "Halo Home Buyers"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-no-buyers",
+      "title": "No buyers on file",
+      "base": "deal",
+      "context": {
+        "buyers": []
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_buyers",
+        "recommendation": "hold",
+        "actions": [
+          "rank_buyers"
+        ],
+        "noActions": [
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-emailable-buyers",
+      "title": "Buyers exist but none can be emailed",
+      "base": "deal",
+      "context": {
+        "buyers": [
+          {
+            "id": "b-cashkings",
+            "name": "Cash Kings Investments",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 100000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 9,
+            "lastContacted": null,
+            "hasEmail": false,
+            "hasPhone": true,
+            "history": {
+              "sent": 0,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          }
+        ]
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_contactable_buyers",
+        "recommendation": "hold",
+        "noActions": [
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-property",
+      "title": "Nothing to market without a property",
+      "base": "deal",
+      "context": {
+        "property": null
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_property",
+        "recommendation": "hold",
+        "noActions": [
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "memphis-ranking",
+      "title": "Memphis buyers in range who replied before lead the shortlist",
+      "base": "deal",
+      "context": {},
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-riverbend",
+            "fit": "strong",
+            "reason": "Buys in Memphis between $50,000 and $120,000 and replied to two of our last four deals."
+          },
+          {
+            "buyer_id": "b-midsouth",
+            "fit": "strong",
+            "reason": "Targets 38116 rentals up to $90,000 and has replied before."
+          },
+          {
+            "buyer_id": "b-volunteer",
+            "fit": "possible",
+            "reason": "Statewide buyer whose range covers the price; no replies yet."
+          },
+          {
+            "buyer_id": "b-delta",
+            "fit": "possible",
+            "reason": "Memphis buyer; the price is just under their stated minimum."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "Two Memphis buyers fit location and price and have replied before; two more are reasonable backups."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "tier": "mid",
+        "candidates": {
+          "top": [
+            "b-riverbend",
+            "b-midsouth",
+            "b-volunteer",
+            "b-delta"
+          ],
+          "exclude": [
+            "b-cashkings"
+          ]
+        },
+        "shortlist": {
+          "include": [
+            "b-riverbend",
+            "b-midsouth"
+          ],
+          "exclude": [
+            "b-lonestar",
+            "b-cashkings"
+          ],
+          "min": 2
+        },
+        "actions": [
+          "rank_buyers",
+          "queue_buyer_blast"
+        ],
+        "mentions": [
+          "Pecan Grove"
+        ]
+      }
+    },
+    {
+      "id": "unknown-and-duplicate-ids",
+      "title": "Ids that are not candidates, repeats and buyers without email are dropped",
+      "base": "deal",
+      "context": {},
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-ghost",
+            "fit": "strong",
+            "reason": "Not a real candidate."
+          },
+          {
+            "buyer_id": "b-riverbend",
+            "fit": "strong",
+            "reason": "Memphis, in range, replies."
+          },
+          {
+            "buyer_id": "b-riverbend",
+            "fit": "strong",
+            "reason": "Listed twice."
+          },
+          {
+            "buyer_id": "b-cashkings",
+            "fit": "strong",
+            "reason": "Has no email on file."
+          },
+          {
+            "buyer_id": "b-midsouth",
+            "fit": "possible",
+            "reason": "Zip match."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "Best fits first."
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "shortlist": {
+          "include": [
+            "b-riverbend",
+            "b-midsouth"
+          ],
+          "exclude": [
+            "b-ghost",
+            "b-cashkings"
+          ],
+          "min": 2,
+          "max": 2
+        },
+        "actions": [
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "shortlist-cap",
+      "title": "A shortlist longer than the cap is cut to ten",
+      "base": "deal",
+      "context": {
+        "buyers": [
+          {
+            "id": "b-m01",
+            "name": "Memphis Buyer 1",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 2,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m02",
+            "name": "Memphis Buyer 2",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 3,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m03",
+            "name": "Memphis Buyer 3",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 4,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m04",
+            "name": "Memphis Buyer 4",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 5,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m05",
+            "name": "Memphis Buyer 5",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 6,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m06",
+            "name": "Memphis Buyer 6",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 7,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m07",
+            "name": "Memphis Buyer 7",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 8,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m08",
+            "name": "Memphis Buyer 8",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 9,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m09",
+            "name": "Memphis Buyer 9",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 10,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m10",
+            "name": "Memphis Buyer 10",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 1,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m11",
+            "name": "Memphis Buyer 11",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 2,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m12",
+            "name": "Memphis Buyer 12",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 3,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-m13",
+            "name": "Memphis Buyer 13",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 4,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          }
+        ]
+      },
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-m01",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m02",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m03",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m04",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m05",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m06",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m07",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m08",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m09",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m10",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m11",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          },
+          {
+            "buyer_id": "b-m12",
+            "fit": "possible",
+            "reason": "Memphis buyer in range."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "Every candidate fits."
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "shortlist": {
+          "min": 10,
+          "max": 10
+        },
+        "actions": [
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "no-fit-birmingham",
+      "title": "A Birmingham deal and only Tennessee and Texas buyers: no blast",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "arv": 118000,
+          "repairEstimate": 30000,
+          "mao": 42600,
+          "offerAmount": 39000
+        },
+        "property": {
+          "address": "1408 Pike Ave",
+          "city": "Birmingham",
+          "state": "AL",
+          "zip": "35208",
+          "estimatedValue": 70000
+        },
+        "underwriting": {
+          "confidence": 0.5,
+          "offerRange": {
+            "low": 34000,
+            "high": 40000
+          },
+          "rationale": "1916 house; renovated values near $118,000."
+        },
+        "buyers": [
+          {
+            "id": "b-riverbend",
+            "name": "Riverbend Renovations",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 8,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 4,
+              "replies": 2,
+              "lastReplyAt": "2026-09-21T14:00:00.000Z"
+            }
+          },
+          {
+            "id": "b-midsouth",
+            "name": "Mid-South Rentals",
+            "preferences": {
+              "locations": [
+                "38116",
+                "38118"
+              ],
+              "priceRange": {
+                "min": 40000,
+                "max": 90000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 5,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 3,
+              "replies": 1,
+              "lastReplyAt": "2026-09-21T14:00:00.000Z"
+            }
+          },
+          {
+            "id": "b-volunteer",
+            "name": "Volunteer Capital",
+            "preferences": {
+              "locations": [
+                "TN"
+              ],
+              "priceRange": {
+                "min": 60000,
+                "max": 250000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 6,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 3,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-delta",
+            "name": "Delta Home Partners",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 80000,
+                "max": 140000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 3,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 1,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-bluff",
+            "name": "Bluff City Holdings",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 150000,
+                "max": 300000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 4,
+            "lastContacted": null,
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 0,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-lonestar",
+            "name": "Lone Star Flips",
+            "preferences": {
+              "locations": [
+                "Dallas",
+                "Fort Worth"
+              ],
+              "priceRange": {
+                "min": 150000,
+                "max": 400000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 7,
+            "lastContacted": null,
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 0,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          },
+          {
+            "id": "b-cashkings",
+            "name": "Cash Kings Investments",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 100000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 9,
+            "lastContacted": null,
+            "hasEmail": false,
+            "hasPhone": true,
+            "history": {
+              "sent": 0,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          }
+        ]
+      },
+      "reply": {
+        "shortlist": [],
+        "blast": null,
+        "rationale": "No candidate buys in Birmingham or Alabama; the Memphis and Texas buyers' stated locations do not include this market."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "hold",
+        "shortlist": {
+          "max": 0
+        },
+        "noActions": [
+          "queue_buyer_blast"
+        ]
+      }
+    },
+    {
+      "id": "target-price-from-arv",
+      "title": "With no offer or MAO the target is 70% of ARV, which reorders the buyers",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "arv": 200000,
+          "repairEstimate": null,
+          "mao": null,
+          "offerAmount": null
+        },
+        "underwriting": null
+      },
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-delta",
+            "fit": "strong",
+            "reason": "Memphis buyer whose $80,000 to $140,000 range fits the $140,000 target."
+          },
+          {
+            "buyer_id": "b-bluff",
+            "fit": "possible",
+            "reason": "Memphis buyer; the target is just under their $150,000 minimum."
+          },
+          {
+            "buyer_id": "b-volunteer",
+            "fit": "possible",
+            "reason": "Statewide range covers the target."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nEstimated ARV: $200,000\nTarget price: $140,000\n\nSold as-is. Reply to this email with questions or your offer.\n\nHalo Home Buyers"
+        },
+        "rationale": "One Memphis buyer fits the target squarely; two more are close."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "candidates": {
+          "top": [
+            "b-delta",
+            "b-riverbend",
+            "b-bluff",
+            "b-volunteer",
+            "b-midsouth"
+          ]
+        },
+        "shortlist": {
+          "include": [
+            "b-delta"
+          ],
+          "exclude": [
+            "b-cashkings"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nashville-state-match",
+      "title": "A Nashville deal goes to the statewide buyer, not the Memphis-only ones",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "arv": 265000,
+          "repairEstimate": 45000,
+          "mao": 130500,
+          "offerAmount": 125000
+        },
+        "property": {
+          "address": "1215 Lischey Ave",
+          "city": "Nashville",
+          "state": "TN",
+          "zip": "37207",
+          "estimatedValue": 215000
+        },
+        "underwriting": {
+          "confidence": 0.55,
+          "offerRange": {
+            "low": 110000,
+            "high": 128000
+          },
+          "rationale": "Renovated values in 37207 near $265,000."
+        }
+      },
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-volunteer",
+            "fit": "strong",
+            "reason": "Buys statewide in Tennessee and the $125,000 price is inside their range."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Nashville deal: 1215 Lischey Ave",
+          "body": "Off-market deal in Nashville (37207): 1215 Lischey Ave.\n\nAsking: $125,000\nEstimated ARV: $265,000\nEstimated repairs: $45,000\n\nSold as-is. Reply to this email for details or to schedule a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "Only the statewide buyer covers Nashville; the Memphis buyers name Memphis only."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "candidates": {
+          "top": [
+            "b-volunteer"
+          ]
+        },
+        "shortlist": {
+          "include": [
+            "b-volunteer"
+          ],
+          "exclude": [
+            "b-lonestar",
+            "b-bluff"
+          ]
+        },
+        "mentions": [
+          "Lischey"
+        ]
+      }
+    },
+    {
+      "id": "one-good-buyer",
+      "title": "One buyer fits and one does not: a shortlist of one",
+      "base": "deal",
+      "context": {
+        "buyers": [
+          {
+            "id": "b-riverbend",
+            "name": "Riverbend Renovations",
+            "preferences": {
+              "locations": [
+                "Memphis"
+              ],
+              "priceRange": {
+                "min": 50000,
+                "max": 120000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 8,
+            "lastContacted": "2026-09-20T15:00:00.000Z",
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 4,
+              "replies": 2,
+              "lastReplyAt": "2026-09-21T14:00:00.000Z"
+            }
+          },
+          {
+            "id": "b-lonestar",
+            "name": "Lone Star Flips",
+            "preferences": {
+              "locations": [
+                "Dallas",
+                "Fort Worth"
+              ],
+              "priceRange": {
+                "min": 150000,
+                "max": 400000
+              },
+              "propertyTypes": [
+                "single_family"
+              ]
+            },
+            "engagementScore": 7,
+            "lastContacted": null,
+            "hasEmail": true,
+            "hasPhone": true,
+            "history": {
+              "sent": 0,
+              "replies": 0,
+              "lastReplyAt": null
+            }
+          }
+        ]
+      },
+      "reply": {
+        "shortlist": [
+          {
+            "buyer_id": "b-riverbend",
+            "fit": "strong",
+            "reason": "Memphis buyer in range who has replied before."
+          }
+        ],
+        "blast": {
+          "subject": "Off-market Memphis deal: 2418 Pecan Grove Dr, $72,000",
+          "body": "Off-market deal in Memphis (38116): 2418 Pecan Grove Dr.\n\nAsking: $72,000\nEstimated ARV: $172,000\nEstimated repairs: $32,000\n\nSold as-is. Reply to this email if you want the details or a walkthrough.\n\nHalo Home Buyers"
+        },
+        "rationale": "The Dallas buyer neither buys in Memphis nor at this price."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "market",
+        "shortlist": {
+          "include": [
+            "b-riverbend"
+          ],
+          "exclude": [
+            "b-lonestar"
+          ]
+        },
+        "actions": [
+          "queue_buyer_blast"
+        ]
+      }
+    }
+  ]
+}

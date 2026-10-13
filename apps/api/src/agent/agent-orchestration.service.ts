@@ -61,6 +61,8 @@ export interface DecisionReport {
   decision?: AgentDecision;
   costUsd?: number;
   error?: string;
+  /** What the agent saw and the model's raw reply, kept with the run. */
+  replay?: { context?: unknown; reply?: unknown };
 }
 
 interface AppliedAction {
@@ -73,6 +75,8 @@ type GatedAction = Extract<AgentAction, { gated: boolean }>;
 
 const DEFAULT_SWEEP_STALE_DAYS = 7;
 const DEFAULT_FOLLOWUP_DAYS = 3;
+/** Model replies are a few kB; anything longer is cut, never refused. */
+const MAX_REPLAY_REPLY_CHARS = 20_000;
 
 /**
  * The api side of the agent frame: enqueue runs, open the ledger row before
@@ -161,6 +165,7 @@ export class AgentOrchestrationService {
     if (!report.decision) {
       throw new BadRequestException('A decision is required to complete a run');
     }
+    await this.storeReplay(accountId, runId, report.decision, report.replay);
 
     const autonomy = await this.autonomyOf(accountId);
     const outcomes = await this.applyAutonomous(
@@ -214,6 +219,44 @@ export class AgentOrchestrationService {
       },
       aiCostUsd: report.costUsd ?? 0,
     });
+  }
+
+  /**
+   * Keeps what the agent saw and what the model answered, so the run can be
+   * replayed exactly and a reviewed run can seed the golden set
+   * (docs/agent-eval.md). Best effort: a replay that cannot be stored never
+   * costs the decision.
+   */
+  private async storeReplay(
+    accountId: string,
+    runId: string,
+    decision: AgentDecision,
+    replay: DecisionReport['replay'],
+  ) {
+    const context = replay?.context;
+    if (!context || typeof context !== 'object' || Array.isArray(context)) {
+      return;
+    }
+    const data = {
+      agent: decision.agent,
+      promptVersion: decision.promptVersion ?? null,
+      context: context as Prisma.InputJsonObject,
+      reply:
+        typeof replay.reply === 'string'
+          ? replay.reply.slice(0, MAX_REPLAY_REPLY_CHARS)
+          : null,
+    };
+    try {
+      await this.prisma.agentRunReplay.upsert({
+        where: { runId },
+        create: { runId, tenantId: accountId, ...data },
+        update: data,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Replay for agent run ${runId} not stored: ${(err as Error).message}`,
+      );
+    }
   }
 
   /** A person accepts the recommendation: the gated actions happen now. */

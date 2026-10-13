@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual runs also run the agents' live eval when its key is set.
+  workflow_dispatch:
 
 jobs:
   lint-typecheck-build:
@@ -85,6 +87,70 @@ jobs:
         env:
           DATABASE_URL: postgresql://halo:halo_dev_password@localhost:5432/halo_test
         run: cd apps/api && npx prisma migrate deploy
+
+  agents-eval:
+    # The agents' golden set (docs/agent-eval.md): every case replayed
+    # through the real agent against its recorded model reply, free and
+    # deterministic. When the EVAL_OPENAI_API_KEY secret is set, a change to
+    # a prompt, an agent or the golden set (or a manual run) also asks the
+    # real models and must keep each agent's decision agreement above its
+    # threshold: about $0.30 a run, stopped at $2.
+    runs-on: ubuntu-latest
+    env:
+      # Whether the key exists; the key itself only reaches the live step.
+      LIVE_EVAL: ${{ secrets.EVAL_OPENAI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build shared package
+        run: npm run build -w @halo/shared
+
+      - name: Golden set, recorded replies
+        run: npm run agents:eval -- --report "$RUNNER_TEMP/agents-eval.md"
+
+      - name: Report
+        if: always()
+        run: cat "$RUNNER_TEMP/agents-eval.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Did prompts, agents or the golden set change?
+        id: changes
+        if: env.LIVE_EVAL == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT" = "pull_request" ]; then
+            base="origin/$BASE_REF"
+          else
+            base="$BEFORE"
+          fi
+          if git diff --name-only "$base"...HEAD -- packages/shared/src/agents apps/worker/src/agents apps/worker/eval | grep -q .; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Golden set, live models
+        if: steps.changes.outputs.live == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.EVAL_OPENAI_API_KEY }}
+        run: npm run agents:eval -- --live --via openai --max-cost-usd 2 --report "$RUNNER_TEMP/agents-eval-live.md"
+
+      - name: Live report
+        if: always() && steps.changes.outputs.live == 'true'
+        run: cat "$RUNNER_TEMP/agents-eval-live.md" >> "$GITHUB_STEP_SUMMARY" || true
 
   agents-tests:
     # The CrewAI runtime is Python and outside the npm workspaces. Only the

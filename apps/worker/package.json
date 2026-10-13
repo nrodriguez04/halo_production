@@ -6,11 +6,12 @@
     "build": "nest build",
     "start": "node dist/main",
     "dev": "nest start --watch",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
-    "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"{src,apps,libs,test,eval}/**/*.ts\"",
+    "lint:fix": "eslint \"{src,apps,libs,test,eval}/**/*.ts\" --fix",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p eval/tsconfig.json",
     "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "eval": "tsx eval/run-eval.ts"
   },
   "dependencies": {
     "@halo/shared": "*",
@@ -42,7 +43,8 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "roots": [
-      "<rootDir>/src"
+      "<rootDir>/src",
+      "<rootDir>/eval"
     ]
   }
 }

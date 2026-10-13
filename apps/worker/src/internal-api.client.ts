@@ -271,11 +271,19 @@ export function openAgentRun(
   return postInternal<{ id: string }>('agent/runs', accountId, { ...input });
 }
 
+/** What the agent saw and what the model answered, kept with the run (docs/agent-eval.md). */
+export interface AgentReplay {
+  context: Record<string, unknown>;
+  /** The model's raw reply; null when a rule decided. */
+  reply: string | null;
+}
+
 export interface AgentDecisionReport {
   status: 'COMPLETED' | 'AWAITING_APPROVAL' | 'FAILED' | 'CANCELLED';
   decision?: AgentDecision;
   costUsd?: number;
   error?: string;
+  replay?: AgentReplay;
 }
 
 /** Reports the decision; the api applies it within the tenant's autonomy tier. */

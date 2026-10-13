@@ -228,6 +228,7 @@ export class InternalController {
       decision: dto.decision as unknown as AgentDecision | undefined,
       costUsd: dto.costUsd,
       error: dto.error,
+      replay: dto.replay,
     };
     return this.agents.recordDecision(accountId, id, report);
   }

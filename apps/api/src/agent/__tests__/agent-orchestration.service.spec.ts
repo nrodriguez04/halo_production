@@ -11,6 +11,7 @@ const prisma = {
   lead: { updateMany: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
   deal: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
   underwritingResult: { upsert: jest.fn() },
+  agentRunReplay: { upsert: jest.fn() },
   message: { findFirst: jest.fn(), update: jest.fn() },
   marketingMaterial: { create: jest.fn() },
   buyer: { findMany: jest.fn() },
@@ -222,6 +223,48 @@ describe('AgentOrchestrationService', () => {
         error: 'openai unavailable',
         decision: null,
       });
+    });
+
+    it('keeps the context and the model reply with the run', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: ruleDisqualify,
+        costUsd: 0,
+        replay: {
+          context: { lead: { id: 'lead-1' }, dnc: true },
+          reply: 'x'.repeat(25_000),
+        },
+      });
+      const call = prisma.agentRunReplay.upsert.mock.calls[0][0];
+      expect(call.where).toEqual({ runId: 'run-1' });
+      expect(call.create).toMatchObject({
+        runId: 'run-1',
+        tenantId: 'acct',
+        agent: 'lead_analyst',
+        promptVersion: ruleDisqualify.promptVersion,
+        context: { lead: { id: 'lead-1' }, dnc: true },
+      });
+      expect(call.create.reply).toHaveLength(20_000);
+    });
+
+    it('records the decision even when the replay cannot be stored', async () => {
+      prisma.agentRunReplay.upsert.mockRejectedValueOnce(new Error('db down'));
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: ruleDisqualify,
+        costUsd: 0,
+        replay: { context: { lead: { id: 'lead-1' } }, reply: null },
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalled();
+    });
+
+    it('stores no replay without a context', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: ruleDisqualify,
+        costUsd: 0,
+      });
+      expect(prisma.agentRunReplay.upsert).not.toHaveBeenCalled();
     });
 
     it('rejects a run the tenant does not own', async () => {

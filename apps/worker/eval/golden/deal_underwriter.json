@@ -1,0 +1,633 @@
+{
+  "agent": "deal_underwriter",
+  "liveThreshold": 0.75,
+  "notes": "Deals with the valuation range and recommendation a person would accept. MAO = ARV x 0.70 - repairs - 10,000 (prompt). Synthetic data.",
+  "bases": {
+    "deal": {
+      "deal": {
+        "id": "deal-golden",
+        "stage": "contacted",
+        "arv": null,
+        "repairEstimate": null,
+        "mao": null,
+        "offerAmount": null,
+        "createdAt": "2026-10-04T16:00:00.000Z",
+        "updatedAt": "2026-10-06T10:30:00.000Z"
+      },
+      "property": {
+        "address": "2418 Pecan Grove Dr",
+        "city": "Memphis",
+        "state": "TN",
+        "zip": "38116",
+        "apn": "075-123-0042",
+        "estimatedValue": 142000,
+        "salePrice": 58000
+      },
+      "lead": {
+        "status": "qualified",
+        "score": 86,
+        "tags": [
+          "owner:absentee",
+          "source:rentcast",
+          "listing:expired",
+          "stale_listing"
+        ]
+      },
+      "sources": [
+        {
+          "provider": "attom",
+          "endpoint": "property/detailowner",
+          "summary": {
+            "propertyType": "SFR",
+            "yearBuilt": 1967,
+            "beds": 3,
+            "baths": 1.5,
+            "sqft": 1320,
+            "assessedValue": 35500,
+            "marketValue": 142000,
+            "lastSaleAmount": 58000,
+            "lastSaleDate": "2004-03-18",
+            "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+            "ownerOccupied": false
+          }
+        },
+        {
+          "provider": "rentcast",
+          "endpoint": "listings/sale",
+          "summary": {
+            "source": "rentcast",
+            "listingKey": "rc-77120",
+            "mlsId": null,
+            "status": "Expired",
+            "listPrice": 154900,
+            "daysOnMarket": 199,
+            "propertyType": "Single Family",
+            "bedrooms": 3,
+            "bathrooms": 1.5,
+            "livingArea": 1320,
+            "yearBuilt": 1967,
+            "listDate": "2026-02-10",
+            "city": "Memphis",
+            "postalCode": "38116"
+          }
+        }
+      ],
+      "priorResult": null,
+      "timeline": [
+        {
+          "at": "2026-10-06T10:30:00.000Z",
+          "type": "deal.stage.contacted"
+        },
+        {
+          "at": "2026-10-04T16:00:00.000Z",
+          "type": "deal.created"
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-no-property",
+      "title": "No property on the deal: nothing to value",
+      "base": "deal",
+      "context": {
+        "property": null
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_property",
+        "recommendation": "hold",
+        "actions": [
+          "append_note"
+        ],
+        "noActions": [
+          "set_deal_economics"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-zip",
+      "title": "A property without a ZIP is not enough to value",
+      "base": "deal",
+      "context": {
+        "property": {
+          "zip": ""
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_property",
+        "recommendation": "hold",
+        "noActions": [
+          "set_deal_economics"
+        ]
+      }
+    },
+    {
+      "id": "memphis-ranch",
+      "title": "1967 ranch with an assessor value and an unsold listing",
+      "base": "deal",
+      "context": {},
+      "reply": {
+        "arv": 172000,
+        "repair_estimate": 32000,
+        "mao": 78400,
+        "offer_low": 62000,
+        "offer_high": 74000,
+        "confidence": 0.55,
+        "recommendation": "offer",
+        "rationale": "Market value $142,000 as-is and an unsold list price of $154,900 point to about $172,000 renovated for a 1967 3/1.5 ranch of 1,320 sq ft. Repairs assume a moderate update (kitchen, bath, flooring, paint, HVAC service). MAO = 172,000 x 0.70 - 32,000 - 10,000 = 78,400.",
+        "comps_summary": "No comparable sales in the context; ARV anchored on the assessor market value and the 199-day listing that did not sell at $154,900."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "offer",
+        "tier": "strong",
+        "arv": {
+          "min": 140000,
+          "max": 205000
+        },
+        "repairs": {
+          "min": 15000,
+          "max": 60000
+        },
+        "mao": {
+          "min": 40000,
+          "max": 115000
+        },
+        "confidence": {
+          "min": 0.4,
+          "max": 0.85
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "person-entered-numbers",
+      "title": "A person's numbers are a prior the model should mostly keep",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "stage": "negotiating",
+          "arv": 175000,
+          "repairEstimate": 30000,
+          "mao": 82500,
+          "offerAmount": 70000,
+          "updatedAt": "2026-10-08T14:00:00.000Z"
+        }
+      },
+      "reply": {
+        "arv": 172000,
+        "repair_estimate": 32000,
+        "mao": 78400,
+        "offer_low": 62000,
+        "offer_high": 76000,
+        "confidence": 0.55,
+        "recommendation": "offer",
+        "rationale": "The entered ARV of $175,000 is close to what the data supports (about $172,000), so it stands; repairs a little higher at $32,000 for a 1967 ranch. MAO = 172,000 x 0.70 - 32,000 - 10,000 = 78,400, so the $70,000 offer leaves room.",
+        "comps_summary": "No comparable sales in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "offer",
+        "arv": {
+          "min": 160000,
+          "max": 190000
+        },
+        "mao": {
+          "min": 60000,
+          "max": 95000
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "no-data-hold",
+      "title": "No value, no sale history, no listing: hold with low confidence",
+      "base": "deal",
+      "context": {
+        "property": {
+          "apn": null,
+          "estimatedValue": null,
+          "salePrice": null
+        },
+        "lead": {
+          "tags": [
+            "owner:absentee"
+          ]
+        },
+        "sources": []
+      },
+      "reply": {
+        "arv": null,
+        "repair_estimate": null,
+        "mao": null,
+        "offer_low": null,
+        "offer_high": null,
+        "confidence": 0.15,
+        "recommendation": "hold",
+        "rationale": "No valuation, sale history or listing data for this property, so ARV cannot be estimated responsibly. Pull a property record or comparable sales, then re-run.",
+        "comps_summary": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "hold",
+        "confidence": {
+          "min": 0,
+          "max": 0.4
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "old-house-no-spread",
+      "title": "1916 house where full repairs leave no room under the asking price",
+      "base": "deal",
+      "context": {
+        "property": {
+          "address": "1408 Pike Ave",
+          "city": "Birmingham",
+          "state": "AL",
+          "zip": "35208",
+          "apn": "29-00-12-3-004-011.000",
+          "estimatedValue": 70000,
+          "salePrice": 41000
+        },
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:active"
+          ]
+        },
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1916,
+              "beds": 3,
+              "baths": 1,
+              "sqft": 1650,
+              "assessedValue": 7000,
+              "marketValue": 70000,
+              "lastSaleAmount": 41000,
+              "lastSaleDate": "2015-10-20",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-35208-14",
+              "mlsId": null,
+              "status": "Active",
+              "listPrice": 64900,
+              "daysOnMarket": 47,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1,
+              "livingArea": 1650,
+              "yearBuilt": 1916,
+              "listDate": "2026-08-27",
+              "city": "Birmingham",
+              "postalCode": "35208"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "arv": 88000,
+        "repair_estimate": 48000,
+        "mao": 3600,
+        "offer_low": null,
+        "offer_high": null,
+        "confidence": 0.5,
+        "recommendation": "pass",
+        "rationale": "A 1916 house of 1,650 sq ft in 35208 where renovated values top out near $90,000. A full update is likely about $48,000, so MAO = 88,000 x 0.70 - 48,000 - 10,000 = 3,600, far below the $64,900 asking price. No room for an assignment.",
+        "comps_summary": "No sales in the context; ARV from the $70,000 market value and the active $64,900 list price."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "pass",
+          "hold"
+        ],
+        "mao": {
+          "max": 25000
+        },
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "austin-high-value",
+      "title": "Austin house worth about half a million",
+      "base": "deal",
+      "context": {
+        "property": {
+          "address": "6808 Bramble Dr",
+          "city": "Austin",
+          "state": "TX",
+          "zip": "78745",
+          "apn": "0418230312",
+          "estimatedValue": 455000,
+          "salePrice": 210000
+        },
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "tax:delinquent"
+          ]
+        },
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1984,
+              "beds": 3,
+              "baths": 2,
+              "sqft": 1650,
+              "assessedValue": 455000,
+              "marketValue": 455000,
+              "lastSaleAmount": 210000,
+              "lastSaleDate": "2012-06-15",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "arv": 535000,
+        "repair_estimate": 45000,
+        "mao": 319500,
+        "offer_low": 270000,
+        "offer_high": 305000,
+        "confidence": 0.55,
+        "recommendation": "offer",
+        "rationale": "Assessed and market value of $455,000 for a dated 1984 3/2 of 1,650 sq ft; renovated houses in 78745 should reach about $535,000. Moderate repairs of $45,000. MAO = 535,000 x 0.70 - 45,000 - 10,000 = 319,500.",
+        "comps_summary": "No comparable sales in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "offer",
+        "arv": {
+          "min": 450000,
+          "max": 620000
+        },
+        "mao": {
+          "min": 250000,
+          "max": 400000
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "cleveland-duplex",
+      "title": "1915 duplex in Cleveland with delinquent taxes",
+      "base": "deal",
+      "context": {
+        "property": {
+          "address": "3714 E 116th St",
+          "city": "Cleveland",
+          "state": "OH",
+          "zip": "44105",
+          "apn": "138-21-044",
+          "estimatedValue": 98000,
+          "salePrice": 52000
+        },
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "tax:delinquent",
+            "source:realie"
+          ]
+        },
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "DUPLEX (2 UNITS, ANY COMBINATION)",
+              "yearBuilt": 1915,
+              "beds": 4,
+              "baths": 2,
+              "sqft": 2400,
+              "assessedValue": 34300,
+              "marketValue": 98000,
+              "lastSaleAmount": 52000,
+              "lastSaleDate": "2013-04-30",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          }
+        ]
+      },
+      "reply": {
+        "arv": 135000,
+        "repair_estimate": 38000,
+        "mao": 46500,
+        "offer_low": 36000,
+        "offer_high": 44000,
+        "confidence": 0.5,
+        "recommendation": "offer",
+        "rationale": "A 1915 duplex of 2,400 sq ft with a $98,000 market value; renovated duplexes nearby should sell around $135,000. Repairs of $38,000 for two units. MAO = 135,000 x 0.70 - 38,000 - 10,000 = 46,500.",
+        "comps_summary": "No comparable sales in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "offer",
+          "hold"
+        ],
+        "arv": {
+          "min": 100000,
+          "max": 175000
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "indianapolis-stale-listing",
+      "title": "Listed 160 days at $119,900 against a $128,000 value",
+      "base": "deal",
+      "context": {
+        "property": {
+          "address": "2117 N Gale St",
+          "city": "Indianapolis",
+          "state": "IN",
+          "zip": "46218",
+          "apn": "49-07-29-121-009.000-101",
+          "estimatedValue": 128000,
+          "salePrice": 61000
+        },
+        "lead": {
+          "tags": [
+            "owner:absentee",
+            "source:rentcast",
+            "listing:active",
+            "stale_listing"
+          ]
+        },
+        "sources": [
+          {
+            "provider": "attom",
+            "endpoint": "property/detailowner",
+            "summary": {
+              "propertyType": "SFR",
+              "yearBuilt": 1925,
+              "beds": 3,
+              "baths": 1,
+              "sqft": 1290,
+              "assessedValue": 112400,
+              "marketValue": 128000,
+              "lastSaleAmount": 61000,
+              "lastSaleDate": "2016-08-19",
+              "absenteeIndicator": "ABSENTEE(MAIL AND SITUS NOT =)",
+              "ownerOccupied": false
+            }
+          },
+          {
+            "provider": "rentcast",
+            "endpoint": "listings/sale",
+            "summary": {
+              "source": "rentcast",
+              "listingKey": "rc-46218-2117",
+              "mlsId": null,
+              "status": "Active",
+              "listPrice": 119900,
+              "daysOnMarket": 160,
+              "propertyType": "Single Family",
+              "bedrooms": 3,
+              "bathrooms": 1,
+              "livingArea": 1290,
+              "yearBuilt": 1925,
+              "listDate": "2026-05-06",
+              "city": "Indianapolis",
+              "postalCode": "46218"
+            }
+          }
+        ]
+      },
+      "reply": {
+        "arv": 150000,
+        "repair_estimate": 30000,
+        "mao": 65000,
+        "offer_low": 52000,
+        "offer_high": 62000,
+        "confidence": 0.55,
+        "recommendation": "offer",
+        "rationale": "Value of $128,000 as-is and a listing that has not sold at $119,900 in 160 days; a renovated 1925 3/1 of 1,290 sq ft in 46218 should reach about $150,000. Repairs of $30,000. MAO = 150,000 x 0.70 - 30,000 - 10,000 = 65,000.",
+        "comps_summary": "No comparable sales in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "offer",
+        "arv": {
+          "min": 120000,
+          "max": 180000
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "consistent-with-prior-run",
+      "title": "A second run with the same data stays near the first result",
+      "base": "deal",
+      "context": {
+        "deal": {
+          "stage": "negotiating",
+          "updatedAt": "2026-10-09T12:00:00.000Z"
+        },
+        "priorResult": {
+          "arv": 168000,
+          "repairEstimate": 30000,
+          "mao": 77600,
+          "confidence": 0.6,
+          "rationale": "ARV from the assessor value and the unsold list price; moderate repairs assumed.",
+          "updatedAt": "2026-10-06T10:31:00.000Z",
+          "metadata": {
+            "source": "agent",
+            "offerRange": {
+              "low": 62000,
+              "high": 74000
+            }
+          }
+        },
+        "timeline": [
+          {
+            "at": "2026-10-09T12:00:00.000Z",
+            "type": "deal.stage.negotiating"
+          },
+          {
+            "at": "2026-10-06T10:30:00.000Z",
+            "type": "deal.stage.contacted"
+          }
+        ]
+      },
+      "reply": {
+        "arv": 170000,
+        "repair_estimate": 31000,
+        "mao": 78000,
+        "offer_low": 63000,
+        "offer_high": 75000,
+        "confidence": 0.6,
+        "recommendation": "offer",
+        "rationale": "Nothing new since the last valuation; ARV stays near $170,000 and repairs near $31,000. MAO = 170,000 x 0.70 - 31,000 - 10,000 = 78,000.",
+        "comps_summary": "No comparable sales in the context."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "offer",
+        "arv": {
+          "min": 150000,
+          "max": 190000
+        },
+        "actions": [
+          "set_deal_economics",
+          "append_note"
+        ]
+      }
+    },
+    {
+      "id": "reply-not-json",
+      "title": "A prose estimate is rejected, not parsed",
+      "base": "deal",
+      "context": {},
+      "reply": "ARV is probably around $170k. Let me know if you need more.",
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    }
+  ]
+}

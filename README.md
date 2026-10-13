@@ -308,6 +308,7 @@ npm run typecheck    # Type check all packages
 
 ```bash
 npm run test                    # Unit tests (all packages)
+npm run agents:eval             # Agent golden set, recorded replies (docs/agent-eval.md)
 npm run e2e                     # Golden path E2E script
 npx tsx scripts/security-pentest.ts  # Security pen test (80 checks, no deps)
 cd apps/api && npm run test:e2e      # Jest E2E suites

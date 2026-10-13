@@ -1,0 +1,1236 @@
+{
+  "agent": "outreach_drafter",
+  "liveThreshold": 0.8,
+  "notes": "Seller conversations with the classification and reply a person would send. Opt-out and wrong-number phrases, DNC and the follow-up cap are rules. Synthetic data.",
+  "bases": {
+    "sms_reply": {
+      "trigger": "inbound",
+      "entity": {
+        "type": "deal",
+        "id": "deal-golden"
+      },
+      "deal": {
+        "id": "deal-golden",
+        "stage": "contacted",
+        "arv": 172000,
+        "mao": 78400,
+        "offerAmount": null,
+        "createdAt": "2026-10-04T16:00:00.000Z"
+      },
+      "lead": {
+        "id": "lead-golden",
+        "status": "qualified",
+        "score": 86,
+        "tags": [
+          "owner:absentee",
+          "listing:expired"
+        ],
+        "ownerName": "M. Johnson",
+        "hasPhone": true,
+        "hasEmail": false
+      },
+      "property": {
+        "address": "2418 Pecan Grove Dr",
+        "city": "Memphis",
+        "state": "TN",
+        "zip": "38116"
+      },
+      "compliance": {
+        "dnc": false,
+        "consents": {
+          "sms": true,
+          "email": false
+        }
+      },
+      "thread": [
+        {
+          "id": "msg-out-1",
+          "direction": "outbound",
+          "channel": "sms",
+          "status": "delivered",
+          "at": "2026-10-06T15:02:00.000Z",
+          "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+        },
+        {
+          "id": "msg-in-1",
+          "direction": "inbound",
+          "channel": "sms",
+          "status": "received",
+          "at": "2026-10-06T16:40:00.000Z",
+          "content": "Who is this?"
+        }
+      ],
+      "inbound": {
+        "id": "msg-in-1",
+        "channel": "sms",
+        "content": "Who is this?",
+        "at": "2026-10-06T16:40:00.000Z"
+      },
+      "followUps": {
+        "outboundSinceLastInbound": 0,
+        "lastOutboundAt": "2026-10-06T15:02:00.000Z",
+        "lastInboundAt": "2026-10-06T16:40:00.000Z"
+      },
+      "team": {
+        "name": "Halo Home Buyers"
+      }
+    },
+    "email_reply": {
+      "trigger": "inbound",
+      "entity": {
+        "type": "deal",
+        "id": "deal-golden"
+      },
+      "deal": {
+        "id": "deal-golden",
+        "stage": "contacted",
+        "arv": 172000,
+        "mao": 78400,
+        "offerAmount": null,
+        "createdAt": "2026-10-04T16:00:00.000Z"
+      },
+      "lead": {
+        "id": "lead-golden",
+        "status": "qualified",
+        "score": 86,
+        "tags": [
+          "owner:absentee",
+          "listing:expired"
+        ],
+        "ownerName": "M. Johnson",
+        "hasPhone": false,
+        "hasEmail": true
+      },
+      "property": {
+        "address": "2418 Pecan Grove Dr",
+        "city": "Memphis",
+        "state": "TN",
+        "zip": "38116"
+      },
+      "compliance": {
+        "dnc": false,
+        "consents": {
+          "sms": false,
+          "email": true
+        }
+      },
+      "thread": [
+        {
+          "id": "msg-out-1",
+          "direction": "outbound",
+          "channel": "email",
+          "status": "delivered",
+          "at": "2026-10-06T15:02:00.000Z",
+          "content": "Cash offer for 2418 Pecan Grove Dr\n\nHello, my name is Sam and I buy houses in Memphis for cash. I would like to make you an offer on 2418 Pecan Grove Dr. We buy as-is and you pick the closing date. If you are open to a short conversation, just reply to this email."
+        },
+        {
+          "id": "msg-in-1",
+          "direction": "inbound",
+          "channel": "email",
+          "status": "received",
+          "at": "2026-10-06T16:40:00.000Z",
+          "content": "Who is this?"
+        }
+      ],
+      "inbound": {
+        "id": "msg-in-1",
+        "channel": "email",
+        "content": "Who is this?",
+        "at": "2026-10-06T16:40:00.000Z"
+      },
+      "followUps": {
+        "outboundSinceLastInbound": 0,
+        "lastOutboundAt": "2026-10-06T15:02:00.000Z",
+        "lastInboundAt": "2026-10-06T16:40:00.000Z"
+      },
+      "team": {
+        "name": "Halo Home Buyers"
+      }
+    },
+    "follow_up": {
+      "trigger": "sweep",
+      "entity": {
+        "type": "deal",
+        "id": "deal-golden"
+      },
+      "deal": {
+        "id": "deal-golden",
+        "stage": "contacted",
+        "arv": 172000,
+        "mao": 78400,
+        "offerAmount": null,
+        "createdAt": "2026-10-04T16:00:00.000Z"
+      },
+      "lead": {
+        "id": "lead-golden",
+        "status": "qualified",
+        "score": 86,
+        "tags": [
+          "owner:absentee",
+          "listing:expired"
+        ],
+        "ownerName": "M. Johnson",
+        "hasPhone": true,
+        "hasEmail": false
+      },
+      "property": {
+        "address": "2418 Pecan Grove Dr",
+        "city": "Memphis",
+        "state": "TN",
+        "zip": "38116"
+      },
+      "compliance": {
+        "dnc": false,
+        "consents": {
+          "sms": true,
+          "email": false
+        }
+      },
+      "thread": [
+        {
+          "id": "msg-out-1",
+          "direction": "outbound",
+          "channel": "sms",
+          "status": "delivered",
+          "at": "2026-10-06T15:02:00.000Z",
+          "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+        }
+      ],
+      "inbound": null,
+      "followUps": {
+        "outboundSinceLastInbound": 1,
+        "lastOutboundAt": "2026-10-06T15:02:00.000Z",
+        "lastInboundAt": null
+      },
+      "team": {
+        "name": "Halo Home Buyers"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-stop-texting",
+      "title": "An explicit request to stop is an opt-out, applied without a model",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Please stop texting me."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Please stop texting me.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "opt_out_phrase",
+        "recommendation": "opt_out",
+        "actions": [
+          "classify_inbound:opt_out:rule",
+          "record_opt_out:autonomous"
+        ],
+        "noActions": [
+          "draft_message",
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "rule-take-me-off",
+      "title": "Take me off your list",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Take me off your list. Not selling."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Take me off your list. Not selling.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "opt_out_phrase",
+        "recommendation": "opt_out",
+        "actions": [
+          "record_opt_out:autonomous"
+        ],
+        "noActions": [
+          "draft_message",
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "rule-never-call",
+      "title": "Never call or text again",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Never call or text this number again"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Never call or text this number again",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "opt_out_phrase",
+        "recommendation": "opt_out",
+        "actions": [
+          "record_opt_out:autonomous"
+        ],
+        "noActions": [
+          "draft_message",
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "rule-wrong-number",
+      "title": "Wrong number: flag the contact, no reply",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Wrong number. I don't own any house on Pecan Grove."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Wrong number. I don't own any house on Pecan Grove.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "wrong_number_phrase",
+        "recommendation": "wrong_number",
+        "actions": [
+          "classify_inbound:wrong_number:rule",
+          "flag_contact:wrong_number"
+        ],
+        "noActions": [
+          "draft_message",
+          "record_opt_out"
+        ]
+      }
+    },
+    {
+      "id": "rule-not-the-owner",
+      "title": "A tenant answering is a wrong number for the owner",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "I'm not the owner, I just rent here."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "I'm not the owner, I just rent here.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "wrong_number_phrase",
+        "recommendation": "wrong_number",
+        "actions": [
+          "flag_contact:wrong_number"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-dnc-holds-interested-reply",
+      "title": "Even an interested reply from a do-not-call number gets no draft",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Yes I might sell, call me"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Yes I might sell, call me",
+          "at": "2026-10-06T16:40:00.000Z"
+        },
+        "compliance": {
+          "dnc": true
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "dnc",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-follow-up-cap",
+      "title": "Three follow-ups without a reply: park the deal",
+      "base": "follow_up",
+      "context": {
+        "followUps": {
+          "outboundSinceLastInbound": 3
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "follow_up_cap",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-contact",
+      "title": "No phone or email on file: nothing to follow up with",
+      "base": "follow_up",
+      "context": {
+        "lead": {
+          "hasPhone": false,
+          "hasEmail": false
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_contact",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "rule-no-lead",
+      "title": "A deal without a seller lead",
+      "base": "sms_reply",
+      "context": {
+        "lead": null
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_lead",
+        "recommendation": "hold",
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "interested-asks-offer",
+      "title": "Asks what the offer is: interested, and no price in the reply",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Maybe. What kind of offer are we talking about?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Maybe. What kind of offer are we talking about?",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "interested",
+        "confidence": 0.86,
+        "reply": {
+          "body": "Thanks for getting back to me. Our offer depends mostly on the condition of the house. Could you tell me a bit about it, like the roof, the kitchen and any repairs it needs?",
+          "subject": null
+        },
+        "rationale": "The seller is open to selling and asked about the offer.",
+        "next_step": "Collect condition details, then have a person prepare the offer."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "interested",
+        "tier": "mid",
+        "actions": [
+          "classify_inbound:interested:model",
+          "draft_message:sms:seller",
+          "transition_deal:negotiating"
+        ]
+      }
+    },
+    {
+      "id": "interested-repeats-entered-offer",
+      "title": "Asks for the best price: only the offer a person entered may be repeated",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-earlier-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Maybe. What would you pay?"
+          },
+          {
+            "id": "msg-out-2",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T17:05:00.000Z",
+            "content": "Thanks for getting back to me. Could you tell me a bit about the condition of the house?"
+          },
+          {
+            "id": "msg-in-earlier-2",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-07T13:15:00.000Z",
+            "content": "Roof is 10 years old, kitchen and baths are dated, no other issues."
+          },
+          {
+            "id": "msg-out-3",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-08T14:10:00.000Z",
+            "content": "Thanks for the details. Based on that we can offer $68,000 cash for the house as-is, no repairs or fees on your side."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Is $68,000 really the best you can do?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Is $68,000 really the best you can do?",
+          "at": "2026-10-06T16:40:00.000Z"
+        },
+        "deal": {
+          "stage": "negotiating",
+          "offerAmount": 68000
+        }
+      },
+      "reply": {
+        "intent": "interested",
+        "confidence": 0.8,
+        "reply": {
+          "body": "I understand. $68,000 is the cash offer we can make for the house as it is, with no repairs or fees on your side. Would it help to talk it through on a quick call?",
+          "subject": null
+        },
+        "rationale": "The seller is negotiating on the offer a person already made.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "interested",
+        "tier": "mid",
+        "actions": [
+          "draft_message:sms:seller"
+        ],
+        "noActions": [
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "negotiating-high-value-strong-tier",
+      "title": "A negotiation on a deal worth over $400,000 goes to the strong tier",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Can you do any better than $305,000?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Can you do any better than $305,000?",
+          "at": "2026-10-06T16:40:00.000Z"
+        },
+        "deal": {
+          "stage": "negotiating",
+          "arv": 545000,
+          "mao": 321500,
+          "offerAmount": 305000
+        },
+        "property": {
+          "address": "6808 Bramble Dr",
+          "city": "Austin",
+          "state": "TX",
+          "zip": "78745"
+        }
+      },
+      "reply": {
+        "intent": "interested",
+        "confidence": 0.82,
+        "reply": {
+          "body": "Thanks for asking. $305,000 is the cash offer we can make today for the house as-is. Would you like to go over how we arrived at it on a quick call?",
+          "subject": null
+        },
+        "rationale": "The seller is negotiating on the entered offer.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "interested",
+        "tier": "strong",
+        "actions": [
+          "draft_message:sms:seller"
+        ],
+        "noActions": [
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "not-interested",
+      "title": "A polite no closes the deal, pending approval",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Not interested, thanks."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Not interested, thanks.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "not_interested",
+        "confidence": 0.93,
+        "reply": {
+          "body": "Understood, thank you for letting me know. Have a good day.",
+          "subject": null
+        },
+        "rationale": "The seller declined.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "not_interested",
+        "actions": [
+          "classify_inbound:not_interested:model",
+          "transition_deal:lost"
+        ]
+      }
+    },
+    {
+      "id": "callback-after-work",
+      "title": "Names a time to call back",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Busy at work right now. Call me after 5:30 tomorrow."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Busy at work right now. Call me after 5:30 tomorrow.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "callback",
+        "confidence": 0.9,
+        "reply": {
+          "body": "Thanks, I will call you tomorrow after 5:30. Talk then.",
+          "subject": null
+        },
+        "rationale": "The seller asked for a call at a specific time.",
+        "next_step": "Schedule a call tomorrow after 5:30 pm."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "callback",
+        "actions": [
+          "draft_message:sms:seller"
+        ],
+        "noActions": [
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "unclear-who-is-this",
+      "title": "Who is this: introduce the team, ask one question",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Who is this?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Who is this?",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "unclear",
+        "confidence": 0.75,
+        "reply": {
+          "body": "This is Sam with Halo Home Buyers. We buy houses in Memphis and I reached out about 2418 Pecan Grove Dr. Would you ever consider an offer on it?",
+          "subject": null
+        },
+        "rationale": "The seller does not know who we are yet.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "unclear",
+        "actions": [
+          "draft_message:sms:seller"
+        ],
+        "noActions": [
+          "transition_deal"
+        ],
+        "mentions": [
+          "Halo Home Buyers"
+        ]
+      }
+    },
+    {
+      "id": "email-interested-process",
+      "title": "An email reply asking about the process gets an email answer",
+      "base": "email_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Cash offer for 2418 Pecan Grove Dr\n\nHello, my name is Sam and I buy houses in Memphis for cash. I would like to make you an offer on 2418 Pecan Grove Dr. We buy as-is and you pick the closing date. If you are open to a short conversation, just reply to this email."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "email",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "I might consider selling. The roof is about 20 years old and the kitchen is original. What does the process look like?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "email",
+          "content": "I might consider selling. The roof is about 20 years old and the kitchen is original. What does the process look like?",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "interested",
+        "confidence": 0.88,
+        "reply": {
+          "body": "Thanks for the details on the roof and kitchen. The process is simple: we ask a few questions about the house, schedule a short walkthrough, then send a written cash offer. If you accept, a title company handles the closing on the date you choose. Would a walkthrough this week work for you?",
+          "subject": "Re: 2418 Pecan Grove Dr"
+        },
+        "rationale": "The seller is considering a sale and asked how it works.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "interested",
+        "actions": [
+          "draft_message:email:seller",
+          "transition_deal:negotiating"
+        ]
+      }
+    },
+    {
+      "id": "follow-up-text",
+      "title": "No reply after one text: one short follow-up",
+      "base": "follow_up",
+      "context": {},
+      "reply": {
+        "intent": "follow_up",
+        "confidence": 0.9,
+        "reply": {
+          "body": "Hi, Sam again with Halo Home Buyers. No pressure at all, but if selling 2418 Pecan Grove Dr ever makes sense, is there a time frame that would work better for you?",
+          "subject": null
+        },
+        "rationale": "One follow-up that asks about timing instead of repeating the offer.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "follow_up",
+        "actions": [
+          "draft_message:sms:seller"
+        ],
+        "noActions": [
+          "classify_inbound",
+          "transition_deal"
+        ]
+      }
+    },
+    {
+      "id": "follow-up-email-only",
+      "title": "Only an email on file: the follow-up is an email",
+      "base": "follow_up",
+      "context": {
+        "lead": {
+          "hasPhone": false,
+          "hasEmail": true
+        },
+        "compliance": {
+          "consents": {
+            "sms": false,
+            "email": true
+          }
+        },
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "email",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Cash offer for 2418 Pecan Grove Dr\n\nHello, my name is Sam and I buy houses in Memphis for cash. I would like to make you an offer on 2418 Pecan Grove Dr. We buy as-is and you pick the closing date. If you are open to a short conversation, just reply to this email."
+          }
+        ]
+      },
+      "reply": {
+        "intent": "follow_up",
+        "confidence": 0.9,
+        "reply": {
+          "body": "Hello again. I wanted to follow up on my note about 2418 Pecan Grove Dr. If selling is something you might consider in the next few months, I would be glad to answer any questions. Is there a better time to reach you?",
+          "subject": "Following up on 2418 Pecan Grove Dr"
+        },
+        "rationale": "One email follow-up with a new question.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "follow_up",
+        "actions": [
+          "draft_message:email:seller"
+        ],
+        "noActions": [
+          "draft_message:sms"
+        ]
+      }
+    },
+    {
+      "id": "model-opt-out-confident",
+      "title": "A paraphrased opt-out the rules miss: recorded at once when the model is sure",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "I'm good. Please don't bother me anymore."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "I'm good. Please don't bother me anymore.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "opt_out",
+        "confidence": 0.9,
+        "reply": null,
+        "rationale": "The seller asked not to be bothered again.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "opt_out",
+        "actions": [
+          "classify_inbound:opt_out:model",
+          "record_opt_out"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "model-opt-out-unsure",
+      "title": "An unsure opt-out waits for a person",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "ok whatever, I'm done with this"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "ok whatever, I'm done with this",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "opt_out",
+        "confidence": 0.55,
+        "reply": null,
+        "rationale": "Possibly asking us to stop, but it is ambiguous.",
+        "next_step": null
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "opt_out",
+        "actions": [
+          "record_opt_out:gated"
+        ],
+        "noActions": [
+          "draft_message"
+        ]
+      }
+    },
+    {
+      "id": "business-line",
+      "title": "A business line that owns no property",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "This is a business line. We don't have any property for sale."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "This is a business line. We don't have any property for sale.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "wrong_number",
+        "confidence": 0.75,
+        "reply": null,
+        "rationale": "The number reaches a business, not the owner.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": [
+          "wrong_number",
+          "not_interested"
+        ]
+      }
+    },
+    {
+      "id": "inherited-vacant",
+      "title": "An heir open to selling: empathy, questions, no price",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "It's been empty since my mom passed in March. I'd sell if the price is right."
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "It's been empty since my mom passed in March. I'd sell if the price is right.",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "interested",
+        "confidence": 0.85,
+        "reply": {
+          "body": "I am sorry about your mother. We can buy the house as it is, so there is nothing to clear out or repair first. Could you tell me a little about its condition so we can put together an offer?",
+          "subject": null
+        },
+        "rationale": "The seller would sell at the right price.",
+        "next_step": null
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "interested",
+        "actions": [
+          "draft_message:sms:seller",
+          "transition_deal:negotiating"
+        ]
+      }
+    },
+    {
+      "id": "reply-not-json",
+      "title": "A reply in prose is rejected",
+      "base": "sms_reply",
+      "context": {
+        "thread": [
+          {
+            "id": "msg-out-1",
+            "direction": "outbound",
+            "channel": "sms",
+            "status": "delivered",
+            "at": "2026-10-06T15:02:00.000Z",
+            "content": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Reply STOP to opt out."
+          },
+          {
+            "id": "msg-in-1",
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "at": "2026-10-06T16:40:00.000Z",
+            "content": "Maybe. What kind of offer are we talking about?"
+          }
+        ],
+        "inbound": {
+          "id": "msg-in-1",
+          "channel": "sms",
+          "content": "Maybe. What kind of offer are we talking about?",
+          "at": "2026-10-06T16:40:00.000Z"
+        }
+      },
+      "reply": "Sure! I'd reply: Thanks for your message, we will be in touch.",
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    }
+  ]
+}
