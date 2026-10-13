@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { AGENT_NAMES, type AgentName } from '@halo/shared';
 import {
   ArrayNotEmpty,
   IsArray,
@@ -73,17 +74,8 @@ export class SkipTraceLeadDto {
 // ----------------------------------------------------------------- agents
 
 export class AgentRunOpenDto {
-  @IsIn([
-    'lead_analyst',
-    'deal_underwriter',
-    'outreach_drafter',
-    'disposition_matcher',
-  ])
-  agent!:
-    | 'lead_analyst'
-    | 'deal_underwriter'
-    | 'outreach_drafter'
-    | 'disposition_matcher';
+  @IsIn([...AGENT_NAMES])
+  agent!: AgentName;
 
   @IsIn(['lead', 'deal', 'message'])
   entityType!: 'lead' | 'deal' | 'message';

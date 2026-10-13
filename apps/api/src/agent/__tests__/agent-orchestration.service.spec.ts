@@ -1,6 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AGENT_NAMES, type AgentDecision } from '@halo/shared';
 import { AgentOrchestrationService } from '../agent-orchestration.service';
+import { openCounterparty } from '../../communications/message-counterparty';
 
 const prisma = {
   automationRun: {
@@ -14,7 +15,7 @@ const prisma = {
   agentRunReplay: { upsert: jest.fn() },
   message: { findFirst: jest.fn(), update: jest.fn() },
   marketingMaterial: { create: jest.fn() },
-  buyer: { findMany: jest.fn() },
+  buyer: { findMany: jest.fn(), findFirst: jest.fn() },
 };
 const communications = { create: jest.fn() };
 jest.mock('../../pii/contact-crypto', () => ({
@@ -1324,6 +1325,164 @@ describe('AgentOrchestrationService', () => {
       );
       expect(communications.create).not.toHaveBeenCalled();
       expect(automation.approveRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('buyer reply drafts', () => {
+    const draft = {
+      type: 'draft_message',
+      channel: 'email',
+      recipientType: 'buyer',
+      buyerId: 'b-1',
+      content: 'Thanks, what times work for a walkthrough?',
+      subject: 'Re: Off-market deal',
+      inReplyToMessageId: 'msg-9',
+      gated: true,
+    };
+    const awaitingReply = () => ({
+      ...baseRun,
+      entityType: 'deal',
+      entityId: 'deal-1',
+      status: 'AWAITING_APPROVAL',
+      decisionJson: {
+        agent: 'buyer_responder',
+        recommendation: 'interested',
+        summary: 's',
+        actions: [draft],
+        outcomes: [{ action: draft, result: 'pending' }],
+      },
+    });
+    const lastOutcomes = () => {
+      const calls = prisma.automationRun.update.mock.calls;
+      return calls[calls.length - 1][0].data.decisionJson.outcomes;
+    };
+
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue(awaitingReply());
+      prisma.buyer.findFirst.mockResolvedValue({
+        id: 'b-1',
+        name: 'Riverbend Renovations',
+        emailEnc: 'enc-email',
+        phoneEnc: null,
+      });
+      communications.create.mockResolvedValue({ id: 'msg-out-1' });
+    });
+
+    it('drafts to the address the buyer wrote from, through the communications service', async () => {
+      prisma.message.findFirst.mockResolvedValue({
+        channel: 'email',
+        counterpartyEnc: 'enc-sender',
+      });
+      (openCounterparty as jest.Mock).mockReturnValueOnce(
+        'sarah@buyers.example',
+      );
+
+      await service().approve('acct', 'run-1', 'user-1');
+
+      expect(communications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: 'acct',
+          dealId: 'deal-1',
+          channel: 'email',
+          direction: 'outbound',
+          content: 'Thanks, what times work for a walkthrough?',
+          metadata: expect.objectContaining({
+            email: 'sarah@buyers.example',
+            recipientType: 'buyer',
+            buyerId: 'b-1',
+            type: 'buyer_reply',
+            subject: 'Re: Off-market deal',
+            inReplyToMessageId: 'msg-9',
+          }),
+        }),
+      );
+      expect(agentService.draftMessage).not.toHaveBeenCalled();
+      expect(lastOutcomes()).toEqual([
+        { action: draft, result: 'applied', detail: 'message:msg-out-1' },
+      ]);
+    });
+
+    it("falls back to the buyer's address on file when the reply came on another channel", async () => {
+      prisma.message.findFirst.mockResolvedValue({
+        channel: 'sms',
+        counterpartyEnc: 'enc-phone',
+      });
+      await service().approve('acct', 'run-1', 'user-1');
+      expect(communications.create.mock.calls[0][0].metadata.email).toBe(
+        'open:enc-email',
+      );
+    });
+
+    it('skips a buyer with no address for the channel', async () => {
+      prisma.message.findFirst.mockResolvedValue(null);
+      prisma.buyer.findFirst.mockResolvedValue({
+        id: 'b-1',
+        name: 'Riverbend Renovations',
+        emailEnc: null,
+        phoneEnc: null,
+      });
+      await service().approve('acct', 'run-1', 'user-1');
+      expect(communications.create).not.toHaveBeenCalled();
+      expect(lastOutcomes()).toEqual([
+        expect.objectContaining({ result: 'skipped' }),
+      ]);
+    });
+  });
+
+  describe('buyer reply refusals', () => {
+    const draft = {
+      type: 'draft_message',
+      channel: 'email',
+      recipientType: 'buyer',
+      buyerId: 'b-1',
+      content: 'Thanks for getting back to us.',
+      inReplyToMessageId: 'msg-9',
+      gated: true,
+    };
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue({
+        ...baseRun,
+        entityType: 'deal',
+        entityId: 'deal-1',
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          agent: 'buyer_responder',
+          recommendation: 'unavailable',
+          summary: 's',
+          actions: [draft],
+          outcomes: [{ action: draft, result: 'pending' }],
+        },
+      });
+      prisma.message.findFirst.mockResolvedValue(null);
+    });
+
+    it('keeps the run open with the reason when compliance refuses the draft', async () => {
+      prisma.buyer.findFirst.mockResolvedValue({
+        id: 'b-1',
+        name: 'Riverbend Renovations',
+        emailEnc: 'enc-email',
+        phoneEnc: null,
+      });
+      communications.create.mockRejectedValue(
+        new ForbiddenException({
+          code: 'MISSING_CONSENT',
+          reason: 'Outbound messaging requires consent',
+        }),
+      );
+      await expect(
+        service().approve('acct', 'run-1', 'user-1'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(automation.approveRun).not.toHaveBeenCalled();
+    });
+
+    it('records any other problem as a failed step and closes the run', async () => {
+      prisma.buyer.findFirst.mockResolvedValue(null);
+      await service().approve('acct', 'run-1', 'user-1');
+      const calls = prisma.automationRun.update.mock.calls;
+      expect(calls[calls.length - 1][0].data.decisionJson.outcomes).toEqual([
+        { action: draft, result: 'failed', detail: 'buyer not found' },
+      ]);
+      expect(automation.approveRun).toHaveBeenCalled();
     });
   });
 });

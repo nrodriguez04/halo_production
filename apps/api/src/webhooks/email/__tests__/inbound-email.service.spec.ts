@@ -230,18 +230,28 @@ describe('InboundEmailService', () => {
     );
   });
 
-  it('files a buyer reply on the deal we last emailed them about and leaves the Drafter alone', async () => {
+  it('files a buyer reply on the deal we last emailed them about and queues the Buyer Responder', async () => {
     prisma.lead.findMany.mockResolvedValue([]);
     prisma.buyer.findMany.mockResolvedValue([{ accountId: 'acct' }]);
     prisma.lead.findFirst.mockResolvedValue(null);
     prisma.buyer.findFirst.mockResolvedValue({ id: 'b1' });
     prisma.message.findFirst.mockResolvedValue({ dealId: 'deal-9' });
+    agents.enqueue.mockResolvedValue(true);
 
     const res = await service().handle(
       mail({ from: 'Sarah <sarah@buyers.example>', envelope: null }) as any,
     );
 
-    expect(res).toMatchObject({ handled: 'buyer_reply', queued: false });
+    expect(res).toMatchObject({ handled: 'buyer_reply', queued: true });
+    expect(agents.enqueue).toHaveBeenCalledWith({
+      agent: 'buyer_responder',
+      accountId: 'acct',
+      entityType: 'deal',
+      entityId: 'deal-9',
+      trigger: 'inbound',
+      triggerEventId: 'inbound:msg-1',
+      messageId: 'msg-1',
+    });
     expect(prisma.message.create.mock.calls[0][0].data).toMatchObject({
       leadId: null,
       dealId: 'deal-9',
@@ -257,6 +267,63 @@ describe('InboundEmailService', () => {
         eventType: 'BUYER_REPLIED',
       }),
     );
+  });
+
+  it('ties a buyer reply to the deal of the email it answers, not the newest one', async () => {
+    prisma.lead.findMany.mockResolvedValue([]);
+    prisma.buyer.findMany.mockResolvedValue([{ accountId: 'acct' }]);
+    prisma.lead.findFirst.mockResolvedValue(null);
+    prisma.buyer.findFirst.mockResolvedValue({ id: 'b1' });
+    prisma.message.findFirst.mockImplementation(async (args: any) =>
+      args.where.metadata
+        ? { dealId: 'deal-older' }
+        : { dealId: 'deal-newest' },
+    );
+    agents.enqueue.mockResolvedValue(true);
+
+    await service().handle(
+      mail({
+        from: 'Sarah <sarah@buyers.example>',
+        envelope: null,
+        subject: 'RE: Fwd: Off-market Memphis deal: 2418 Pecan Grove Dr',
+      }) as any,
+    );
+
+    const bySubject = prisma.message.findFirst.mock.calls.find(
+      (c: any[]) => c[0].where.metadata,
+    );
+    expect(bySubject[0].where.metadata).toEqual({
+      path: ['subject'],
+      equals: 'Off-market Memphis deal: 2418 Pecan Grove Dr',
+    });
+    expect(prisma.message.create.mock.calls[0][0].data.dealId).toBe(
+      'deal-older',
+    );
+    expect(agents.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: 'buyer_responder',
+        entityId: 'deal-older',
+      }),
+    );
+  });
+
+  it('never answers a buyer out-of-office', async () => {
+    prisma.lead.findMany.mockResolvedValue([]);
+    prisma.buyer.findMany.mockResolvedValue([{ accountId: 'acct' }]);
+    prisma.lead.findFirst.mockResolvedValue(null);
+    prisma.buyer.findFirst.mockResolvedValue({ id: 'b1' });
+    prisma.message.findFirst.mockResolvedValue({ dealId: 'deal-9' });
+
+    const res = await service().handle(
+      mail({
+        from: 'Sarah <sarah@buyers.example>',
+        envelope: null,
+        subject: 'Automatic reply: Off-market deal',
+        headers: 'Auto-Submitted: auto-replied',
+      }) as any,
+    );
+
+    expect(res).toMatchObject({ handled: 'buyer_reply', queued: false });
     expect(agents.enqueue).not.toHaveBeenCalled();
   });
 

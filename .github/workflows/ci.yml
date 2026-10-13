@@ -94,7 +94,7 @@ jobs:
     # deterministic. When the EVAL_OPENAI_API_KEY secret is set, a change to
     # a prompt, an agent or the golden set (or a manual run) also asks the
     # real models and must keep each agent's decision agreement above its
-    # threshold: about $0.30 a run, stopped at $2.
+    # threshold: about $0.35 a run, stopped at $2.
     runs-on: ubuntu-latest
     env:
       # Whether the key exists; the key itself only reaches the live step.

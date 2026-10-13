@@ -218,7 +218,7 @@ export class InboundEmailService {
     const buyer =
       accountId === UNATTRIBUTED_ACCOUNT_ID || link
         ? null
-        : await this.linkToBuyer(accountId, hash);
+        : await this.linkToBuyer(accountId, hash, parsed.subject);
 
     const fullText = (
       parsed.text?.trim() ? parsed.text : htmlToText(parsed.html)
@@ -311,16 +311,23 @@ export class InboundEmailService {
             buyerId: buyer.buyerId,
             subject,
             documentIds,
+            autoReply,
           },
           actorId: null,
           actorType: TimelineActorType.webhook,
         });
       }
+      // An out-of-office never gets an answer; a reply that cannot be tied
+      // to a deal is left for a person.
+      const queued =
+        buyer.dealId && !autoReply
+          ? await this.queueBuyerResponder(accountId, message.id, buyer.dealId)
+          : false;
       return {
         handled: 'buyer_reply',
         messageId: message.id,
         accountId,
-        queued: false,
+        queued,
       };
     }
 
@@ -399,26 +406,43 @@ export class InboundEmailService {
     return { leadId: lead.id, dealId: lead.deals[0]?.id ?? null };
   }
 
-  /** A buyer writing back, tied to the deal we last emailed them about. */
+  /**
+   * A buyer writing back, tied to the deal of the email they answered (same
+   * subject once "Re:" is removed), else to the deal we last emailed them
+   * about. Buyers get several blasts; a reply to an older one must not be
+   * answered about the newest deal.
+   */
   private async linkToBuyer(
     accountId: string,
     emailHash: string,
+    subject?: string,
   ): Promise<{ buyerId: string; dealId: string | null } | null> {
     const buyer = await this.prisma.buyer.findFirst({
       where: { accountId, emailHash },
       select: { id: true },
     });
     if (!buyer) return null;
-    const last = await this.prisma.message.findFirst({
-      where: {
-        accountId,
-        direction: 'outbound',
-        counterpartyHash: emailHash,
-        dealId: { not: null },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { dealId: true },
-    });
+    const sent = {
+      accountId,
+      direction: 'outbound',
+      counterpartyHash: emailHash,
+      dealId: { not: null },
+    };
+    const original = stripReplyPrefixes(subject);
+    const answered = original
+      ? await this.prisma.message.findFirst({
+          where: { ...sent, metadata: { path: ['subject'], equals: original } },
+          orderBy: { createdAt: 'desc' },
+          select: { dealId: true },
+        })
+      : null;
+    const last =
+      answered ??
+      (await this.prisma.message.findFirst({
+        where: sent,
+        orderBy: { createdAt: 'desc' },
+        select: { dealId: true },
+      }));
     return { buyerId: buyer.id, dealId: last?.dealId ?? null };
   }
 
@@ -479,6 +503,29 @@ export class InboundEmailService {
   }
 
   /** Design doc s3.3: every linked reply gets the Outreach Drafter's read. */
+  private async queueBuyerResponder(
+    accountId: string,
+    messageId: string,
+    dealId: string,
+  ) {
+    try {
+      return await this.agents.enqueue({
+        agent: 'buyer_responder',
+        accountId,
+        entityType: 'deal',
+        entityId: dealId,
+        trigger: 'inbound',
+        triggerEventId: `inbound:${messageId}`,
+        messageId,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Could not queue the Buyer Responder for email ${messageId}: ${err}`,
+      );
+      return false;
+    }
+  }
+
   private async queueDrafter(
     accountId: string,
     messageId: string,
@@ -501,4 +548,12 @@ export class InboundEmailService {
       return false;
     }
   }
+}
+
+/** "Re: Fwd: Off-market deal" -> "Off-market deal"; null when nothing is left. */
+export function stripReplyPrefixes(subject?: string | null): string | null {
+  const s = (subject ?? '')
+    .replace(/^(\s*(re|fwd?|aw|sv)\s*(\[\d+\])?\s*:\s*)+/i, '')
+    .trim();
+  return s || null;
 }

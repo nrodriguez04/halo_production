@@ -31,7 +31,12 @@ import {
   XCircle,
 } from 'lucide-react';
 
-type AgentName = 'lead_analyst' | 'deal_underwriter' | 'outreach_drafter' | 'disposition_matcher';
+type AgentName =
+  | 'lead_analyst'
+  | 'deal_underwriter'
+  | 'outreach_drafter'
+  | 'disposition_matcher'
+  | 'buyer_responder';
 
 interface AgentAction {
   type:
@@ -129,8 +134,10 @@ const AGENT_LABEL: Record<AgentName, string> = {
   deal_underwriter: 'Deal Underwriter',
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
+  buyer_responder: 'Buyer Responder',
 };
-const RELEASED: AgentName[] = [
+/** The Buyer Responder answers a buyer's email, so the inbound webhook queues it, not a person. */
+const QUEUEABLE: AgentName[] = [
   'lead_analyst',
   'deal_underwriter',
   'outreach_drafter',
@@ -208,7 +215,7 @@ function describeAction(action: AgentAction): string {
     case 'transition_lead':
       return `Move the lead to ${action.to}`;
     case 'draft_message':
-      return `Draft a seller ${action.channel === 'sms' ? 'text' : 'email'} for the approval queue`;
+      return `Draft a ${action.recipientType === 'buyer' ? 'buyer' : 'seller'} ${action.channel === 'sms' ? 'text' : 'email'} for the approval queue`;
     case 'set_deal_economics':
       return `Set ARV ${money(action.arv)}, repairs ${money(action.repairEstimate)}, MAO ${money(action.mao)} on the deal`;
     case 'classify_inbound':
@@ -643,10 +650,9 @@ export default function AgentsPage() {
                 value={queueAgent}
                 onChange={(e) => setQueueAgent(e.target.value as AgentName)}
               >
-                {(Object.keys(AGENT_LABEL) as AgentName[]).map((name) => (
-                  <option key={name} value={name} disabled={!RELEASED.includes(name)}>
+                {QUEUEABLE.map((name) => (
+                  <option key={name} value={name}>
                     {AGENT_LABEL[name]}
-                    {RELEASED.includes(name) ? '' : ' (not released yet)'}
                   </option>
                 ))}
               </Select>

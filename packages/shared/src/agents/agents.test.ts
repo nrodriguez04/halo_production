@@ -113,6 +113,12 @@ describe('agent frame', () => {
       intent: 'opt_out',
     });
     expect(classifyInboundByRule('Take me off your list')).toMatchObject({ intent: 'opt_out' });
+    // How buyers say it about deal emails.
+    expect(classifyInboundByRule('Stop sending me deals, I am out of the market')).toMatchObject({
+      intent: 'opt_out',
+    });
+    expect(classifyInboundByRule('No more deals please')).toMatchObject({ intent: 'opt_out' });
+    expect(classifyInboundByRule('Can you send me more deals like this one?')).toBeNull();
     expect(classifyInboundByRule('You have the wrong number')).toMatchObject({
       intent: 'wrong_number',
     });

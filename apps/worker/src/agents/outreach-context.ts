@@ -116,9 +116,20 @@ export async function loadOutreachContext(
 
   const leadId = lead ? (lead.id as string) : null;
   const dealId = deal ? (deal.id as string) : null;
+  // The seller's conversation only: messages on the lead, or on the deal
+  // with the seller's own number or address. Buyer blasts and buyer replies
+  // share the deal, but they carry the buyer price, which must never reach
+  // a seller-facing draft, and they are not follow-ups to the seller.
+  const sellerHashes = lead
+    ? [lead.canonicalPhoneHash, lead.canonicalEmailHash].filter(
+        (h): h is string => typeof h === 'string' && !!h,
+      )
+    : [];
   const threadWhere = [
     ...(leadId ? [{ leadId }] : []),
-    ...(dealId ? [{ dealId }] : []),
+    ...(dealId && sellerHashes.length
+      ? [{ dealId, counterpartyHash: { in: sellerHashes } }]
+      : []),
   ];
   const [messages, consents, dnc, account] = await Promise.all([
     threadWhere.length

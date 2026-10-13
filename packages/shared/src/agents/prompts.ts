@@ -29,6 +29,10 @@ export interface PromptTemplates {
     system: string;
     user: string;
   };
+  buyer_responder: {
+    system: string;
+    user: string;
+  };
 }
 
 export const prompts: PromptTemplates = promptsData as PromptTemplates;

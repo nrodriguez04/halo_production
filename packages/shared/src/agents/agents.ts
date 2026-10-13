@@ -10,6 +10,7 @@ export const AGENT_NAMES = [
   'deal_underwriter',
   'outreach_drafter',
   'disposition_matcher',
+  'buyer_responder',
 ] as const;
 export type AgentName = (typeof AGENT_NAMES)[number];
 
@@ -18,6 +19,7 @@ export const AGENT_LABEL: Record<AgentName, string> = {
   deal_underwriter: 'Deal Underwriter',
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
+  buyer_responder: 'Buyer Responder',
 };
 
 /** How a run started (design doc s4). */
@@ -81,6 +83,7 @@ export const AGENT_TIER: Record<AgentName, AgentModelTier> = {
   deal_underwriter: 'strong',
   outreach_drafter: 'mid',
   disposition_matcher: 'mid',
+  buyer_responder: 'mid',
 };
 
 /** Workflow name on the run and scopeRef of the agent's budget bucket. */
@@ -110,13 +113,15 @@ export type AgentAction =
       subject?: string;
       /** The inbound message this draft answers, when it answers one. */
       inReplyToMessageId?: string;
+      /** The buyer a buyer draft goes to (recipientType buyer). */
+      buyerId?: string;
       gated: true;
     }
   | {
       /** The inbound message's intent, recorded on the message and the timeline. */
       type: 'classify_inbound';
       messageId: string;
-      intent: InboundIntent;
+      intent: InboundIntent | BuyerReplyIntent;
       confidence: number;
       method: 'rule' | 'model';
     }
@@ -294,7 +299,8 @@ const OPT_OUT_PHRASES: RegExp[] = [
   /\b(remove|take) me (off|from)\b/i,
   /\bunsubscribe\b/i,
   /\bleave me alone\b/i,
-  /\bno more (texts|messages|calls|emails)\b/i,
+  /\bno more (texts|messages|calls|emails|deals|offers)\b/i,
+  /\bstop sending (me )?(any )?(more )?(deals|offers|emails|texts|messages|these|them)\b/i,
   /\bopt ?out\b/i,
   /\blose (my|this) number\b/i,
 ];
@@ -394,5 +400,51 @@ export function parseDispositionMatcherOutput(
   const raw = firstJsonObject(text);
   if (raw === undefined) return null;
   const parsed = DispositionMatcherOutputSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+// ------------------------------------------------------------ Buyer Responder
+
+/** How a cash buyer answered a deal we marketed to them. */
+export const BUYER_REPLY_INTENTS = [
+  'interested',
+  'question',
+  'offer',
+  'not_interested',
+  'opt_out',
+  'unclear',
+] as const;
+export type BuyerReplyIntent = (typeof BUYER_REPLY_INTENTS)[number];
+
+export const BUYER_RESPONDER_PROMPT_VERSION = 'buyer_responder.v1';
+
+export const BuyerResponderOutputSchema = z.object({
+  intent: z.enum(BUYER_REPLY_INTENTS),
+  confidence: z.number().min(0).max(1),
+  reply: z
+    .object({
+      body: z.string().min(1).max(3000),
+      subject: z.string().max(150).nullable().default(null),
+    })
+    .nullable()
+    .default(null),
+  /** What the buyer offered, when they named a price or terms. */
+  offer: z
+    .object({
+      amount: z.number().min(0).max(100_000_000).nullable().default(null),
+      terms: z.string().max(500).nullable().default(null),
+    })
+    .nullable()
+    .default(null),
+  rationale: z.string().min(1).max(2000),
+});
+export type BuyerResponderOutput = z.infer<typeof BuyerResponderOutputSchema>;
+
+export function parseBuyerResponderOutput(
+  text: string,
+): BuyerResponderOutput | null {
+  const raw = firstJsonObject(text);
+  if (raw === undefined) return null;
+  const parsed = BuyerResponderOutputSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }

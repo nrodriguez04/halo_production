@@ -60,6 +60,15 @@ jest.mock('../disposition-matcher.agent', () => ({
   DispositionMatcherAgent: jest.fn().mockImplementation(() => ({ run: mockMatcherRun })),
 }));
 
+const mockLoadBuyerReplyContext = jest.fn();
+jest.mock('../buyer-context', () => ({
+  loadBuyerReplyContext: (...args: unknown[]) => mockLoadBuyerReplyContext(...args),
+}));
+const mockResponderRun = jest.fn();
+jest.mock('../buyer-responder.agent', () => ({
+  BuyerResponderAgent: jest.fn().mockImplementation(() => ({ run: mockResponderRun })),
+}));
+
 import {
   CostBlockedError,
   IntegrationUnavailableError,
@@ -387,5 +396,46 @@ describe('AgentsProcessor', () => {
       replay: { context: { deal: { id: 'deal-1' } }, reply: null },
     });
     expect(result.status).toBe('COMPLETED');
+  });
+
+  it('dispatches buyer replies to the Buyer Responder and never de-dupes them', async () => {
+    mockPrisma.automationRun.findFirst.mockResolvedValue({ id: 'run-0' });
+    const draft = decision([
+      { type: 'append_note', note: 'n' },
+      {
+        type: 'draft_message',
+        channel: 'email',
+        recipientType: 'buyer',
+        buyerId: 'b-1',
+        content: 'Thanks, what times work?',
+        inReplyToMessageId: 'msg-9',
+        gated: true,
+      },
+    ]);
+    mockLoadBuyerReplyContext.mockResolvedValue({ inbound: { id: 'msg-9' } });
+    mockResponderRun.mockResolvedValue({ decision: draft, costUsd: 0.003 });
+
+    const result = await processor.process(
+      job({
+        agent: 'buyer_responder',
+        entityType: 'deal',
+        entityId: 'deal-1',
+        trigger: 'inbound',
+        triggerEventId: 'inbound:msg-9',
+        messageId: 'msg-9',
+      }),
+    );
+
+    expect(mockPrisma.automationRun.findFirst).not.toHaveBeenCalled();
+    expect(mockLoadBuyerReplyContext).toHaveBeenCalledWith(
+      expect.objectContaining({ entityId: 'deal-1', messageId: 'msg-9' }),
+    );
+    expect(mockRecordAgentDecision).toHaveBeenCalledWith('acct', 'run-1', {
+      status: 'AWAITING_APPROVAL',
+      decision: draft,
+      costUsd: 0.003,
+      replay: { context: { inbound: { id: 'msg-9' } }, reply: null },
+    });
+    expect(result.status).toBe('AWAITING_APPROVAL');
   });
 });

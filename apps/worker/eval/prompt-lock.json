@@ -1,4 +1,5 @@
 {
+  "buyer_responder.v1": "sha256:7c338d12fd0e1cc593605d476954d5f97a9a45c26d92108e633706c93d7c48c1",
   "deal_underwriter.v1": "sha256:b980854b6124cdc99d6f497d87a226070572ece1e2c161388b8cabf055d3568c",
   "deal_underwriter.v2": "sha256:7345986d5bbe5d0dc5c4fac981933954bb31be236a7127644353a612f8a58b2c",
   "disposition_matcher.v1": "sha256:0645f9f0c63bf1591eb90fbf29f8bb6db84ba92680da5acb2dab8dc064892c5e",
