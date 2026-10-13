@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import {
   AGENT_NAMES,
+  DEFAULT_ASSIGNMENT_FEE,
   DEAL_UNDERWRITER_PROMPT_VERSION,
   DISPOSITION_MATCHER_PROMPT_VERSION,
   LEAD_ANALYST_PROMPT_VERSION,
@@ -21,8 +22,8 @@ import {
   DispositionMatcherAgent,
   matcherCandidates,
   scoreBuyers,
+  buyerPrice,
   shortlistMax,
-  targetPrice,
 } from '../src/agents/disposition-matcher.agent';
 import type { DispositionContext } from '../src/agents/disposition-context';
 import {
@@ -809,7 +810,11 @@ export function invariantChecks(
   }
 
   if (agent === 'deal_underwriter') {
-    const deal = (ctx.deal ?? {}) as { updatedAt?: string };
+    const deal = (ctx.deal ?? {}) as {
+      updatedAt?: string;
+      assignmentFee?: number;
+    };
+    const fee = deal.assignmentFee ?? DEFAULT_ASSIGNMENT_FEE;
     for (const a of actions) {
       if (a.type !== 'set_deal_economics') continue;
       out.push(
@@ -852,6 +857,19 @@ export function invariantChecks(
             'an offer needs a positive MAO',
             (a.mao ?? 0) > 0,
             `MAO ${a.mao}`,
+          ),
+        );
+      }
+      if (a.arv != null && a.repairEstimate != null && a.mao != null) {
+        // The prompt's formula with the deal's fee; models round, so a
+        // small tolerance. A detail: arithmetic slips are reported, not gated.
+        const expected = a.arv * 0.7 - a.repairEstimate - fee;
+        out.push(
+          check(
+            'detail',
+            'MAO = ARV x 0.70 - repairs - the deal fee',
+            Math.abs(a.mao - expected) <= Math.max(1000, a.arv * 0.01),
+            `MAO ${a.mao}, formula gives ${Math.round(expected)} with a ${fee} fee`,
           ),
         );
       }
@@ -1007,23 +1025,41 @@ export function invariantChecks(
         );
       }
     }
+    // Buyers may see the asking price, ARV, repairs and the as-is value.
+    // The seller side (the offer made, the contract price, the MAO) never:
+    // advertising it gives the assignment fee away.
+    const asking = buyerPrice(dctx)?.price ?? null;
     const figures = [
-      dctx.deal.offerAmount,
-      dctx.deal.mao,
+      asking,
       dctx.deal.arv,
       dctx.deal.repairEstimate,
       dctx.property?.estimatedValue ?? null,
-      targetPrice(dctx),
     ].filter((n): n is number => n != null);
+    const sellerSide = [
+      dctx.deal.offerAmount,
+      dctx.deal.contractPrice,
+      dctx.deal.mao,
+    ].filter((n): n is number => n != null && n !== asking);
+    const matches = (n: number, f: number) =>
+      near(n, f) || near(n, Math.round(f / 1000) * 1000);
     for (const t of texts) {
       const amounts = dollarAmounts(t.text);
-      const known = (n: number) =>
-        figures.some((f) => near(n, f) || near(n, Math.round(f / 1000) * 1000));
+      const leaked = amounts.filter((n) =>
+        sellerSide.some((f) => matches(n, f)),
+      );
       out.push(
         check(
           'safety',
-          'blast: only figures from the deal',
-          amounts.every(known),
+          "blast: never the seller's price",
+          leaked.length === 0,
+          `shows ${leaked.join(', ')}; seller side ${sellerSide.join(', ')}`,
+        ),
+      );
+      out.push(
+        check(
+          'safety',
+          'blast: only buyer-facing figures',
+          amounts.every((n) => figures.some((f) => matches(n, f))),
           `amounts ${amounts.join(', ')}; figures ${figures.join(', ')}`,
         ),
       );

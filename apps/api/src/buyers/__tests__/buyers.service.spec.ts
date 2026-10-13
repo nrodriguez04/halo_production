@@ -29,6 +29,11 @@ describe('BuyersService', () => {
       deal: {
         findFirst: jest.fn(),
       },
+      controlPlane: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ defaultAssignmentFee: 10000 }),
+      },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
 
@@ -158,6 +163,32 @@ describe('BuyersService', () => {
         data: { name: 'Updated Buyer' },
       });
       expect(result.name).toBe('Updated Buyer');
+    });
+  });
+
+  describe('matchBuyers', () => {
+    it("matches price ranges against the buyers' price, not the offer made to the seller", async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        accountId: 'account-1',
+        offerAmount: 72000,
+        arv: 172000,
+        property: { city: 'Memphis', state: 'TN' },
+        economics: null,
+      });
+      const buyer = (id: string, min: number, max: number) => ({
+        ...stored(),
+        id,
+        preferences: { priceRange: { min, max } },
+      });
+      prisma.buyer.findMany.mockResolvedValue([
+        buyer('fits-82k', 80000, 120000),
+        buyer('only-up-to-75k', 50000, 75000),
+      ]);
+
+      const matches = await service.matchBuyers('deal-1', 'account-1');
+
+      expect(matches.map((b: any) => b.id)).toEqual(['fits-82k']);
     });
   });
 });

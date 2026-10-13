@@ -36,6 +36,11 @@ describe('DealsService', () => {
       property: {
         findFirst: jest.fn(),
       },
+      controlPlane: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ defaultAssignmentFee: 10000 }),
+      },
     };
 
     timelineService = {
@@ -348,6 +353,43 @@ describe('DealsService', () => {
       await expect(
         service.updateStage('deal-1', 'tenant-1', 'contacted', 'user-1'),
       ).resolves.toMatchObject({ stage: 'contacted' });
+    });
+  });
+
+  describe('findOne', () => {
+    it("returns the buyers' price: the offer to the seller plus the tenant fee", async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        offerAmount: 72000,
+        mao: 78400,
+        lead: null,
+        economics: null,
+      });
+      const deal: any = await service.findOne('deal-1', 'tenant-1');
+      expect(deal.buyerPrice).toEqual({
+        price: 82000,
+        basis: 'offer',
+        sellerPrice: 72000,
+        fee: 10000,
+      });
+      expect(prisma.controlPlane.findUnique).toHaveBeenCalledWith({
+        where: { accountId: 'tenant-1' },
+        select: { defaultAssignmentFee: true },
+      });
+    });
+
+    it('returns the price a person set on the deal economics', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        offerAmount: 72000,
+        lead: null,
+        economics: { assignmentPrice: 89500 },
+      });
+      const deal: any = await service.findOne('deal-1', 'tenant-1');
+      expect(deal.buyerPrice).toMatchObject({
+        price: 89500,
+        basis: 'asking_price',
+      });
     });
   });
 });

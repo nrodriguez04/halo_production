@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { AI_PROVIDER_KEYS } from '@halo/shared';
+import { AI_PROVIDER_KEYS, DEFAULT_ASSIGNMENT_FEE } from '@halo/shared';
 
 /** Reserved accountId for the platform-wide master switch. */
 export const GLOBAL_ACCOUNT_ID = 'GLOBAL';
@@ -23,6 +23,8 @@ export interface ControlPlaneStatus {
   /** New leads are enriched automatically, up to the daily cap. */
   autoEnrichEnabled: boolean;
   autoEnrichDailyCap: number;
+  /** Wholesale fee: buyers pay the seller price plus this; the MAO subtracts it. */
+  defaultAssignmentFee: number;
   updatedAt?: Date;
   updatedBy?: string | null;
   /** True when a GLOBAL row is narrowing this tenant's settings. */
@@ -79,6 +81,7 @@ export class ControlPlaneService {
         agentModels: null,
         autoEnrichEnabled: false,
         autoEnrichDailyCap: 0,
+        defaultAssignmentFee: DEFAULT_ASSIGNMENT_FEE,
         globallyConstrained: !!globalRow,
       };
     }
@@ -117,6 +120,8 @@ export class ControlPlaneService {
         tenant.autoEnrichDailyCap,
         globalRow.autoEnrichDailyCap,
       ),
+      // A business number, not a switch: the GLOBAL row has no say in it.
+      defaultAssignmentFee: tenant.defaultAssignmentFee,
       globallyConstrained: true,
     };
   }
@@ -143,6 +148,7 @@ export class ControlPlaneService {
       agentModels?: Record<string, string> | null;
       autoEnrichEnabled?: boolean;
       autoEnrichDailyCap?: number;
+      defaultAssignmentFee?: number;
     },
     userId: string,
   ) {

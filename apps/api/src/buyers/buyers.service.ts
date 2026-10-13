@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { dealBuyerPrice } from '../deals/buyer-price';
 import { BuyerCreate, BuyerUpdate } from '@halo/shared';
 import { PIIService } from '../pii/pii.service';
 import type { PiiViewer } from '../auth/pii-access';
@@ -105,12 +106,16 @@ export class BuyersService {
       include: {
         property: true,
         underwritingResult: true,
+        economics: true,
       },
     });
 
     if (!deal) {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
+    // Buyers compare their range with what they would pay, not with the
+    // offer made to the seller.
+    const price = (await dealBuyerPrice(this.prisma, accountId, deal))?.price;
 
     // Get all buyers for the account
     const buyers = await this.prisma.buyer.findMany({
@@ -133,11 +138,8 @@ export class BuyersService {
       }
 
       // Match by price range
-      if (prefs.priceRange && deal.offerAmount) {
-        if (
-          deal.offerAmount < prefs.priceRange.min ||
-          deal.offerAmount > prefs.priceRange.max
-        ) {
+      if (prefs.priceRange && price) {
+        if (price < prefs.priceRange.min || price > prefs.priceRange.max) {
           return false;
         }
       }

@@ -159,4 +159,31 @@ describe('DealEconomicsService', () => {
       );
     });
   });
+
+  describe('partial updates', () => {
+    it('recomputes revenue from everything on file when one field changes', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        id: 'deal-1',
+        accountId: 'tenant-1',
+      });
+      prisma.dealEconomics.findUnique.mockResolvedValue({
+        id: 'econ-1',
+        dealId: 'deal-1',
+        contractPrice: 70000,
+        assignmentPrice: 85000,
+        closingCosts: 2000,
+      });
+      prisma.dealEconomics.upsert.mockResolvedValue({ id: 'econ-1' });
+
+      await service.upsert('deal-1', 'tenant-1', { assignmentPrice: 89500 });
+
+      const { update } = prisma.dealEconomics.upsert.mock.calls[0][0];
+      expect(update).toMatchObject({
+        assignmentPrice: 89500,
+        grossRevenue: 19500,
+        netProfit: 17500,
+      });
+      expect(update.contractPrice).toBeUndefined();
+    });
+  });
 });

@@ -18,6 +18,7 @@ import { QueueService } from '../queues/queue.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import type { PiiViewer } from '../auth/pii-access';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
+import { dealBuyerPrice } from './buyer-price';
 
 @Injectable()
 export class DealsService {
@@ -152,6 +153,7 @@ export class DealsService {
         contracts: true,
         underwritingResult: true,
         marketingMaterials: true,
+        economics: true,
       },
     });
 
@@ -159,7 +161,11 @@ export class DealsService {
       throw new NotFoundException(`Deal with ID ${id} not found`);
     }
 
-    return this.presentDeal(deal, opts.viewer);
+    const [presented, buyerPrice] = await Promise.all([
+      this.presentDeal(deal, opts.viewer),
+      dealBuyerPrice(this.prisma, accountId, deal),
+    ]);
+    return { ...presented, buyerPrice };
   }
 
   async update(

@@ -1,6 +1,8 @@
 {
   "deal_underwriter.v1": "sha256:b980854b6124cdc99d6f497d87a226070572ece1e2c161388b8cabf055d3568c",
+  "deal_underwriter.v2": "sha256:7345986d5bbe5d0dc5c4fac981933954bb31be236a7127644353a612f8a58b2c",
   "disposition_matcher.v1": "sha256:0645f9f0c63bf1591eb90fbf29f8bb6db84ba92680da5acb2dab8dc064892c5e",
+  "disposition_matcher.v2": "sha256:f65ea9c8cf20c16c36ed8f33045ba42d46daf950b3f33b98483243e447ef5add",
   "lead_analyst.v2": "sha256:eea3e92e2eb5a30ba616808efc568bf9b24926c1ae2232988cbf37b7b871bb1b",
   "outreach_drafter.v1": "sha256:a59648ec52dfe7b293aa6eab5d9857115fc1d0dcdc3d66bbd0b1ffd634f94b69"
 }

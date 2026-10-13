@@ -1,3 +1,4 @@
+import { assignmentFeeFor } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { scalarsOf } from './agent-context';
 
@@ -27,9 +28,16 @@ export interface DispositionContext {
     stage: string;
     arv: number | null;
     repairEstimate: number | null;
+    /** Seller side: the most we would pay and the offer made. Never shown to buyers. */
     mao: number | null;
     offerAmount: number | null;
+    /** Set by a person on the deal's economics, when they were. */
+    contractPrice: number | null;
+    assignmentPrice: number | null;
+    assignmentFee: number | null;
   };
+  /** The tenant's wholesale fee (control plane). */
+  defaultAssignmentFee: number;
   property: {
     address: string;
     city: string;
@@ -60,6 +68,13 @@ export async function loadDispositionContext(
       repairEstimate: true,
       mao: true,
       offerAmount: true,
+      economics: {
+        select: {
+          contractPrice: true,
+          assignmentPrice: true,
+          assignmentFee: true,
+        },
+      },
       property: {
         select: {
           address: true,
@@ -76,7 +91,7 @@ export async function loadDispositionContext(
   });
   if (!deal) return null;
 
-  const [buyers, blasts, account] = await Promise.all([
+  const [buyers, blasts, account, controlPlane] = await Promise.all([
     prisma.buyer.findMany({
       where: { accountId },
       orderBy: { engagementScore: 'desc' },
@@ -100,6 +115,10 @@ export async function loadDispositionContext(
     prisma.account.findUnique({
       where: { id: accountId },
       select: { name: true },
+    }),
+    prisma.controlPlane.findUnique({
+      where: { accountId },
+      select: { defaultAssignmentFee: true },
     }),
   ]);
 
@@ -165,7 +184,14 @@ export async function loadDispositionContext(
       repairEstimate: deal.repairEstimate,
       mao: deal.mao,
       offerAmount: deal.offerAmount,
+      contractPrice: deal.economics?.contractPrice ?? null,
+      assignmentPrice: deal.economics?.assignmentPrice ?? null,
+      assignmentFee: deal.economics?.assignmentFee ?? null,
     },
+    defaultAssignmentFee: assignmentFeeFor(
+      null,
+      controlPlane?.defaultAssignmentFee,
+    ),
     property: deal.property,
     underwriting: deal.underwritingResult
       ? {

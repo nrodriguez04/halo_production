@@ -1,3 +1,4 @@
+import { assignmentFeeFor } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { scalarsOf, summarizeSource } from './agent-context';
 
@@ -15,6 +16,8 @@ export interface DealUnderwriterContext {
     repairEstimate: number | null;
     mao: number | null;
     offerAmount: number | null;
+    /** Wholesale fee the MAO subtracts: the deal's own, else the tenant's. */
+    assignmentFee: number;
     createdAt: string;
     /** Snapshot the api compares against before writing numbers back. */
     updatedAt: string;
@@ -61,6 +64,7 @@ export async function loadDealContext(
       offerAmount: true,
       createdAt: true,
       updatedAt: true,
+      economics: { select: { assignmentFee: true } },
       property: {
         select: {
           address: true,
@@ -104,12 +108,18 @@ export async function loadDealContext(
   });
   if (!deal) return null;
 
-  const timeline = await prisma.timelineEvent.findMany({
-    where: { tenantId: accountId, entityType: 'DEAL', entityId: dealId },
-    orderBy: { createdAt: 'desc' },
-    take: 15,
-    select: { eventType: true, createdAt: true },
-  });
+  const [timeline, controlPlane] = await Promise.all([
+    prisma.timelineEvent.findMany({
+      where: { tenantId: accountId, entityType: 'DEAL', entityId: dealId },
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+      select: { eventType: true, createdAt: true },
+    }),
+    prisma.controlPlane.findUnique({
+      where: { accountId },
+      select: { defaultAssignmentFee: true },
+    }),
+  ]);
 
   const { sourceRecords: propertyRecords, ...property } = deal.property ?? {
     sourceRecords: [],
@@ -139,6 +149,10 @@ export async function loadDealContext(
       repairEstimate: deal.repairEstimate,
       mao: deal.mao,
       offerAmount: deal.offerAmount,
+      assignmentFee: assignmentFeeFor(
+        deal.economics?.assignmentFee,
+        controlPlane?.defaultAssignmentFee,
+      ),
       createdAt: deal.createdAt.toISOString(),
       updatedAt: deal.updatedAt.toISOString(),
     },

@@ -163,7 +163,40 @@ describe('grading', () => {
     };
     const r = await offline(matcher, { ...c, reply });
     expect(failures(r).join('\n')).toContain(
-      'blast: only figures from the deal',
+      'blast: only buyer-facing figures',
+    );
+  });
+
+  it("flags a buyer blast that shows the seller's price", async () => {
+    // The base deal offers the seller $72,000 (MAO $78,400); buyers are
+    // asked $82,000. Advertising the offer would give the fee away.
+    const matcher = fileOf('disposition_matcher');
+    const c = caseOf(matcher, 'memphis-ranking');
+    const original = c.reply as { blast: { subject: string; body: string } };
+    for (const leak of ['$72,000', '$72k', '$78,400']) {
+      const reply = {
+        ...original,
+        blast: {
+          ...original.blast,
+          body: original.blast.body.replace('$82,000', leak),
+        },
+      };
+      const r = await offline(matcher, { ...c, reply });
+      expect(failures(r).join('\n')).toContain(
+        "blast: never the seller's price",
+      );
+    }
+  });
+
+  it('reports an Underwriter MAO that ignores the deal fee as a detail', async () => {
+    const underwriter = fileOf('deal_underwriter');
+    const c = caseOf(underwriter, 'tenant-fee');
+    // MAO computed with the default $10,000 fee instead of the deal's $15,000.
+    const reply = { ...(c.reply as Record<string, unknown>), mao: 78400 };
+    const r = await offline(underwriter, { ...c, reply });
+    expect(r.decisionAgrees).toBe(true);
+    expect(failures(r)).toContain(
+      'detail: MAO = ARV x 0.70 - repairs - the deal fee (MAO 78400, formula gives 73400 with a 15000 fee)',
     );
   });
 
