@@ -14,6 +14,7 @@ import { EmailSendService } from '../../integrations/email/email-send.service';
 import { IntegrationUnavailableException } from '../../integrations/integration-unavailable.exception';
 import { DealsService } from '../../deals/deals.service';
 import { DisclosureGateService } from '../../compliance/disclosure-gate.service';
+import { DispositionEligibilityService } from '../../disposition/eligibility.service';
 import { counterpartyColumns } from '../message-counterparty';
 import { verifyUnsubscribeToken } from '../unsubscribe-token';
 
@@ -24,6 +25,7 @@ describe('MessageDispatchService', () => {
     deal: { findFirst: jest.Mock };
   };
   let deals: { updateStage: jest.Mock };
+  let eligibility: any;
   let disclosure: { assertEquitableInterest: jest.Mock };
   let compliance: { getFacts: jest.Mock };
   let controlPlane: { getStatus: jest.Mock };
@@ -50,6 +52,9 @@ describe('MessageDispatchService', () => {
       deal: { findFirst: jest.fn().mockResolvedValue({ stage: 'contacted' }) },
     };
     deals = { updateStage: jest.fn().mockResolvedValue({}) };
+    eligibility = {
+      assertEligible: jest.fn().mockResolvedValue({ status: 'eligible' }),
+    };
     disclosure = {
       assertEquitableInterest: jest
         .fn()
@@ -86,6 +91,7 @@ describe('MessageDispatchService', () => {
         { provide: EmailSendService, useValue: email },
         { provide: DealsService, useValue: deals },
         { provide: DisclosureGateService, useValue: disclosure },
+        { provide: DispositionEligibilityService, useValue: eligibility },
       ],
     }).compile();
     service = module.get(MessageDispatchService);
@@ -439,6 +445,45 @@ describe('MessageDispatchService', () => {
       expect(twilio.sendSms).not.toHaveBeenCalled();
       expect(email.sendEmail).not.toHaveBeenCalled();
       expect(deals.updateStage).not.toHaveBeenCalled();
+    });
+
+    it('re-checks the disposition gate for contract marketing, at the moment it leaves', async () => {
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          leadId: null,
+          metadata: { recipientType: 'buyer', type: 'disposition_outreach' },
+        }),
+      );
+      eligibility.assertEligible.mockRejectedValue(
+        new ComplianceBlockedException(
+          'DISPOSITION_NOT_ELIGIBLE',
+          'The closing deadline has passed',
+        ),
+      );
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).rejects.toBeInstanceOf(ComplianceBlockedException);
+      expect(eligibility.assertEligible).toHaveBeenCalledWith(
+        'tenant-1',
+        'deal-1',
+        'marketing this contract to buyers',
+      );
+      expect(twilio.sendSms).not.toHaveBeenCalled();
+      expect(email.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('still lets a plain reply to a buyer through when the deal is no longer marketed', async () => {
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          leadId: null,
+          metadata: { recipientType: 'buyer', type: 'buyer_reply' },
+        }),
+      );
+      eligibility.assertEligible.mockRejectedValue(
+        new Error('should not be asked'),
+      );
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(eligibility.assertEligible).not.toHaveBeenCalled();
     });
 
     it('does not consult the Texas gate for seller messages', async () => {

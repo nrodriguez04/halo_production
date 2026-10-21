@@ -17,7 +17,9 @@ export const allowedDealTransitions: Record<DealStage, DealStage[]> = {
   negotiating: ['under_contract', 'lost'],
   under_contract: ['marketing', 'lost'],
   marketing: ['assigned', 'lost'],
-  assigned: ['closed', 'lost'],
+  // A buyer who walks away or fails to fund sends the contract back to
+  // marketing while the seller contract is still in force.
+  assigned: ['closed', 'marketing', 'lost'],
   closed: [],
   lost: [],
 };

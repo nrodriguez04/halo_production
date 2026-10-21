@@ -88,6 +88,17 @@ jobs:
           DATABASE_URL: postgresql://halo:halo_dev_password@localhost:5432/halo_test
         run: cd apps/api && npx prisma migrate deploy
 
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # The contract-flipping lifecycle (docs/contract-flipping.md) through the
+      # real services against the migrated database: synthetic fixtures on
+      # throwaway tenants, nothing sent (the queue is stubbed).
+      - name: Contract-flipping lifecycle (real database)
+        env:
+          INTEGRATION_DATABASE_URL: postgresql://halo:halo_dev_password@localhost:5432/halo_test
+        run: npm run test:integration -w @halo/api
+
   agents-eval:
     # The agents' golden set (docs/agent-eval.md): every case replayed
     # through the real agent against its recorded model reply, free and

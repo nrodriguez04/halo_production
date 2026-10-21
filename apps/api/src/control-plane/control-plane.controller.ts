@@ -30,6 +30,15 @@ const UpdateControlPlaneSchema = z
     autoEnrichEnabled: z.boolean().optional(),
     autoEnrichDailyCap: z.number().int().min(0).max(1000).optional(),
     defaultAssignmentFee: z.number().int().min(0).max(1_000_000).optional(),
+    minNetProfit: z.number().int().min(0).max(1_000_000).optional(),
+    dispositionCosts: z.number().int().min(0).max(1_000_000).optional(),
+    minUnderwritingConfidence: z.number().min(0).max(1).optional(),
+    requireVerifiedPof: z.boolean().optional(),
+    revenueRecognition: z
+      .enum(['on_funds_received', 'on_closing_confirmed'])
+      .optional(),
+    campaignFollowUpDays: z.number().int().min(1).max(30).optional(),
+    campaignMaxFollowUps: z.number().int().min(0).max(5).optional(),
   })
   .strict();
 

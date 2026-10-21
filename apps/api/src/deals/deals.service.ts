@@ -19,6 +19,7 @@ import { ControlPlaneService } from '../control-plane/control-plane.service';
 import type { PiiViewer } from '../auth/pii-access';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { dealBuyerPrice } from './buyer-price';
+import { DispositionEligibilityService } from '../disposition/eligibility.service';
 
 @Injectable()
 export class DealsService {
@@ -31,6 +32,7 @@ export class DealsService {
     private pii: PIIService,
     private queues: QueueService,
     private controlPlane: ControlPlaneService,
+    private eligibility: DispositionEligibilityService,
   ) {}
 
   /**
@@ -256,6 +258,9 @@ export class DealsService {
         transition.reason || 'Invalid stage transition',
       );
     }
+    if (deal.stage !== stage) {
+      await this.assertStagePreconditions(accountId, deal.id, stage);
+    }
 
     const updated = await this.prisma.deal.update({
       where: { id: deal.id },
@@ -305,6 +310,48 @@ export class DealsService {
     }
 
     return updated;
+  }
+
+  /**
+   * The contract-flipping stages carry facts the state machine alone cannot
+   * see (docs/contract-flipping.md): a deal is marketed only from an
+   * executed, verified, assignable seller contract in a state whose rules
+   * were reviewed; it is assigned only once an assignment is executed; and
+   * it is closed only once a person confirmed the closing. Every route into
+   * these stages, the manual one included, goes through here.
+   */
+  private async assertStagePreconditions(
+    accountId: string,
+    dealId: string,
+    stage: DealStage,
+  ) {
+    if (stage === 'marketing') {
+      await this.eligibility.assertEligible(
+        accountId,
+        dealId,
+        'buyer marketing',
+      );
+    } else if (stage === 'assigned') {
+      const executed = await this.prisma.assignmentAgreement.findFirst({
+        where: { accountId, dealId, status: 'executed' },
+        select: { id: true },
+      });
+      if (!executed) {
+        throw new BadRequestException(
+          'A deal is assigned only once an assignment agreement is executed. Record the executed assignment on the Closing tab.',
+        );
+      }
+    } else if (stage === 'closed') {
+      const closing = await this.prisma.closingFile.findFirst({
+        where: { accountId, dealId, status: 'closed' },
+        select: { id: true },
+      });
+      if (!closing) {
+        throw new BadRequestException(
+          'A deal is closed only once the closing is confirmed with the settlement statement on the Closing tab.',
+        );
+      }
+    }
   }
 
   /**

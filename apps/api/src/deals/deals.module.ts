@@ -6,9 +6,16 @@ import { TimelineModule } from '../timeline/timeline.module';
 import { AutomationModule } from '../automation/automation.module';
 import { QueuesModule } from '../queues/queues.module';
 import { ControlPlaneModule } from '../control-plane/control-plane.module';
+import { DispositionGateModule } from '../disposition/disposition-gate.module';
 
 @Module({
-  imports: [TimelineModule, AutomationModule, QueuesModule, ControlPlaneModule],
+  imports: [
+    TimelineModule,
+    AutomationModule,
+    QueuesModule,
+    ControlPlaneModule,
+    DispositionGateModule,
+  ],
   controllers: [DealsController],
   providers: [DealsService, PrismaService],
   exports: [DealsService],

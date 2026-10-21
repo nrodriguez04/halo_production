@@ -30,6 +30,7 @@ const prisma = {
   buyer: { findFirst: jest.fn() },
   contract: { create: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
   document: { findMany: jest.fn() },
+  assignmentAgreement: { findFirst: jest.fn() },
 };
 const controlPlane = { isDocuSignEnabled: jest.fn(), getStatus: jest.fn() };
 const timeline = { appendEvent: jest.fn() };
@@ -60,6 +61,15 @@ const costControl = {
 };
 
 const disclosure = { assertEquitableInterest: jest.fn() };
+const agreements = {
+  onEnvelopeSent: jest.fn(),
+  onEnvelopeCompleted: jest.fn(),
+};
+const assignments = {
+  onEnvelopeSent: jest.fn(),
+  onEnvelopeCompleted: jest.fn(),
+};
+const eligibility = { assertEligible: jest.fn() };
 
 const service = () =>
   new DocuSignService(
@@ -72,6 +82,9 @@ const service = () =>
     documents as any,
     costControl as any,
     disclosure as any,
+    agreements as any,
+    assignments as any,
+    eligibility as any,
   );
 
 const deal = {
@@ -141,6 +154,7 @@ describe('DocuSignService', () => {
         { role: 'seller' },
         { role: 'buyer', buyerId: 'b1', routingOrder: 2 },
       ],
+      purpose: 'purchase_agreement',
     });
 
     expect(res).toEqual({
@@ -191,7 +205,16 @@ describe('DocuSignService', () => {
       dealId: 'deal-1',
       docusignEnvelopeId: 'env-1',
       status: 'sent',
+      purpose: 'purchase_agreement',
     });
+    // The seller contract is recorded as sent; it is relied on only once
+    // executed and verified (docs/contract-flipping.md).
+    expect(agreements.onEnvelopeSent).toHaveBeenCalledWith(
+      'acct',
+      'deal-1',
+      'c1',
+      'user-1',
+    );
     expect(contract.metadata.recipients).toEqual([
       { role: 'seller', name: 'Pat Owner', recipientId: '1' },
       { role: 'buyer', name: 'Sarah Johnson', recipientId: '2', buyerId: 'b1' },
@@ -395,12 +418,15 @@ describe('DocuSignService', () => {
     expect(disclosure.assertEquitableInterest).not.toHaveBeenCalled();
   });
 
-  it('on completion files the signed copy and moves an under-contract deal to marketing', async () => {
+  it('on completion files the signed copy and records the executed agreement, without marketing it', async () => {
     const svc = service();
     jest
       .spyOn(svc, 'storeSignedCopy')
       .mockResolvedValue({ documentId: 'doc-signed', alreadyStored: false });
     prisma.contract.findFirst.mockResolvedValue({
+      id: 'c1',
+      purpose: 'purchase_agreement',
+      metadata: { recipients: [{ role: 'seller' }] },
       deal: { id: 'deal-1', stage: 'under_contract' },
     });
 
@@ -411,23 +437,27 @@ describe('DocuSignService', () => {
       }),
     ).resolves.toEqual({
       signedDocumentId: 'doc-signed',
-      movedToMarketing: true,
+      movedToMarketing: false,
     });
-    expect(deals.updateStage).toHaveBeenCalledWith(
-      'deal-1',
+    expect(agreements.onEnvelopeCompleted).toHaveBeenCalledWith(
       'acct',
-      'marketing',
-      null,
-      'webhook',
+      'c1',
+      'doc-signed',
+      { actorId: null, actorType: 'webhook' },
     );
+    // Marketing waits for a person to verify the signed terms.
+    expect(deals.updateStage).not.toHaveBeenCalled();
   });
 
-  it('still moves the deal when the signed copy cannot be downloaded yet, and leaves other stages alone', async () => {
+  it('treats a seller envelope sent before purposes existed as the purchase agreement', async () => {
     const svc = service();
     jest
       .spyOn(svc, 'storeSignedCopy')
       .mockRejectedValue(new Error('download failed'));
     prisma.contract.findFirst.mockResolvedValue({
+      id: 'c1',
+      purpose: null,
+      metadata: { recipients: [{ role: 'seller' }] },
       deal: { id: 'deal-1', stage: 'under_contract' },
     });
     await expect(
@@ -435,24 +465,119 @@ describe('DocuSignService', () => {
         actorId: 'user-1',
         actorType: 'user' as any,
       }),
-    ).resolves.toEqual({ signedDocumentId: null, movedToMarketing: true });
+    ).resolves.toEqual({ signedDocumentId: null, movedToMarketing: false });
+    expect(agreements.onEnvelopeSent).toHaveBeenCalledWith(
+      'acct',
+      'deal-1',
+      'c1',
+      null,
+    );
+    expect(agreements.onEnvelopeCompleted).toHaveBeenCalledWith(
+      'acct',
+      'c1',
+      null,
+      {
+        actorId: 'user-1',
+        actorType: 'user',
+      },
+    );
+    expect(deals.updateStage).not.toHaveBeenCalled();
+  });
 
-    deals.updateStage.mockClear();
-    prisma.contract.findFirst.mockResolvedValue({
-      deal: { id: 'deal-1', stage: 'marketing' },
-    });
+  it('hands a completed assignment envelope to the assignment, and ignores other envelopes', async () => {
+    const svc = service();
     jest
       .spyOn(svc, 'storeSignedCopy')
-      .mockResolvedValue({ documentId: 'doc-signed', alreadyStored: true });
-    await expect(
-      svc.onEnvelopeCompleted('c1', 'acct', {
-        actorId: null,
-        actorType: 'system' as any,
-      }),
-    ).resolves.toEqual({
-      signedDocumentId: 'doc-signed',
-      movedToMarketing: false,
+      .mockResolvedValue({ documentId: 'doc-signed', alreadyStored: false });
+    prisma.contract.findFirst.mockResolvedValue({
+      id: 'c2',
+      purpose: 'assignment',
+      metadata: { recipients: [{ role: 'buyer' }] },
+      deal: { id: 'deal-1', stage: 'marketing' },
     });
+    await svc.onEnvelopeCompleted('c2', 'acct', {
+      actorId: null,
+      actorType: 'system' as any,
+    });
+    expect(assignments.onEnvelopeCompleted).toHaveBeenCalledWith(
+      'acct',
+      'c2',
+      'doc-signed',
+      {
+        actorId: null,
+        actorType: 'system',
+      },
+    );
+    expect(agreements.onEnvelopeCompleted).not.toHaveBeenCalled();
+
+    assignments.onEnvelopeCompleted.mockClear();
+    prisma.contract.findFirst.mockResolvedValue({
+      id: 'c3',
+      purpose: 'other',
+      metadata: { recipients: [{ role: 'other' }] },
+      deal: { id: 'deal-1', stage: 'marketing' },
+    });
+    await svc.onEnvelopeCompleted('c3', 'acct', {
+      actorId: null,
+      actorType: 'system' as any,
+    });
+    expect(assignments.onEnvelopeCompleted).not.toHaveBeenCalled();
+    expect(agreements.onEnvelopeCompleted).not.toHaveBeenCalled();
+  });
+
+  it('sends an assignment only for the approved assignment, only to its buyer, only while eligible', async () => {
+    (prisma.assignmentAgreement.findFirst as jest.Mock).mockResolvedValue(null);
+    await expect(
+      service().createEnvelope('acct', 'user-1', {
+        dealId: 'deal-1',
+        documentIds: ['doc-1'],
+        recipients: [{ role: 'buyer', buyerId: 'b1' }],
+        purpose: 'assignment',
+        assignmentId: 'a1',
+      }),
+    ).rejects.toThrow('draft assignment');
+
+    (prisma.assignmentAgreement.findFirst as jest.Mock).mockResolvedValue({
+      id: 'a1',
+      status: 'draft',
+      buyerId: 'b-other',
+    });
+    await expect(
+      service().createEnvelope('acct', 'user-1', {
+        dealId: 'deal-1',
+        documentIds: ['doc-1'],
+        recipients: [{ role: 'buyer', buyerId: 'b1' }],
+        purpose: 'assignment',
+        assignmentId: 'a1',
+      }),
+    ).rejects.toThrow('whose offer was accepted');
+
+    (prisma.assignmentAgreement.findFirst as jest.Mock).mockResolvedValue({
+      id: 'a1',
+      status: 'draft',
+      buyerId: 'b1',
+    });
+    eligibility.assertEligible.mockRejectedValueOnce(new Error('not eligible'));
+    await expect(
+      service().createEnvelope('acct', 'user-1', {
+        dealId: 'deal-1',
+        documentIds: ['doc-1'],
+        recipients: [{ role: 'buyer', buyerId: 'b1' }],
+        purpose: 'assignment',
+        assignmentId: 'a1',
+      }),
+    ).rejects.toThrow('not eligible');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await service().createEnvelope('acct', 'user-1', {
+      dealId: 'deal-1',
+      documentIds: ['doc-1'],
+      recipients: [{ role: 'buyer', buyerId: 'b1' }],
+      purpose: 'assignment',
+      assignmentId: 'a1',
+    });
+    expect(assignments.onEnvelopeSent).toHaveBeenCalledWith('acct', 'a1', 'c1');
+    // An assignment never moves the deal; executing it does.
     expect(deals.updateStage).not.toHaveBeenCalled();
   });
 });

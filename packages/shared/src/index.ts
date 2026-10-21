@@ -14,6 +14,9 @@ export * from './utils/budget-period';
 export * from './utils/ai-providers';
 export * from './utils/buyer-price';
 
+// Contract flipping: disposition gate, buyer ranking, fee pricing, closing
+export * from './disposition';
+
 // Policy and state machine
 export * from './policy';
 export * from './state-machine/deal-stage';

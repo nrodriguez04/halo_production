@@ -7,6 +7,8 @@ import { TimelineModule } from '../../timeline/timeline.module';
 import { DealsModule } from '../../deals/deals.module';
 import { DocumentsModule } from '../../documents/documents.module';
 import { IntegrationSecretsModule } from '../../integration-secrets/integration-secrets.module';
+import { DispositionModule } from '../../disposition/disposition.module';
+import { DispositionGateModule } from '../../disposition/disposition-gate.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { IntegrationSecretsModule } from '../../integration-secrets/integration-
     DealsModule,
     DocumentsModule,
     IntegrationSecretsModule,
+    DispositionModule,
+    DispositionGateModule,
   ],
   controllers: [DocuSignController],
   providers: [DocuSignService, PrismaService],
