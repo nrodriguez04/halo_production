@@ -441,18 +441,17 @@ export class ClosingService {
         raisedBy: actorId,
       },
     });
-    if (input.kind === 'title') {
+    // A blocking title issue means the title has issues, and reopens a
+    // milestone marked clear; a warning (a survey still to come) does not.
+    if (input.kind === 'title' && input.severity === 'blocking') {
       await this.prisma.closingFile.update({
         where: { id: file.id },
         data: { titleStatus: 'issues' },
       });
-      // A blocking title issue reopens a milestone marked clear.
-      if (input.severity === 'blocking') {
-        await this.prisma.closingMilestone.updateMany({
-          where: { closingFileId: file.id, key: 'title_clear', status: 'done' },
-          data: { status: 'pending', completedAt: null, completedBy: null },
-        });
-      }
+      await this.prisma.closingMilestone.updateMany({
+        where: { closingFileId: file.id, key: 'title_clear', status: 'done' },
+        data: { status: 'pending', completedAt: null, completedBy: null },
+      });
     }
     await dealEvent(
       this.timeline,
