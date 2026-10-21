@@ -728,15 +728,39 @@ export function deriveNextActions(s: {
     s.closing.status !== 'closed' &&
     s.closing.status !== 'cancelled'
   ) {
+    let urgent = false;
     for (const item of s.closing.readiness.attention) {
       if (item.level === 'overdue' || item.level === 'blocked') {
+        urgent = true;
         out.push({
           kind: 'closing_attention',
           title: item.text,
           detail: 'On the Closing tab.',
           priority: item.level === 'blocked' ? 4 : 3,
         });
+      } else if (item.level === 'due_soon') {
+        urgent = true;
+        out.push({
+          kind: 'closing_attention',
+          title: item.text,
+          detail: 'Due within two days, on the Closing tab.',
+          priority: 13,
+        });
       }
+    }
+    // Once a buyer is signed, the next closing step is always worth showing.
+    if (
+      !urgent &&
+      s.assignment?.status === 'executed' &&
+      !s.closing.readiness.clearToClose &&
+      s.closing.readiness.blockers.length > 0
+    ) {
+      out.push({
+        kind: 'closing_attention',
+        title: `Next closing step: ${s.closing.readiness.blockers[0]}`,
+        detail: `${s.closing.readiness.blockers.length} step(s) before the closing can be confirmed.`,
+        priority: 18,
+      });
     }
     if (
       s.assignment?.status === 'executed' &&

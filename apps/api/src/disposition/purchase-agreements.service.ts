@@ -136,6 +136,9 @@ export class PurchaseAgreementsService {
       },
       userId,
     );
+    if (agreement.purchasePrice != null) {
+      await this.syncContractPrice(accountId, dealId, agreement.purchasePrice);
+    }
     if (status === 'executed')
       await this.afterExecuted(accountId, deal, agreement.id, userId);
     return this.get(accountId, dealId);
@@ -160,6 +163,9 @@ export class PurchaseAgreementsService {
     });
     const clearVerification =
       !!agreement.verifiedAt && changedVerified.length > 0;
+    if (patch.purchasePrice != null) {
+      await this.syncContractPrice(accountId, dealId, patch.purchasePrice);
+    }
     await this.prisma.purchaseAgreement.update({
       where: { id: agreement.id },
       data: {
