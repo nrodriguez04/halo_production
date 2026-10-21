@@ -38,6 +38,7 @@ enum TimelineEntityType {
   MESSAGE
   PROPERTY
   JOB
+  BUYER
 }
 
 enum TimelineActorType {
@@ -294,6 +295,13 @@ model Deal {
   underwritingResult UnderwritingResult?
   marketingMaterials MarketingMaterial[]
   economics          DealEconomics?
+  purchaseAgreements   PurchaseAgreement[]
+  dealPackages         DealPackage[]
+  dispositionCampaigns DispositionCampaign[]
+  shareLinks           DealShareLink[]
+  buyerOffers          BuyerOffer[]
+  assignmentAgreements AssignmentAgreement[]
+  closingFile          ClosingFile?
 
   @@index([stage])
   @@index([leadId])
@@ -309,6 +317,9 @@ model Contract {
   dealId          String
   docusignEnvelopeId String? @unique
   status          String   // draft, sent, delivered, completed, declined, voided
+  /// What the envelope is: purchase_agreement (with the seller), assignment
+  /// (with the cash buyer) or other. Null on envelopes sent before it existed.
+  purpose         String?
   pdfUrl          String?
   /// What was sent and to whom (roles only, never addresses): documents, recipients, subject, signed copy.
   metadata        Json?
@@ -369,12 +380,38 @@ model Buyer {
   emailHash   String?
   phoneEnc    String?
   phoneHash   String?
+  /// Stated buy box: locations, priceRange {min,max}, propertyTypes,
+  /// maxRepairEstimate, minARV, strategies. What the buyer told us, not
+  /// evidence of what they buy (that is buyer_transactions).
   preferences Json?
   engagementScore Float @default(0.0)
   lastContacted DateTime?
+  company     String?
+  /// active | inactive | do_not_market
+  status      String   @default("active")
+  /// Where the record came from: manual | import | inbound_inquiry |
+  /// deal_page | referral | public_record, with a free-text detail.
+  source       String  @default("manual")
+  sourceDetail String?
+  /// cash | hard_money | private_money | conventional | unknown
+  fundingType  String  @default("unknown")
+  /// Proof of funds: none | requested | received | verified | expired | rejected.
+  /// Only `verified` (a person checked the document) counts as proof.
+  pofStatus     String    @default("none")
+  pofAmount     Float?
+  pofDocumentId String?
+  pofVerifiedAt DateTime?
+  pofVerifiedBy String?
+  pofExpiresAt  DateTime?
+  notes         String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  transactions BuyerTransaction[]
+  offers       BuyerOffer[]
+  targets      DispositionTarget[]
+
+  @@index([accountId, status])
   @@index([accountId, engagementScore])
   @@index([accountId, emailHash])
   @@index([accountId, phoneHash])
@@ -411,6 +448,19 @@ model ControlPlane {
   /// price, subtracted in the Underwriter's MAO. A deal's own fee
   /// (deal_economics.assignmentFee) overrides it.
   defaultAssignmentFee Int @default(10000)
+  /// Contract flipping (docs/contract-flipping.md). The least net profit a
+  /// deal may be assigned for; offers below it are recommended for rejection.
+  minNetProfit         Int     @default(5000)
+  /// Our typical costs paid out of the fee, used when a deal records none.
+  dispositionCosts     Int     @default(0)
+  /// Below this underwriting confidence the ARV is shown to buyers as unconfirmed.
+  minUnderwritingConfidence Float @default(0.5)
+  /// A buyer's proof of funds must be verified before an offer is accepted.
+  requireVerifiedPof   Boolean @default(true)
+  /// on_funds_received | on_closing_confirmed
+  revenueRecognition   String  @default("on_funds_received")
+  campaignFollowUpDays Int     @default(3)
+  campaignMaxFollowUps Int     @default(2)
   updatedAt DateTime @updatedAt
   updatedBy String?
 
@@ -719,6 +769,11 @@ model DealEconomics {
   grossRevenue     Float?
   netProfit        Float?
   roiPercent       Float?
+  /// projected | realized | lost. grossRevenue/netProfit are projections
+  /// until the configured recognition event; realizedFee is money received.
+  revenueStatus    String   @default("projected")
+  realizedFee      Float?
+  realizedAt       DateTime?
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1004,4 +1059,429 @@ model Document {
   @@index([accountId, dealId])
   @@index([accountId, status])
   @@map("documents")
+}
+
+// =============================================================================
+// Contract flipping (docs/contract-flipping.md)
+// =============================================================================
+// The seller contract Halo holds, the state rules that apply to it, the
+// buyers it is offered to and their offers, and the closing that turns an
+// accepted offer into a collected fee. Halo owns every one of these rows:
+// agents read them through the api and change them only through its
+// services, and every binding step waits for a person.
+
+/// The acquisition contract with the seller: the terms Halo relies on to
+/// market and assign the deal, and a person's verification of them against
+/// the executed copy. A deal is marketed only from an executed, verified,
+/// assignable agreement (packages/shared disposition/eligibility.ts).
+model PurchaseAgreement {
+  id                      String    @id @default(cuid())
+  accountId               String
+  dealId                  String
+  /// draft | sent | executed | terminated | expired
+  status                  String    @default("draft")
+  /// The DocuSign envelope it went out in, when it did.
+  contractId              String?   @unique
+  /// The executed copy in the documents library.
+  executedDocumentId      String?
+  jurisdiction            String?
+  purchasePrice           Float?
+  earnestMoneyAmount      Float?
+  earnestMoneyDueAt       DateTime?
+  earnestMoneyDepositedAt DateTime?
+  inspectionEndsAt        DateTime?
+  closingDeadline         DateTime?
+  executedAt              DateTime?
+  /// permitted | consent_required | prohibited | unknown. Unknown is never permission.
+  assignability           String    @default("unknown")
+  /// The clause, or where it is (e.g. "s.14, p.6").
+  assignmentClause        String?
+  sellerConsentDocumentId String?
+  /// The seller was told in writing that we may assign.
+  sellerAssignmentNotice  Boolean   @default(false)
+  verifiedAt              DateTime?
+  verifiedBy              String?
+  /// Each verification key a person confirmed, with when.
+  verification            Json?
+  terminatedAt            DateTime?
+  terminationReason       String?
+  notes                   String?
+  createdBy               String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, status])
+  @@index([dealId])
+  @@index([accountId, closingDeadline])
+  @@map("purchase_agreements")
+}
+
+/// What the operator, with counsel, has confirmed about wholesaling in one
+/// state. Nothing is assumed: a deal in a state without a reviewed policy is
+/// held for review before it can be marketed or assigned.
+model JurisdictionPolicy {
+  id                     String    @id @default(cuid())
+  accountId              String
+  state                  String
+  /// draft | reviewed | retired. Only reviewed policies are relied on.
+  status                 String    @default("draft")
+  /// allowed | conditional | prohibited | unknown
+  assignmentAllowed      String    @default("unknown")
+  doubleCloseAllowed     String    @default("unknown")
+  /// yes | no | unknown
+  licenseRequired        String    @default("unknown")
+  licenseDocumentId      String?
+  /// May the contract be advertised to buyers we have no relationship with.
+  publicMarketingAllowed String    @default("unknown")
+  /// Checklist keys that must be on file for the deal before buyer marketing.
+  buyerDisclosureKeys    String[]
+  /// Checklist keys that must be on file before the seller contract is relied on.
+  sellerDisclosureKeys   String[]
+  conditions             String?
+  /// Statutes, counsel memo: what the review relied on.
+  references             String?
+  reviewedBy             String?
+  reviewedAt             DateTime?
+  reviewExpiresAt        DateTime?
+  notes                  String?
+  updatedBy              String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@unique([accountId, state])
+  @@map("jurisdiction_policies")
+}
+
+/// A purchase a buyer made, with where we learned of it. Public-record and
+/// Halo closings are evidence; buyer-provided and manual rows are claims.
+model BuyerTransaction {
+  id           String    @id @default(cuid())
+  accountId    String
+  buyerId      String
+  address      String?
+  city         String?
+  state        String?
+  zip          String?
+  propertyType String?
+  price        Float?
+  closedAt     DateTime?
+  /// public_record | buyer_provided | halo_closing | manual
+  source       String
+  sourceRef    String?
+  dealId       String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+
+  buyer Buyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, state, city])
+  @@index([accountId, zip])
+  @@index([buyerId])
+  @@map("buyer_transactions")
+}
+
+/// The buyer-facing investment package for a deal, versioned. Built from a
+/// whitelist of buyer-safe facts: never the contract price, the offer to the
+/// seller or the MAO. Only an approved version is shown to buyers.
+model DealPackage {
+  id          String    @id @default(cuid())
+  accountId   String
+  dealId      String
+  version     Int
+  /// draft | approved | superseded
+  status      String    @default("draft")
+  content     Json
+  askingPrice Float
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  deal       Deal                  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  campaigns  DispositionCampaign[]
+  shareLinks DealShareLink[]
+
+  @@unique([dealId, version])
+  @@index([accountId, status])
+  @@map("deal_packages")
+}
+
+/// Offering one contract to selected buyers: the price, the package, the
+/// outreach a person approved, and who was offered it.
+model DispositionCampaign {
+  id              String    @id @default(cuid())
+  accountId       String
+  dealId          String
+  packageId       String?
+  /// draft | active | paused | completed | cancelled | expired
+  status          String    @default("draft")
+  askingPrice     Float
+  floorPrice      Float
+  /// The pricing recommendation it was built on (fee-pricing.ts).
+  pricing         Json?
+  channel         String    @default("email")
+  outreachSubject String
+  outreachBody    String
+  followUpDays    Int       @default(3)
+  maxFollowUps    Int       @default(2)
+  approvedBy      String?
+  approvedAt      DateTime?
+  launchedAt      DateTime?
+  expiresAt       DateTime?
+  endedAt         DateTime?
+  endedReason     String?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  deal    Deal                @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  package DealPackage?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  targets DispositionTarget[]
+  offers  BuyerOffer[]
+
+  @@index([accountId, status])
+  @@index([dealId])
+  @@map("disposition_campaigns")
+}
+
+/// One buyer in a campaign: why they were chosen and what happened.
+model DispositionTarget {
+  id             String    @id @default(cuid())
+  accountId      String
+  campaignId     String
+  buyerId        String
+  rank           Int
+  score          Float
+  /// The deterministic match: components, evidence, explanation.
+  match          Json
+  /// selected | contacted | viewed | interested | offered | declined | opted_out | skipped
+  status         String    @default("selected")
+  shareLinkId    String?
+  lastMessageId  String?
+  contactedAt    DateTime?
+  lastActivityAt DateTime?
+  followUps      Int       @default(0)
+  skipReason     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  campaign DispositionCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  buyer    Buyer               @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, buyerId])
+  @@index([accountId, status])
+  @@map("disposition_targets")
+}
+
+/// A token-gated buyer page for one deal package. Only the hash of the token
+/// is stored; the link works until it expires, is revoked, or the deal stops
+/// being eligible.
+model DealShareLink {
+  id            String    @id @default(cuid())
+  accountId     String
+  dealId        String
+  packageId     String
+  campaignId    String?
+  buyerId       String?
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedBy     String?
+  viewCount     Int       @default(0)
+  firstViewedAt DateTime?
+  lastViewedAt  DateTime?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+
+  deal    Deal        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  package DealPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, dealId])
+  @@index([buyerId])
+  @@map("deal_share_links")
+}
+
+/// What a buyer offered for the contract. `amount` is their total price for
+/// the assignment. An offer read out of an email by an agent is captured as
+/// such and must be confirmed by a person before it can be accepted.
+model BuyerOffer {
+  id                String    @id @default(cuid())
+  accountId         String
+  dealId            String
+  buyerId           String
+  campaignId        String?
+  /// indication | written_offer
+  kind              String    @default("written_offer")
+  /// email | sms | deal_page | phone | manual
+  source            String
+  sourceMessageId   String?
+  /// person | buyer | agent: who put the number into Halo.
+  capturedBy        String
+  captureConfidence Float?
+  confirmedAt       DateTime?
+  confirmedBy       String?
+  amount            Float
+  earnestMoney      Float?
+  closeBy           DateTime?
+  financing         String?
+  conditions        String?
+  pofProvided       Boolean   @default(false)
+  /// received | countered | accepted | rejected | withdrawn | expired | superseded
+  status            String    @default("received")
+  counterAmount     Float?
+  counteredAt       DateTime?
+  counteredBy       String?
+  decidedAt         DateTime?
+  decidedBy         String?
+  decisionReason    String?
+  /// The pricing evaluation at the last decision (fee-pricing.ts).
+  evaluation        Json?
+  expiresAt         DateTime?
+  createdBy         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  deal       Deal                 @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  buyer      Buyer                @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  campaign   DispositionCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  assignment AssignmentAgreement?
+
+  @@index([accountId, dealId, status])
+  @@index([buyerId])
+  @@map("buyer_offers")
+}
+
+/// The transfer of our position to the buyer, at the terms a person approved.
+/// For a double close the same row records the resale (B-C) contract.
+model AssignmentAgreement {
+  id                     String    @id @default(cuid())
+  accountId              String
+  dealId                 String
+  buyerId                String
+  offerId                String?   @unique
+  purchaseAgreementId    String
+  /// assignment | double_close
+  structure              String    @default("assignment")
+  /// draft | sent | executed | cancelled
+  status                 String    @default("draft")
+  assignmentPrice        Float
+  assignmentFee          Float
+  buyerDepositAmount     Float?
+  buyerDepositDueAt      DateTime?
+  buyerDepositReceivedAt DateTime?
+  contractId             String?   @unique
+  executedDocumentId     String?
+  executedAt             DateTime?
+  approvedBy             String
+  approvedAt             DateTime
+  cancelledAt            DateTime?
+  cancelledBy            String?
+  cancellationReason     String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  deal  Deal        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  offer BuyerOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, status])
+  @@index([dealId])
+  @@map("assignment_agreements")
+}
+
+/// Title and closing coordination for a deal, opened when the seller
+/// contract is executed. The fee is projected until a person records the
+/// closing (and, by default, the money received).
+model ClosingFile {
+  id                   String    @id @default(cuid())
+  accountId            String
+  dealId               String    @unique
+  /// assignment | double_close
+  structure            String    @default("assignment")
+  /// open | clear_to_close | closed | cancelled
+  status               String    @default("open")
+  /// not_opened | opened | commitment_received | clear | issues
+  titleStatus          String    @default("not_opened")
+  /// The title company or closing attorney: a business contact.
+  closingAgentCompany  String?
+  closingAgentOfficer  String?
+  closingAgentEmail    String?
+  closingAgentPhone    String?
+  fileNumber           String?
+  scheduledClosingAt   DateTime?
+  closedAt             DateTime?
+  closedBy             String?
+  settlementDocumentId String?
+  expectedFee          Float?
+  realizedFee          Float?
+  feeReceivedAt        DateTime?
+  feeRecordedBy        String?
+  revenueRecognizedAt  DateTime?
+  cancelledAt          DateTime?
+  cancelledBy          String?
+  cancellationReason   String?
+  openedAt             DateTime  @default(now())
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  deal       Deal               @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  milestones ClosingMilestone[]
+  issues     ClosingIssue[]
+
+  @@index([accountId, status])
+  @@map("closing_files")
+}
+
+model ClosingMilestone {
+  id                 String    @id @default(cuid())
+  accountId          String
+  closingFileId      String
+  key                String
+  label              String
+  blocking           Boolean   @default(true)
+  /// pending | done | waived
+  status             String    @default("pending")
+  dueAt              DateTime?
+  completedAt        DateTime?
+  completedBy        String?
+  note               String?
+  evidenceDocumentId String?
+  sortOrder          Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  closingFile ClosingFile @relation(fields: [closingFileId], references: [id], onDelete: Cascade)
+
+  @@unique([closingFileId, key])
+  @@index([accountId, status, dueAt])
+  @@map("closing_milestones")
+}
+
+/// Something that can stop the closing: a lien, a missing signature, a
+/// buyer who cannot fund. A blocking issue also blocks disposition.
+model ClosingIssue {
+  id            String    @id @default(cuid())
+  accountId     String
+  closingFileId String
+  dealId        String
+  /// title | funding | signature | contingency | deadline | other
+  kind          String
+  /// blocking | warning
+  severity      String    @default("blocking")
+  description   String
+  /// open | resolved
+  status        String    @default("open")
+  raisedBy      String?
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  resolution    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  closingFile ClosingFile @relation(fields: [closingFileId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, dealId, status])
+  @@map("closing_issues")
 }

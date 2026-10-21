@@ -17,6 +17,8 @@ import type { CostContext } from '../cost-control/dto/cost-intent.dto';
 import { messageCounterparty } from './message-counterparty';
 import { DealsService } from '../deals/deals.service';
 import { DisclosureGateService } from '../compliance/disclosure-gate.service';
+import { DispositionEligibilityService } from '../disposition/eligibility.service';
+import { DISPOSITION_MARKETING_TYPES } from '../disposition/marketing-types';
 import { TimelineActorType } from '@prisma/client';
 import { composeEmail, emailSettings, withSmsOptOut } from './outbound-content';
 
@@ -53,6 +55,7 @@ export class MessageDispatchService {
     private email: EmailSendService,
     private deals: DealsService,
     private disclosure: DisclosureGateService,
+    private eligibility: DispositionEligibilityService,
   ) {}
 
   async sendApproved(
@@ -137,7 +140,14 @@ export class MessageDispatchService {
     }
   }
 
-  /** Buyer marketing for a Texas deal needs the equitable-interest notice on file. */
+  /**
+   * Buyer marketing for a Texas deal needs the equitable-interest notice on
+   * file. A message that markets the contract itself (a blast, campaign
+   * outreach, a follow-up, a counter) also needs the deal to pass the
+   * disposition gate at the moment it leaves: a message approved yesterday
+   * must not advertise a contract that expired overnight. Replies to a
+   * buyer (including "this one is gone") are not marketing and still send.
+   */
   private async assertBuyerDisclosure(message: Message) {
     const meta = (message.metadata ?? {}) as Record<string, unknown>;
     const toBuyer =
@@ -148,6 +158,16 @@ export class MessageDispatchService {
       message.dealId,
       'marketing this deal to buyers',
     );
+    if (
+      typeof meta.type === 'string' &&
+      DISPOSITION_MARKETING_TYPES.has(meta.type)
+    ) {
+      await this.eligibility.assertEligible(
+        message.accountId,
+        message.dealId,
+        'marketing this contract to buyers',
+      );
+    }
   }
 
   /**

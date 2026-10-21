@@ -6,6 +6,17 @@ import { AI_PROVIDER_KEYS, DEFAULT_ASSIGNMENT_FEE } from '@halo/shared';
 /** Reserved accountId for the platform-wide master switch. */
 export const GLOBAL_ACCOUNT_ID = 'GLOBAL';
 
+/** The schema defaults, for a tenant read without provisioning a row. */
+const DISPOSITION_DEFAULTS = {
+  minNetProfit: 5000,
+  dispositionCosts: 0,
+  minUnderwritingConfidence: 0.5,
+  requireVerifiedPof: true,
+  revenueRecognition: 'on_funds_received',
+  campaignFollowUpDays: 3,
+  campaignMaxFollowUps: 2,
+};
+
 export interface ControlPlaneStatus {
   accountId: string;
   enabled: boolean;
@@ -25,6 +36,14 @@ export interface ControlPlaneStatus {
   autoEnrichDailyCap: number;
   /** Wholesale fee: buyers pay the seller price plus this; the MAO subtracts it. */
   defaultAssignmentFee: number;
+  /** Contract flipping (docs/contract-flipping.md): business settings, not switches. */
+  minNetProfit: number;
+  dispositionCosts: number;
+  minUnderwritingConfidence: number;
+  requireVerifiedPof: boolean;
+  revenueRecognition: string;
+  campaignFollowUpDays: number;
+  campaignMaxFollowUps: number;
   updatedAt?: Date;
   updatedBy?: string | null;
   /** True when a GLOBAL row is narrowing this tenant's settings. */
@@ -82,6 +101,7 @@ export class ControlPlaneService {
         autoEnrichEnabled: false,
         autoEnrichDailyCap: 0,
         defaultAssignmentFee: DEFAULT_ASSIGNMENT_FEE,
+        ...DISPOSITION_DEFAULTS,
         globallyConstrained: !!globalRow,
       };
     }
@@ -120,8 +140,15 @@ export class ControlPlaneService {
         tenant.autoEnrichDailyCap,
         globalRow.autoEnrichDailyCap,
       ),
-      // A business number, not a switch: the GLOBAL row has no say in it.
+      // Business numbers, not switches: the GLOBAL row has no say in them.
       defaultAssignmentFee: tenant.defaultAssignmentFee,
+      minNetProfit: tenant.minNetProfit,
+      dispositionCosts: tenant.dispositionCosts,
+      minUnderwritingConfidence: tenant.minUnderwritingConfidence,
+      requireVerifiedPof: tenant.requireVerifiedPof,
+      revenueRecognition: tenant.revenueRecognition,
+      campaignFollowUpDays: tenant.campaignFollowUpDays,
+      campaignMaxFollowUps: tenant.campaignMaxFollowUps,
       globallyConstrained: true,
     };
   }
@@ -149,6 +176,13 @@ export class ControlPlaneService {
       autoEnrichEnabled?: boolean;
       autoEnrichDailyCap?: number;
       defaultAssignmentFee?: number;
+      minNetProfit?: number;
+      dispositionCosts?: number;
+      minUnderwritingConfidence?: number;
+      requireVerifiedPof?: boolean;
+      revenueRecognition?: string;
+      campaignFollowUpDays?: number;
+      campaignMaxFollowUps?: number;
     },
     userId: string,
   ) {

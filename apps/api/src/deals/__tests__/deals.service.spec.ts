@@ -7,6 +7,7 @@ import { AutomationService } from '../../automation/automation.service';
 import { PIIService } from '../../pii/pii.service';
 import { QueueService } from '../../queues/queue.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
+import { DispositionEligibilityService } from '../../disposition/eligibility.service';
 
 describe('DealsService', () => {
   let service: DealsService;
@@ -15,6 +16,7 @@ describe('DealsService', () => {
   let automationService: any;
   let queueService: any;
   let controlPlaneService: any;
+  let eligibility: any;
 
   const existingDeal = {
     id: 'deal-1',
@@ -36,6 +38,8 @@ describe('DealsService', () => {
       property: {
         findFirst: jest.fn(),
       },
+      assignmentAgreement: { findFirst: jest.fn() },
+      closingFile: { findFirst: jest.fn() },
       controlPlane: {
         findUnique: jest
           .fn()
@@ -52,6 +56,9 @@ describe('DealsService', () => {
     };
     queueService = { enqueueAgent: jest.fn().mockResolvedValue({}) };
     controlPlaneService = { isEnabled: jest.fn().mockResolvedValue(true) };
+    eligibility = {
+      assertEligible: jest.fn().mockResolvedValue({ status: 'eligible' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -61,6 +68,7 @@ describe('DealsService', () => {
         { provide: AutomationService, useValue: automationService },
         { provide: QueueService, useValue: queueService },
         { provide: ControlPlaneService, useValue: controlPlaneService },
+        { provide: DispositionEligibilityService, useValue: eligibility },
         PIIService,
       ],
     }).compile();
@@ -309,6 +317,61 @@ describe('DealsService', () => {
         entityId: 'deal-1',
         trigger: 'lifecycle',
         triggerEventId: 'stage:marketing:2026-10-12T12:00:00.000Z',
+      });
+    });
+
+    it('refuses marketing until the disposition gate passes, before anything changes', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'under_contract',
+      });
+      eligibility.assertEligible.mockRejectedValueOnce(
+        new BadRequestException(
+          'Needs review before disposition: Terms verified by a person.',
+        ),
+      );
+      await expect(
+        service.updateStage('deal-1', 'tenant-1', 'marketing', 'user-1'),
+      ).rejects.toThrow('Terms verified');
+      expect(eligibility.assertEligible).toHaveBeenCalledWith(
+        'tenant-1',
+        'deal-1',
+        'buyer marketing',
+      );
+      expect(prisma.deal.update).not.toHaveBeenCalled();
+      expect(queueService.enqueueAgent).not.toHaveBeenCalled();
+    });
+
+    it('assigns only with an executed assignment and closes only with a confirmed closing', async () => {
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'marketing',
+      });
+      prisma.assignmentAgreement.findFirst.mockResolvedValue(null);
+      await expect(
+        service.updateStage('deal-1', 'tenant-1', 'assigned', 'user-1'),
+      ).rejects.toThrow('assignment agreement is executed');
+
+      prisma.deal.findFirst.mockResolvedValue({
+        ...existingDeal,
+        stage: 'assigned',
+      });
+      prisma.closingFile.findFirst.mockResolvedValue(null);
+      await expect(
+        service.updateStage('deal-1', 'tenant-1', 'closed', 'user-1'),
+      ).rejects.toThrow('closing is confirmed');
+      expect(prisma.deal.update).not.toHaveBeenCalled();
+
+      prisma.closingFile.findFirst.mockResolvedValue({ id: 'cf-1' });
+      prisma.deal.update.mockResolvedValue({
+        ...existingDeal,
+        stage: 'closed',
+        updatedAt: new Date(),
+      });
+      await service.updateStage('deal-1', 'tenant-1', 'closed', 'user-1');
+      expect(prisma.closingFile.findFirst).toHaveBeenLastCalledWith({
+        where: { accountId: 'tenant-1', dealId: 'deal-1', status: 'closed' },
+        select: { id: true },
       });
     });
 

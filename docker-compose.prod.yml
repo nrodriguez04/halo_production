@@ -142,6 +142,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       # Messaging compliance: email is refused until the first three are set.
       PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.haloacquisitions.com/api}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
+      DISPOSITION_SWEEP: ${DISPOSITION_SWEEP:-on}
+      DISPOSITION_SWEEP_HOUR_UTC: ${DISPOSITION_SWEEP_HOUR_UTC:-13}
       EMAIL_FROM: ${EMAIL_FROM:-}
       EMAIL_POSTAL_ADDRESS: ${EMAIL_POSTAL_ADDRESS:-}
       MESSAGING_BRAND_NAME: ${MESSAGING_BRAND_NAME:-}

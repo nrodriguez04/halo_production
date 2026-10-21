@@ -21,6 +21,10 @@ import { CostBlockedException } from '../../cost-control/cost-blocked.exception'
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import { openValue } from '../../pii/contact-crypto';
 import { DisclosureGateService } from '../../compliance/disclosure-gate.service';
+import { envelopePurpose } from './docusign.dto';
+import { PurchaseAgreementsService } from '../../disposition/purchase-agreements.service';
+import { AssignmentsService } from '../../disposition/assignments.service';
+import { DispositionEligibilityService } from '../../disposition/eligibility.service';
 import {
   DocuSignAuthError,
   parseEnv,
@@ -76,6 +80,8 @@ export interface ContractMetadata {
   sentBy: string | null;
   signedDocumentId?: string;
   lastEvent?: string;
+  /** The assignment an `assignment` envelope executes. */
+  assignmentId?: string;
 }
 
 async function readAll(stream: Readable): Promise<Buffer> {
@@ -108,6 +114,9 @@ export class DocuSignService {
     private readonly documents: DocumentsService,
     private readonly costControl: IntegrationCostControlService,
     private readonly disclosure: DisclosureGateService,
+    private agreements: PurchaseAgreementsService,
+    private assignments: AssignmentsService,
+    private eligibility: DispositionEligibilityService,
   ) {}
 
   // ------------------------------------------------------------ auth
@@ -261,6 +270,30 @@ export class DocuSignService {
         'sending a contract to a buyer',
       );
     }
+    const purpose = envelopePurpose(input);
+    if (purpose === 'assignment') {
+      // An assignment transfers our position: only the one a person approved,
+      // to that buyer, while the deal may still be assigned.
+      const assignment = await this.prisma.assignmentAgreement.findFirst({
+        where: { id: input.assignmentId, accountId, dealId: deal.id },
+      });
+      if (!assignment || assignment.status !== 'draft') {
+        throw new BadRequestException(
+          'An assignment envelope needs a draft assignment on this deal (accept an offer first).',
+        );
+      }
+      const buyers = input.recipients.filter((r) => r.role === 'buyer');
+      if (buyers.length !== 1 || buyers[0].buyerId !== assignment.buyerId) {
+        throw new BadRequestException(
+          'The assignment goes to the buyer whose offer was accepted, and only to them.',
+        );
+      }
+      await this.eligibility.assertEligible(
+        accountId,
+        deal.id,
+        'sending an assignment for signature',
+      );
+    }
     const docs = await this.loadDocuments(accountId, input.documentIds);
     const signers = await this.resolveRecipients(
       accountId,
@@ -398,17 +431,33 @@ export class DocuSignService {
         ...(s.buyerId ? { buyerId: s.buyerId } : {}),
       })),
       sentBy: userId,
+      ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
     };
     const contract = await this.prisma.contract.create({
       data: {
         dealId: deal.id,
         docusignEnvelopeId: envelope.envelopeId,
         status: envelope.status === 'sent' ? 'sent' : envelope.status,
+        purpose,
         metadata: metadata as unknown as Prisma.InputJsonObject,
       },
     });
+    if (purpose === 'purchase_agreement') {
+      await this.agreements.onEnvelopeSent(
+        accountId,
+        deal.id,
+        contract.id,
+        userId,
+      );
+    } else if (purpose === 'assignment' && input.assignmentId) {
+      await this.assignments.onEnvelopeSent(
+        accountId,
+        input.assignmentId,
+        contract.id,
+      );
+    }
 
-    if (deal.stage === 'negotiating') {
+    if (deal.stage === 'negotiating' && purpose === 'purchase_agreement') {
       await this.dealsService.updateStage(
         deal.id,
         accountId,
@@ -614,10 +663,12 @@ export class DocuSignService {
   }
 
   /**
-   * The seller signed: file the executed copy in the library (tolerating a
-   * failed download, which a person can retry) and move an under-contract
-   * deal to marketing, which starts the Disposition Matcher. The webhook,
-   * the status refresh and the manual pull all come through here.
+   * Everyone signed: file the executed copy in the library (tolerating a
+   * failed download, which a person can retry) and record what was signed.
+   * A seller contract becomes an executed purchase agreement that a person
+   * must verify before the deal can be marketed (docs/contract-flipping.md);
+   * an assignment becomes executed and the deal assigned. The webhook, the
+   * status refresh and the manual pull all come through here.
    */
   async onEnvelopeCompleted(
     contractId: string,
@@ -635,20 +686,51 @@ export class DocuSignService {
     }
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, deal: { accountId } },
-      select: { deal: { select: { id: true, stage: true } } },
+      select: {
+        id: true,
+        purpose: true,
+        metadata: true,
+        deal: { select: { id: true, stage: true } },
+      },
     });
-    let movedToMarketing = false;
-    if (contract?.deal.stage === 'under_contract') {
-      await this.dealsService.updateStage(
-        contract.deal.id,
+    if (!contract) return { signedDocumentId, movedToMarketing: false };
+    const roles = new Set(
+      (
+        ((contract.metadata ?? {}) as Partial<ContractMetadata>).recipients ??
+        []
+      ).map((r) => r.role),
+    );
+    // Envelopes sent before `purpose` existed: a seller envelope on a deal
+    // under contract is the purchase agreement, as the old flow assumed.
+    const purpose =
+      contract.purpose ??
+      (roles.has('seller') && !roles.has('buyer')
+        ? 'purchase_agreement'
+        : 'other');
+    if (purpose === 'purchase_agreement') {
+      if (!contract.purpose) {
+        await this.agreements.onEnvelopeSent(
+          accountId,
+          contract.deal.id,
+          contract.id,
+          null,
+        );
+      }
+      await this.agreements.onEnvelopeCompleted(
         accountId,
-        'marketing',
-        actor.actorId,
-        actor.actorType,
+        contract.id,
+        signedDocumentId,
+        actor,
       );
-      movedToMarketing = true;
+    } else if (purpose === 'assignment') {
+      await this.assignments.onEnvelopeCompleted(
+        accountId,
+        contract.id,
+        signedDocumentId,
+        actor,
+      );
     }
-    return { signedDocumentId, movedToMarketing };
+    return { signedDocumentId, movedToMarketing: false };
   }
 
   async downloadPDF(envelopeId: string, accountId: string): Promise<Buffer> {

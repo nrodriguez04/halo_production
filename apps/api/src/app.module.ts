@@ -44,6 +44,7 @@ import { TwilioSendModule } from './integrations/twilio-send/twilio-send.module'
 import { EmailSendModule } from './integrations/email/email-send.module';
 import { SkipTraceModule } from './skip-trace/skip-trace.module';
 import { LeadLifecycleModule } from './lead-lifecycle/lead-lifecycle.module';
+import { DispositionModule } from './disposition/disposition.module';
 import { PrismaService } from './prisma.service';
 import { AuditModule } from './audit/audit.module';
 
@@ -106,6 +107,7 @@ import { AuditModule } from './audit/audit.module';
     EmailSendModule,
     SkipTraceModule,
     LeadLifecycleModule,
+    DispositionModule,
   ],
   providers: [PrismaService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
   exports: [PrismaService],
