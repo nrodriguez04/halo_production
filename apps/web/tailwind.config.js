@@ -105,9 +105,12 @@ module.exports = {
           from: { opacity: '0', transform: 'translateX(16px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
+        // The `scale` property, not `transform`: with fill-mode `both` a
+        // transform keyframe stays applied and wipes out the
+        // translate(-50%, -50%) that centres dialogs.
         'scale-in': {
-          from: { opacity: '0', transform: 'scale(0.96)' },
-          to: { opacity: '1', transform: 'scale(1)' },
+          from: { opacity: '0', scale: '0.96' },
+          to: { opacity: '1', scale: '1' },
         },
       },
       animation: {

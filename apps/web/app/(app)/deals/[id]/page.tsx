@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { apiFetch } from '@/lib/api-fetch';
+import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,46 +14,19 @@ import { toast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/page-header';
 import { LoadingState, EmptyState, ErrorState } from '@/components/states';
 import { cn } from '@/lib/utils';
-import { FileText, Brain, Clock, MapPin, Calculator } from 'lucide-react';
+import { FileText, Brain, Clock, MapPin, Calculator, Inbox } from 'lucide-react';
 import { ContractsPanel, type ContractRow } from '@/components/deals/contracts-panel';
-import {
-  BuyerPricePanel,
-  type BuyerPrice,
-  type DealPricing,
-} from '@/components/deals/buyer-price-panel';
+import { BuyerPricePanel, type DealPricing } from '@/components/deals/buyer-price-panel';
+import { EconomicsCard, EligibilityCard, NextActionsCard } from '@/components/disposition/overview-cards';
+import { AgreementPanel } from '@/components/disposition/agreement-panel';
+import { BuyersPanel } from '@/components/disposition/buyers-panel';
+import { CampaignPanel } from '@/components/disposition/campaign-panel';
+import { OffersPanel } from '@/components/disposition/offers-panel';
+import { ClosingPanel } from '@/components/disposition/closing-panel';
+import { ELIGIBILITY_LABEL, ELIGIBILITY_VARIANT, day, errorText, type Workspace } from '@/lib/disposition';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
 const Marker = dynamic(() => import('react-map-gl/maplibre').then((m) => m.Marker), { ssr: false });
-
-interface Deal {
-  id: string;
-  stage: string;
-  arv?: number;
-  repairEstimate?: number;
-  mao?: number;
-  offerAmount?: number;
-  createdAt: string;
-  property?: {
-    id: string;
-    address: string;
-    city: string;
-    state: string;
-    latitude?: number;
-    longitude?: number;
-    estimatedValue?: number;
-  };
-  lead?: {
-    id: string;
-    canonicalOwner?: string;
-    canonicalPhone?: string;
-    canonicalEmail?: string | null;
-  };
-  contracts?: ContractRow[];
-  marketingMaterials?: Array<{ id: string; type: string; createdAt: string }>;
-  economics?: DealPricing | null;
-  /** What buyers are asked to pay (never the offer to the seller). */
-  buyerPrice?: BuyerPrice | null;
-}
 
 interface TimelineEvent {
   id: string;
@@ -95,61 +68,35 @@ const stageVariant = (stage: string) => {
   }
 };
 
+/**
+ * The Deal Command Center (docs/contract-flipping.md s7): one read of the
+ * whole opportunity, the few actions that move it at the top, and a tab per
+ * stage of the flip. Every number shown to a buyer is the buyer price; the
+ * seller-side figures stay on this page.
+ */
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [deal, setDeal] = useState<Deal | null>(null);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
-  const [uwResult, setUwResult] = useState<UnderwritingResult | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [errored, setErrored] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    setLoading(true);
-    setErrored(false);
-    Promise.all([
-      apiFetch(`/deals/${id}`).then(async (r) => (r.ok ? r.json() : null)),
-      apiFetch(`/timeline/DEAL/${id}`).then(async (r) => (r.ok ? r.json() : [])),
-      apiFetch(`/underwriting/result/${id}`).then(async (r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([d, t, u]) => {
-        if (cancelled) return;
-        setDeal(d);
-        setTimeline(t ?? []);
-        setUwResult(u);
-      })
-      .catch(() => {
-        if (!cancelled) setErrored(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, reloadKey]);
-
-  async function runUnderwriting() {
-    if (analyzing) return;
-    setAnalyzing(true);
-    try {
-      const res = await apiFetch(`/underwriting/analyze/${id}`, { method: 'POST' });
-      if (!res.ok) throw new Error(await res.text());
+  const qc = useQueryClient();
+  const [tab, setTab] = useState('overview');
+  const workspace = useApiQuery<Workspace>(`/deals/${id}/workspace`, { enabled: !!id });
+  const timeline = useApiQuery<TimelineEvent[]>(`/timeline/DEAL/${id}`, { enabled: !!id && tab === 'timeline' });
+  const underwriting = useApiQuery<UnderwritingResult | null>(`/underwriting/result/${id}`, {
+    enabled: !!id,
+    retry: false,
+  });
+  const reload = () => {
+    qc.invalidateQueries({ queryKey: [`/deals/${id}/workspace`] });
+    qc.invalidateQueries({ queryKey: [`/timeline/DEAL/${id}`] });
+  };
+  const analyze = useApiMutation(() => apiJson(`/underwriting/analyze/${id}`, { method: 'POST' }), {
+    onSuccess: () => {
       toast.success('Underwriting analysis queued');
-      // Re-fetch results -- the worker may take a moment.
-      const next = await apiFetch(`/underwriting/result/${id}`).then((r) => (r.ok ? r.json() : null));
-      setUwResult(next);
-    } catch (err: any) {
-      toast.error('Failed to run underwriting', { description: err?.message });
-    } finally {
-      setAnalyzing(false);
-    }
-  }
+      qc.invalidateQueries({ queryKey: [`/underwriting/result/${id}`] });
+    },
+    onError: (err) => toast.error('Failed to run underwriting', { description: errorText(err) }),
+  });
 
-  if (loading) {
+  if (workspace.isPending) {
     return (
       <div className="space-y-6 p-6">
         <PageHeader title="Loading…" />
@@ -157,27 +104,36 @@ export default function DealDetailPage() {
       </div>
     );
   }
-  if (errored || !deal) {
+  if (workspace.isError || !workspace.data) {
     return (
       <div className="space-y-6 p-6">
         <PageHeader title="Deal not found" />
         <ErrorState
-          title="Deal not found"
-          description="It may have been deleted or you don't have access."
+          title="Could not load this deal"
+          description={workspace.error ? errorText(workspace.error) : "It may have been deleted or you don't have access."}
+          onRetry={() => workspace.refetch()}
         />
       </div>
     );
   }
 
+  const ws = workspace.data;
+  const deal = ws.deal;
   const hasCoords = deal.property?.latitude && deal.property?.longitude;
+  const uwResult = underwriting.data;
+  const activeAssignment = ws.assignments.find((a) => a.status !== 'cancelled') ?? null;
+  const buyerNames: Record<string, string> = Object.fromEntries([
+    ...ws.offers.map((o) => [o.buyerId, o.buyer.name] as const),
+    ...ws.matches.map((m) => [m.buyerId, m.name] as const),
+  ]);
+  const openOffers = ws.offers.filter((o) => o.status === 'received' || o.status === 'countered').length;
+  const pending = ws.approvals.agentRuns.length + ws.approvals.messages.length;
 
   return (
     <div className="space-y-6 p-6">
       <PageHeader
         title={deal.property?.address || `Deal ${deal.id.slice(0, 8)}`}
-        description={
-          deal.property ? `${deal.property.city}, ${deal.property.state}` : undefined
-        }
+        description={deal.property ? `${deal.property.city}, ${deal.property.state}` : undefined}
         actions={
           <>
             <Button asChild variant="outline" size="sm">
@@ -186,6 +142,9 @@ export default function DealDetailPage() {
                 Documents
               </Link>
             </Button>
+            <Badge variant={ELIGIBILITY_VARIANT[ws.eligibility.status]} className="px-3 py-1 text-sm">
+              {ELIGIBILITY_LABEL[ws.eligibility.status]}
+            </Badge>
             <Badge variant={stageVariant(deal.stage)} className="px-3 py-1 text-sm">
               {deal.stage.replace('_', ' ')}
             </Badge>
@@ -194,50 +153,15 @@ export default function DealDetailPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="animate-fade-up lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Deal Financials</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              {[
-                { label: 'ARV', value: deal.arv },
-                { label: 'Repairs', value: deal.repairEstimate },
-                { label: 'MAO', value: deal.mao },
-                { label: 'Offer to seller', value: deal.offerAmount, highlight: true },
-              ].map((f) => (
-                <div key={f.label} className="space-y-1">
-                  <p className="text-caption uppercase tracking-wider text-muted-foreground">{f.label}</p>
-                  <p
-                    className={cn(
-                      'font-mono text-h3 font-bold',
-                      f.highlight ? 'text-primary' : 'text-foreground',
-                    )}
-                  >
-                    {f.value != null ? `$${f.value.toLocaleString()}` : '—'}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <BuyerPricePanel
-              dealId={deal.id}
-              buyerPrice={deal.buyerPrice}
-              pricing={deal.economics}
-              onSaved={() => setReloadKey((k) => k + 1)}
-            />
-          </CardContent>
-        </Card>
-
+        <div className="lg:col-span-2">
+          <NextActionsCard actions={ws.nextActions} onGo={setTab} />
+        </div>
         <Card className="animate-fade-up overflow-hidden" style={{ animationDelay: '60ms' }}>
           <CardContent className="p-0">
             {hasCoords ? (
               <div className="h-48 w-full">
                 <MapGL
-                  initialViewState={{
-                    latitude: deal.property!.latitude!,
-                    longitude: deal.property!.longitude!,
-                    zoom: 14,
-                  }}
+                  initialViewState={{ latitude: deal.property!.latitude!, longitude: deal.property!.longitude!, zoom: 14 }}
                   mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
                   style={{ width: '100%', height: '100%' }}
                   interactive={false}
@@ -256,16 +180,49 @@ export default function DealDetailPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="overview">
-        <TabsList>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="contracts">
-            Contracts {deal.contracts?.length ? `(${deal.contracts.length})` : ''}
-          </TabsTrigger>
+          <TabsTrigger value="contract">Contract</TabsTrigger>
+          <TabsTrigger value="buyers">Buyers</TabsTrigger>
+          <TabsTrigger value="campaign">Campaign</TabsTrigger>
+          <TabsTrigger value="offers">Offers {openOffers ? `(${openOffers})` : ''}</TabsTrigger>
+          <TabsTrigger value="closing">Closing</TabsTrigger>
+          <TabsTrigger value="approvals">Approvals {pending ? `(${pending})` : ''}</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="space-y-4">
+          <EconomicsCard economics={ws.economics} />
+          <Card className="animate-fade-up">
+            <CardHeader>
+              <CardTitle>Deal Financials</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                {[
+                  { label: 'ARV', value: deal.arv },
+                  { label: 'Repairs', value: deal.repairEstimate },
+                  { label: 'MAO', value: deal.mao },
+                  { label: 'Offer to seller', value: deal.offerAmount, highlight: true },
+                ].map((f) => (
+                  <div key={f.label} className="space-y-1">
+                    <p className="text-caption uppercase tracking-wider text-muted-foreground">{f.label}</p>
+                    <p className={cn('font-mono text-h3 font-bold', f.highlight ? 'text-primary' : 'text-foreground')}>
+                      {f.value != null ? `$${f.value.toLocaleString()}` : '—'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <BuyerPricePanel
+                dealId={deal.id}
+                buyerPrice={deal.buyerPrice}
+                pricing={deal.economics as DealPricing | null}
+                onSaved={reload}
+              />
+            </CardContent>
+          </Card>
+          <EligibilityCard eligibility={ws.eligibility} compact />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -276,12 +233,7 @@ export default function DealDetailPage() {
                 {!uwResult && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={runUnderwriting}
-                        loading={analyzing}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => analyze.mutate(undefined)} loading={analyze.isPending}>
                         <Calculator size={14} className="mr-2" />
                         Run Underwriting
                       </Button>
@@ -295,48 +247,124 @@ export default function DealDetailPage() {
               {uwResult ? (
                 <div className="space-y-3">
                   <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <p className="text-caption uppercase tracking-wider text-muted-foreground">AI ARV</p>
-                      <p className="font-mono text-body font-semibold text-foreground">
-                        {uwResult.arv ? `$${uwResult.arv.toLocaleString()}` : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-caption uppercase tracking-wider text-muted-foreground">AI MAO</p>
-                      <p className="font-mono text-body font-semibold text-foreground">
-                        {uwResult.mao ? `$${uwResult.mao.toLocaleString()}` : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-caption uppercase tracking-wider text-muted-foreground">Confidence</p>
-                      <p className="font-mono text-body font-semibold text-foreground">
-                        {uwResult.confidence ? `${(uwResult.confidence * 100).toFixed(0)}%` : '—'}
-                      </p>
-                    </div>
+                    {[
+                      ['AI ARV', uwResult.arv ? `$${uwResult.arv.toLocaleString()}` : '—'],
+                      ['AI MAO', uwResult.mao ? `$${uwResult.mao.toLocaleString()}` : '—'],
+                      ['Confidence', uwResult.confidence ? `${(uwResult.confidence * 100).toFixed(0)}%` : '—'],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <p className="text-caption uppercase tracking-wider text-muted-foreground">{label}</p>
+                        <p className="font-mono text-body font-semibold text-foreground">{value}</p>
+                      </div>
+                    ))}
                   </div>
                   {uwResult.summary && (
-                    <p className="border-t border-border pt-3 text-body text-muted-foreground">
-                      {uwResult.summary}
-                    </p>
+                    <p className="border-t border-border pt-3 text-body text-muted-foreground">{uwResult.summary}</p>
                   )}
                 </div>
               ) : (
                 <div className="py-3 text-body text-muted-foreground">
-                  No underwriting run yet. Click <span className="font-medium text-foreground">Run Underwriting</span> above to queue an AI pass.
+                  No underwriting run yet. Click <span className="font-medium text-foreground">Run Underwriting</span> above to
+                  queue an AI pass.
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="contracts">
+        <TabsContent value="contract" className="space-y-4">
+          <EligibilityCard eligibility={ws.eligibility} />
+          <AgreementPanel dealId={deal.id} agreement={ws.agreement} />
           <ContractsPanel
-            dealId={id}
+            dealId={deal.id}
             propertyAddress={deal.property?.address}
             lead={deal.lead}
-            contracts={deal.contracts ?? []}
-            onChanged={() => setReloadKey((k) => k + 1)}
+            contracts={(deal.contracts ?? []) as ContractRow[]}
+            onChanged={reload}
+            assignment={
+              activeAssignment && activeAssignment.status === 'draft'
+                ? {
+                    id: activeAssignment.id,
+                    buyerId: activeAssignment.buyerId,
+                    buyerName: buyerNames[activeAssignment.buyerId] ?? 'the buyer',
+                  }
+                : null
+            }
           />
+        </TabsContent>
+
+        <TabsContent value="buyers">
+          <BuyersPanel matches={ws.matches} considered={ws.buyersConsidered} />
+        </TabsContent>
+
+        <TabsContent value="campaign">
+          <CampaignPanel
+            dealId={deal.id}
+            campaigns={ws.campaigns}
+            pricing={ws.pricing}
+            eligibility={ws.eligibility}
+            hasExecutedAgreement={ws.agreement?.status === 'executed'}
+          />
+        </TabsContent>
+
+        <TabsContent value="offers">
+          <OffersPanel dealId={deal.id} offers={ws.offers} pricing={ws.pricing} />
+        </TabsContent>
+
+        <TabsContent value="closing">
+          <ClosingPanel dealId={deal.id} closing={ws.closing} assignments={ws.assignments} buyerNames={buyerNames} />
+        </TabsContent>
+
+        <TabsContent value="approvals">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Inbox size={16} className="text-primary" aria-hidden />
+                <CardTitle>Waiting for approval</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pending === 0 ? (
+                <EmptyState icon={Inbox} title="Nothing waiting" description="Agent recommendations and message drafts for this deal appear here." />
+              ) : (
+                <>
+                  {ws.approvals.agentRuns.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-caption uppercase tracking-wider text-muted-foreground">Agent recommendations</p>
+                      {ws.approvals.agentRuns.map((r) => (
+                        <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2">
+                          <span className="text-body text-foreground">
+                            <Badge variant="outline" className="mr-2">{r.agent}</Badge>
+                            {typeof r.summary === 'string' ? r.summary : 'Recommendation'}
+                          </span>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href="/admin/agents">Review</Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {ws.approvals.messages.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-caption uppercase tracking-wider text-muted-foreground">Message drafts</p>
+                      {ws.approvals.messages.map((m) => (
+                        <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2">
+                          <span className="text-body text-foreground">
+                            <Badge variant="outline" className="mr-2">{m.channel}</Badge>
+                            {String(m.type ?? 'message').replace(/_/g, ' ')}
+                            {m.buyerName ? ` to ${String(m.buyerName)}` : ''} · {day(m.createdAt)}
+                          </span>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href="/communications">Review</Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="timeline">
@@ -348,15 +376,13 @@ export default function DealDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {timeline.length === 0 ? (
-                <EmptyState
-                  icon={Clock}
-                  title="No events"
-                  description="Activity will populate here as the deal progresses."
-                />
+              {timeline.isPending ? (
+                <LoadingState />
+              ) : (timeline.data ?? []).length === 0 ? (
+                <EmptyState icon={Clock} title="No events" description="Activity will populate here as the deal progresses." />
               ) : (
                 <ol className="relative space-y-4 border-l border-border pl-5">
-                  {timeline.map((ev) => (
+                  {(timeline.data ?? []).map((ev) => (
                     <li key={ev.id} className="relative">
                       <span
                         aria-hidden
@@ -365,9 +391,7 @@ export default function DealDetailPage() {
                       <div className="rounded-md border border-border bg-card/60 px-3 py-2.5">
                         <div className="flex items-baseline justify-between gap-3">
                           <span className="text-body font-medium text-foreground">{ev.eventType}</span>
-                          <span className="text-caption text-muted-foreground">
-                            {new Date(ev.createdAt).toLocaleString()}
-                          </span>
+                          <span className="text-caption text-muted-foreground">{new Date(ev.createdAt).toLocaleString()}</span>
                         </div>
                         <p className="mt-0.5 text-caption text-muted-foreground">
                           {ev.actorType}: {ev.actorId || 'system'}

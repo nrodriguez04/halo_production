@@ -63,18 +63,23 @@ const statusVariant: Record<string, 'success' | 'destructive' | 'warning' | 'inf
 
 const SIGNABLE = /\.(pdf|docx?|txt|rtf|png|jpe?g)$/i;
 
+type EnvelopePurpose = 'purchase_agreement' | 'assignment' | 'other';
+
 export function ContractsPanel({
   dealId,
   propertyAddress,
   lead,
   contracts,
   onChanged,
+  assignment,
 }: {
   dealId: string;
   propertyAddress?: string;
   lead?: { canonicalOwner?: string | null; canonicalEmail?: string | null } | null;
   contracts: ContractRow[];
   onChanged: () => void;
+  /** A draft assignment awaiting signature: its envelope goes to that buyer only. */
+  assignment?: { id: string; buyerId: string; buyerName: string } | null;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
@@ -84,6 +89,8 @@ export function ContractsPanel({
   const [otherEmail, setOtherEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [purpose, setPurpose] = useState<EnvelopePurpose>(assignment ? 'assignment' : 'purchase_agreement');
+  const forAssignment = purpose === 'assignment' && !!assignment;
 
   const dealDocs = useApiQuery<LibraryDoc[]>('/documents', { params: { dealId }, enabled: open });
   const templates = useApiQuery<LibraryDoc[]>('/documents', {
@@ -107,10 +114,15 @@ export function ContractsPanel({
   const sendMutation = useApiMutation<void, { contractId: string; envelopeId: string; status: string }>(
     () => {
       const recipients: Array<Record<string, string>> = [];
-      if (includeSeller && sellerEmail) recipients.push({ role: 'seller' });
-      if (buyerId) recipients.push({ role: 'buyer', buyerId });
-      if (otherName.trim() && otherEmail.trim()) {
-        recipients.push({ role: 'other', name: otherName.trim(), email: otherEmail.trim() });
+      if (forAssignment) {
+        // An assignment goes to the buyer whose offer was accepted, and only to them.
+        recipients.push({ role: 'buyer', buyerId: assignment!.buyerId });
+      } else {
+        if (includeSeller && sellerEmail) recipients.push({ role: 'seller' });
+        if (buyerId) recipients.push({ role: 'buyer', buyerId });
+        if (otherName.trim() && otherEmail.trim()) {
+          recipients.push({ role: 'other', name: otherName.trim(), email: otherEmail.trim() });
+        }
       }
       return apiJson('/integrations/docusign/envelopes', {
         method: 'POST',
@@ -118,6 +130,8 @@ export function ContractsPanel({
           dealId,
           documentIds: selectedDocs,
           recipients,
+          purpose: forAssignment ? 'assignment' : purpose === 'assignment' ? 'other' : purpose,
+          ...(forAssignment ? { assignmentId: assignment!.id } : {}),
           ...(subject.trim() ? { emailSubject: subject.trim() } : {}),
         }),
       });
@@ -165,8 +179,9 @@ export function ContractsPanel({
     }
   };
 
-  const recipientCount =
-    (includeSeller && sellerEmail ? 1 : 0) + (buyerId ? 1 : 0) + (otherName.trim() && otherEmail.trim() ? 1 : 0);
+  const recipientCount = forAssignment
+    ? 1
+    : (includeSeller && sellerEmail ? 1 : 0) + (buyerId ? 1 : 0) + (otherName.trim() && otherEmail.trim() ? 1 : 0);
   const canSend = selectedDocs.length > 0 && recipientCount > 0 && !sendMutation.isPending;
 
   return (
@@ -267,6 +282,26 @@ export function ContractsPanel({
           <div className="space-y-5">
             <section className="space-y-2">
               <p className="text-caption font-medium uppercase tracking-wider text-muted-foreground">
+                What is being signed
+              </p>
+              <Select value={purpose} onChange={(e) => setPurpose(e.target.value as EnvelopePurpose)}>
+                <option value="purchase_agreement">Purchase agreement with the seller</option>
+                <option value="assignment" disabled={!assignment}>
+                  {assignment ? `Assignment to ${assignment.buyerName}` : 'Assignment (accept an offer first)'}
+                </option>
+                <option value="other">Something else (addendum, disclosure)</option>
+              </Select>
+              <p className="text-caption text-muted-foreground">
+                {purpose === 'purchase_agreement'
+                  ? 'Once signed, the agreement is recorded as executed; verify its terms on the Contract tab before it is marketed.'
+                  : purpose === 'assignment'
+                    ? 'Goes only to the buyer whose offer was accepted. Once signed, the deal is assigned.'
+                    : 'Stored with the deal; it does not change the contract Halo relies on.'}
+              </p>
+            </section>
+
+            <section className="space-y-2">
+              <p className="text-caption font-medium uppercase tracking-wider text-muted-foreground">
                 Documents
               </p>
               {dealDocs.isPending || templates.isPending ? (
@@ -303,6 +338,14 @@ export function ContractsPanel({
               )}
             </section>
 
+            {forAssignment ? (
+            <section className="space-y-2">
+              <p className="text-caption font-medium uppercase tracking-wider text-muted-foreground">
+                Recipient
+              </p>
+              <p className="text-body text-foreground">Buyer: {assignment!.buyerName}</p>
+            </section>
+            ) : (
             <section className="space-y-2">
               <p className="text-caption font-medium uppercase tracking-wider text-muted-foreground">
                 Recipients
@@ -343,6 +386,7 @@ export function ContractsPanel({
                 />
               </div>
             </section>
+            )}
 
             <section className="space-y-2">
               <p className="text-caption font-medium uppercase tracking-wider text-muted-foreground">
