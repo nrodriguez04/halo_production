@@ -94,6 +94,7 @@ function size(bytes: number): string {
 export default function DocumentsPage() {
   const params = useSearchParams();
   const dealId = params.get('dealId') ?? '';
+  const buyerId = params.get('buyerId') ?? '';
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -110,6 +111,7 @@ export default function DocumentsPage() {
     params: {
       category: category || undefined,
       dealId: dealId || undefined,
+      buyerId: buyerId || undefined,
       q: q || undefined,
     },
     placeholderData: (prev) => prev,
@@ -137,6 +139,7 @@ export default function DocumentsPage() {
       if (f.tags.trim()) body.append('tags', f.tags.trim());
       if (f.checklistKey) body.append('checklistKey', f.checklistKey);
       if (dealId) body.append('dealId', dealId);
+      if (buyerId) body.append('buyerId', buyerId);
       return apiUpload<Doc>('/documents', body);
     },
     {
@@ -221,6 +224,7 @@ export default function DocumentsPage() {
               </Select>
             </div>
             {dealId && <Badge variant="info">Deal {dealId.slice(0, 8)}</Badge>}
+            {buyerId && <Badge variant="info">Buyer {buyerId.slice(0, 8)}</Badge>}
           </div>
 
           {docs.isPending ? (
@@ -397,6 +401,7 @@ export default function DocumentsPage() {
               <DialogDescription>
                 PDF, Word, Excel, CSV, text or images up to 25 MB. Stored privately per account.
                 {dealId ? ' This document will be linked to the current deal.' : ''}
+                {buyerId ? ' This document will be linked to the current buyer.' : ''}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-3 py-4">

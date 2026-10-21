@@ -13,8 +13,10 @@ const devAuthBypass =
   process.env.NODE_ENV !== 'production' &&
   process.env.HALO_DEV_AUTH_BYPASS === 'true';
 
+// `/p/deals/<token>` is a buyer's deal page: the token is the credential,
+// checked by the api on every request (docs/contract-flipping.md s5).
 const descopeMiddleware = authMiddleware({
-  publicRoutes: ['/', '/sign-in', '/favicon.ico', '/_next', '/api/health'],
+  publicRoutes: ['/', '/sign-in', '/favicon.ico', '/_next', '/api/health', '/p/deals/*'],
   redirectUrl: '/sign-in',
 });
 

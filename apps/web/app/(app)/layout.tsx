@@ -25,6 +25,8 @@ import {
   DollarSign,
   Wallet,
   Sparkles,
+  ListChecks,
+  Scale,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -37,7 +39,9 @@ import { prefetchApi, useQueryClient } from '@/lib/api-query';
 // otherwise the prefetch is wasted.
 type Prefetch = { path: string; params?: Record<string, string | number> };
 const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
+  '/command-center': [{ path: '/command-center/attention' }, { path: '/command-center/portfolio' }],
   '/dashboard': [{ path: '/analytics/kpis' }],
+  '/states': [{ path: '/compliance/jurisdictions' }],
   '/deals': [{ path: '/deals' }],
   '/communications': [
     { path: '/communications/messages' },
@@ -77,6 +81,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { href: '/command-center', label: 'Command Center', icon: ListChecks },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/leads', label: 'Leads', icon: Users },
   { href: '/leads/markets', label: 'Markets', icon: Globe },
@@ -87,6 +92,7 @@ const navItems: NavItem[] = [
   { href: '/buyers', label: 'Buyers', icon: UserCheck },
   { href: '/properties', label: 'Properties', icon: Map },
   { href: '/documents', label: 'Documents', icon: FileText },
+  { href: '/states', label: 'State Rules', icon: Scale },
 ];
 
 const adminItems: NavItem[] = [
