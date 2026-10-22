@@ -1088,6 +1088,47 @@ describeDb(
       });
     });
 
+    it('launches a campaign once and accepts one offer per deal, even when two happen at once', async () => {
+      const accountId = tenant();
+      const deal = await marketableDeal(accountId);
+      const a = await buyer(accountId, 'Race Buyer A', { pof: 300_000 });
+      const b = await buyer(accountId, 'Race Buyer B', { pof: 300_000 });
+      const prepared = await campaigns.prepare(accountId, deal.id, USER, {
+        maxBuyers: 5,
+      });
+      const launches = await Promise.allSettled([
+        campaigns.approveAndLaunch(accountId, prepared.campaign.id, USER),
+        campaigns.approveAndLaunch(accountId, prepared.campaign.id, USER),
+      ]);
+      expect(launches.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(queue.enqueueCommunication).toHaveBeenCalledTimes(2);
+
+      const oa = await offers.record(accountId, deal.id, USER, {
+        buyerId: a.id,
+        amount: 136_000,
+        kind: 'written_offer',
+        source: 'email',
+      });
+      const ob = await offers.record(accountId, deal.id, USER, {
+        buyerId: b.id,
+        amount: 135_000,
+        kind: 'written_offer',
+        source: 'email',
+      });
+      const accepts = await Promise.allSettled([
+        offers.accept(accountId, oa.id, USER, { structure: 'assignment' }),
+        offers.accept(accountId, ob.id, USER, { structure: 'assignment' }),
+      ]);
+      expect(accepts.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(
+        await prisma.assignmentAgreement.count({ where: { dealId: deal.id } }),
+      ).toBe(1);
+      const accepted = await prisma.buyerOffer.count({
+        where: { dealId: deal.id, status: 'accepted' },
+      });
+      expect(accepted).toBe(1);
+    });
+
     it('puts what needs a person at the top of the attention list', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId);
