@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -8,7 +9,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { AGENT_NAMES } from '@halo/shared';
+import {
+  AGENT_ENTITY,
+  AGENT_ENTITY_TYPES,
+  AGENT_NAMES,
+  NATIONWIDE_SCOPE,
+  toJurisdictionCode,
+} from '@halo/shared';
 import { AutomationRunStatus } from '@prisma/client';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { AgentService } from './agent.service';
@@ -34,10 +41,38 @@ import {
 const QueueAgentRunSchema = z
   .object({
     agent: z.enum(AGENT_NAMES),
-    entityType: z.enum(['lead', 'deal', 'message']).default('lead'),
+    /** Defaults to the agent's own entity (AGENT_ENTITY). */
+    entityType: z.enum(AGENT_ENTITY_TYPES).optional(),
     entityId: z.string().trim().min(1).max(64),
   })
   .strict();
+
+/**
+ * The entity a manual run is for, checked against what the agent works on.
+ * A market is a state code (or US for the nationwide brief), normalized so
+ * "texas" and "TX" are the same run.
+ */
+function runTarget(dto: z.infer<typeof QueueAgentRunSchema>) {
+  const allowed = AGENT_ENTITY[dto.agent];
+  const entityType = dto.entityType ?? allowed[0];
+  if (!allowed.includes(entityType)) {
+    throw new BadRequestException(
+      `${dto.agent} works on ${allowed.join(' or ')}, not ${entityType}.`,
+    );
+  }
+  if (entityType !== 'market') return { entityType, entityId: dto.entityId };
+  const raw = dto.entityId.toUpperCase();
+  if (dto.agent === 'market_intelligence' && raw === NATIONWIDE_SCOPE) {
+    return { entityType, entityId: raw };
+  }
+  const code = toJurisdictionCode(dto.entityId);
+  if (!code) {
+    throw new BadRequestException(
+      `"${dto.entityId}" is not one of the 50 states or DC.`,
+    );
+  }
+  return { entityType, entityId: code };
+}
 const RejectRunSchema = z
   .object({ reason: z.string().trim().max(500).optional() })
   .strict();
@@ -193,11 +228,12 @@ export class AgentController {
     @Body() body: unknown,
   ) {
     const dto = QueueAgentRunSchema.parse(body);
+    const target = runTarget(dto);
     const queued = await this.orchestration.enqueue({
       agent: dto.agent,
       accountId,
-      entityType: dto.entityType,
-      entityId: dto.entityId,
+      entityType: target.entityType,
+      entityId: target.entityId,
       trigger: 'manual',
       triggerEventId: `manual:${Date.now()}`,
       actorId: userId ?? null,
@@ -212,9 +248,17 @@ export class AgentController {
     @Query('agent') agent?: string,
     @Query('status') status?: string,
     @Query('limit') limit?: string,
+    @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
   ) {
     const n = Number(limit);
     return this.orchestration.listRuns(accountId, {
+      entityType: (AGENT_ENTITY_TYPES as readonly string[]).includes(
+        entityType ?? '',
+      )
+        ? entityType
+        : undefined,
+      entityId: entityId?.trim().slice(0, 64) || undefined,
       agent: (AGENT_NAMES as readonly string[]).includes(agent ?? '')
         ? (agent as (typeof AGENT_NAMES)[number])
         : undefined,

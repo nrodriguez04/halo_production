@@ -21,6 +21,8 @@ import { PurchaseAgreementsService } from '../../src/disposition/purchase-agreem
 import { DispositionEligibilityService } from '../../src/disposition/eligibility.service';
 import { CampaignsService } from '../../src/disposition/campaigns.service';
 import { TemplatesService } from '../../src/templates/templates.service';
+import { MarketAgentContextService } from '../../src/data/market-agent-context.service';
+import { sanitizeMarketProposal, type PolicySource } from '@halo/shared';
 
 describeDb('markets (synthetic fixtures, real database)', () => {
   let moduleRef: TestingModule;
@@ -544,5 +546,102 @@ describeDb('markets (synthetic fixtures, real database)', () => {
       )?.met,
     ).toBe(true);
     expect(detail.coverage.active).toBe(false);
+  });
+
+  it('adds an accepted Market Expansion proposal to the draft only, as unverified, and never while counsel has it', async () => {
+    const accountId = await fx.tenant();
+    await markets.importResearch(accountId, USER, { states: ['FL'] });
+    const context = moduleRef.get(MarketAgentContextService);
+    const ctx = await context.expansionContext(accountId, 'FL');
+    expect(ctx.unanswered.map((q) => q.key)).toEqual(
+      expect.arrayContaining(['seller_cancellation_right']),
+    );
+    const draftBefore = (await markets.detail(accountId, 'FL')).draft!;
+
+    // What the worker would build from a model reply: SYNTHETIC content.
+    const { proposal } = sanitizeMarketProposal(
+      {
+        recommendation: 'propose',
+        classification: 'A',
+        classification_reason: 'SYNTHETIC',
+        answers: [
+          {
+            question: 'assignment_restrictions',
+            answer: 'conditional',
+            note: 'SYNTHETIC sourced',
+            source_ids: ['s1'],
+          },
+          {
+            question: 'seller_cancellation_right',
+            answer: 'no',
+            note: 'SYNTHETIC unsourced',
+            source_ids: [],
+          },
+          {
+            question: 'principal_assignment_without_license',
+            answer: 'no',
+            note: 'SYNTHETIC',
+            source_ids: ['s1'],
+          },
+        ],
+        counsel_questions: ['SYNTHETIC: a question for counsel?'],
+        requirements: [],
+        activation_steps: [],
+        risks: [],
+        rationale: 'SYNTHETIC',
+      },
+      {
+        state: 'FL',
+        draft: draftBefore,
+        researchSources: ctx.research!.sources as PolicySource[],
+      },
+    );
+    const out = await markets.applyAgentProposal(
+      accountId,
+      'FL',
+      USER,
+      proposal,
+      'run-synthetic',
+    );
+    expect(out.answers).toEqual([
+      'assignment_restrictions',
+      'seller_cancellation_right',
+    ]);
+
+    const after = await markets.detail(accountId, 'FL');
+    const a = after.draft!.answers;
+    expect(a.assignment_restrictions).toEqual(
+      expect.objectContaining({ answer: 'conditional', sourceIds: ['s1'] }),
+    );
+    expect(a.assignment_restrictions.note).toMatch(
+      /not verified; counsel to confirm\. Run run-synthetic/,
+    );
+    // Unsourced stays unknown; an answered question is left as it was.
+    expect(a.seller_cancellation_right.answer).toBe('unknown');
+    expect(a.principal_assignment_without_license).toEqual(
+      draftBefore.answers.principal_assignment_without_license,
+    );
+    expect(after.draft!.openQuestions).toEqual(
+      expect.arrayContaining(['SYNTHETIC: a question for counsel?']),
+    );
+    // Only the draft moved: no approval, no status, no review.
+    expect(after.effectiveStatus).toBe('RESEARCH_ONLY');
+    expect(after.requestedStatus).toBe('RESEARCH_ONLY');
+    expect(after.legal.state).toBe('draft');
+    expect(after.versions).toHaveLength(0);
+
+    await prisma.market.updateMany({
+      where: { accountId, state: 'FL' },
+      data: { draftStatus: 'in_review' },
+    });
+    await expect(
+      markets.applyAgentProposal(
+        accountId,
+        'FL',
+        USER,
+        proposal,
+        'run-synthetic-2',
+      ),
+    ).rejects.toThrow('Counsel is reviewing');
   });
 });

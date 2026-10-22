@@ -1,5 +1,10 @@
 import { Type } from 'class-transformer';
-import { AGENT_NAMES, type AgentName } from '@halo/shared';
+import {
+  AGENT_ENTITY_TYPES,
+  AGENT_NAMES,
+  type AgentEntityType,
+  type AgentName,
+} from '@halo/shared';
 import {
   ArrayNotEmpty,
   IsArray,
@@ -77,8 +82,8 @@ export class AgentRunOpenDto {
   @IsIn([...AGENT_NAMES])
   agent!: AgentName;
 
-  @IsIn(['lead', 'deal', 'message'])
-  entityType!: 'lead' | 'deal' | 'message';
+  @IsIn([...AGENT_ENTITY_TYPES])
+  entityType!: AgentEntityType;
 
   @IsString() @MaxLength(64) entityId!: string;
 
@@ -87,6 +92,14 @@ export class AgentRunOpenDto {
 
   @IsOptional() @IsString() @MaxLength(120) triggerEventId?: string;
   @IsOptional() @IsString() @MaxLength(64) actorId?: string | null;
+}
+
+/** What a market agent sees (docs/agent-design.md s3.6, s3.7). */
+export class MarketAgentContextDto {
+  @IsIn(['market_intelligence', 'market_expansion'])
+  agent!: 'market_intelligence' | 'market_expansion';
+
+  @IsString() @MaxLength(8) entityId!: string;
 }
 
 export class AgentDecisionDto {

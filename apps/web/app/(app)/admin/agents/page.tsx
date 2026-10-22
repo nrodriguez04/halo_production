@@ -30,13 +30,20 @@ import {
   Sparkles,
   XCircle,
 } from 'lucide-react';
+import {
+  MarketProposalLink,
+  ProposalDetails,
+  type MarketProposal,
+} from '@/components/markets/market-agents';
 
 type AgentName =
   | 'lead_analyst'
   | 'deal_underwriter'
   | 'outreach_drafter'
   | 'disposition_matcher'
-  | 'buyer_responder';
+  | 'buyer_responder'
+  | 'market_intelligence'
+  | 'market_expansion';
 
 interface AgentAction {
   type:
@@ -51,7 +58,11 @@ interface AgentAction {
     | 'transition_deal'
     | 'rank_buyers'
     | 'queue_buyer_blast'
-    | 'record_buyer_offer';
+    | 'record_buyer_offer'
+    | 'record_market_brief'
+    | 'propose_market_draft';
+  brief?: { scope: string; priorities: Array<{ key: string; label: string }> };
+  proposal?: MarketProposal;
   shortlist?: Array<{ buyerId: string; name: string; rank: number; fit: string; reason: string }>;
   consideredCount?: number;
   buyerIds?: string[];
@@ -138,6 +149,8 @@ const AGENT_LABEL: Record<AgentName, string> = {
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
   buyer_responder: 'Buyer Responder',
+  market_intelligence: 'Market Intelligence',
+  market_expansion: 'Market Expansion',
 };
 /** The Buyer Responder answers a buyer's email, so the inbound webhook queues it, not a person. */
 const QUEUEABLE: AgentName[] = [
@@ -145,7 +158,15 @@ const QUEUEABLE: AgentName[] = [
   'deal_underwriter',
   'outreach_drafter',
   'disposition_matcher',
+  'market_intelligence',
+  'market_expansion',
 ];
+type QueueEntity = 'lead' | 'deal' | 'market';
+function queueEntityOf(agent: AgentName): QueueEntity {
+  if (agent === 'lead_analyst') return 'lead';
+  if (agent === 'market_intelligence' || agent === 'market_expansion') return 'market';
+  return 'deal';
+}
 const DEFAULT_MODELS: Required<AgentModels> = { cheap: 'gpt-4o-mini', mid: 'gpt-4o', strong: 'gpt-4o' };
 const RUNS_PARAMS = { limit: 100 };
 
@@ -193,6 +214,9 @@ const recommendationVariant: Record<
   unclear: 'warning',
   follow_up: 'info',
   market: 'success',
+  brief: 'info',
+  propose: 'warning',
+  not_now: 'secondary',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -240,6 +264,14 @@ function describeAction(action: AgentAction): string {
       return `Draft the buyer blast to ${action.buyerIds?.length ?? 0} buyer(s) (emails go to the approval queue)`;
     case 'record_buyer_offer':
       return `Record the buyer's ${action.kind === 'indication' ? 'indication' : 'offer'} of ${money(action.amount ?? null)} on the deal, for a person to confirm`;
+    case 'record_market_brief':
+      return `Record a brief explaining ${action.brief?.priorities.length ?? 0} ranked market(s)`;
+    case 'propose_market_draft': {
+      const p = action.proposal;
+      return p
+        ? `Add to the ${p.state} draft, marked unverified: ${p.answers.length} answer(s), ${p.counselQuestions.length} counsel question(s), ${p.requirements.length} requirement(s), ${p.activationSteps.length} step(s)${p.classification ? `, class ${p.classification}` : ''}`
+        : 'Add a proposal to the market draft';
+    }
     default:
       return action.type;
   }
@@ -300,7 +332,7 @@ function ApprovalCard({
               {run.entity && (
                 <span className="text-muted-foreground">
                   {' '}
-                  · {run.entityType ?? 'lead'} is {run.entity.status}
+                  · {run.entityType === 'market' ? run.entity.status : `${run.entityType ?? 'lead'} is ${run.entity.status}`}
                   {run.entity.score != null ? `, score ${run.entity.score}` : ''}
                 </span>
               )}
@@ -357,6 +389,12 @@ function ApprovalCard({
                       <p className="whitespace-pre-wrap">{o.action.body}</p>
                     </div>
                   )}
+                  {o.action.type === 'propose_market_draft' && o.action.proposal && (
+                    <div className="mt-2 space-y-2">
+                      <ProposalDetails p={o.action.proposal} />
+                      <MarketProposalLink state={o.action.proposal.state} />
+                    </div>
+                  )}
                   {o.action.type === 'transition_lead' && o.action.reason && (
                     <p className="mt-1 text-caption text-muted-foreground">{o.action.reason}</p>
                   )}
@@ -407,7 +445,7 @@ export default function AgentsPage() {
   const [fee, setFee] = useState('10000');
   const [queueLeadId, setQueueLeadId] = useState('');
   const [queueAgent, setQueueAgent] = useState<AgentName>('lead_analyst');
-  const queueEntityType: 'lead' | 'deal' = queueAgent === 'lead_analyst' ? 'lead' : 'deal';
+  const queueEntityType = queueEntityOf(queueAgent);
 
   useEffect(() => {
     if (!controlPlane) return;
@@ -422,7 +460,7 @@ export default function AgentsPage() {
     (id) => apiJson(`/agent/runs/${id}/approve`, { method: 'POST' }),
     {
       onSuccess: () => {
-        toast.success('Approved', { description: 'The lead moved and any drafts are in the approval queue.' });
+        toast.success('Approved', { description: 'The waiting actions were applied; any drafts are in the approval queue.' });
         invalidateRuns();
         queryClient.invalidateQueries({ queryKey: ['/leads'] });
       },
@@ -437,14 +475,14 @@ export default function AgentsPage() {
       }),
     {
       onSuccess: () => {
-        toast.success('Rejected', { description: 'The lead was left as it was.' });
+        toast.success('Rejected', { description: 'Nothing the run proposed was applied.' });
         invalidateRuns();
       },
       onError: (err) => toast.error('Reject failed', { description: err?.message ?? 'Unknown error' }),
     },
   );
   const queueMutation = useApiMutation<
-    { agent: AgentName; entityType: 'lead' | 'deal'; entityId: string },
+    { agent: AgentName; entityType: QueueEntity; entityId: string },
     { queued: boolean }
   >(
     (body) =>
@@ -664,16 +702,24 @@ export default function AgentsPage() {
             </div>
             <div className="space-y-1">
               <label className="text-caption font-medium text-foreground" htmlFor="queue-lead">
-                {queueEntityType === 'deal' ? 'Deal ID' : 'Lead ID'}
+                {queueEntityType === 'market'
+                  ? queueAgent === 'market_intelligence'
+                    ? 'State code, or US'
+                    : 'State code'
+                  : queueEntityType === 'deal'
+                    ? 'Deal ID'
+                    : 'Lead ID'}
               </label>
               <Input
                 id="queue-lead"
                 value={queueLeadId}
                 onChange={(e) => setQueueLeadId(e.target.value)}
                 placeholder={
-                  queueEntityType === 'deal'
-                    ? 'Paste a deal id from the Deals page'
-                    : 'Paste a lead id from the Leads page'
+                  queueEntityType === 'market'
+                    ? 'TX'
+                    : queueEntityType === 'deal'
+                      ? 'Paste a deal id from the Deals page'
+                      : 'Paste a lead id from the Leads page'
                 }
               />
             </div>

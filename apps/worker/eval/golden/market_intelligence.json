@@ -1,0 +1,632 @@
+{
+  "agent": "market_intelligence",
+  "liveThreshold": 0.75,
+  "notes": "Market Intelligence briefs. The ranking is Halo's own and fixed; the decision is which candidates the brief explains, in ranking order. Synthetic data.",
+  "bases": {
+    "us": {
+      "scope": "US",
+      "asOf": "2026-10-22T12:00:00.000Z",
+      "candidates": [
+        {
+          "key": "TX",
+          "label": "Texas",
+          "kind": "state",
+          "rank": 1,
+          "priority": 19,
+          "opportunity": 64,
+          "feasibility": 0.3,
+          "status": "RESEARCH_ONLY",
+          "classification": "B",
+          "classificationProposed": true,
+          "topCounties": [
+            {
+              "key": "48201",
+              "label": "Harris County, TX",
+              "opportunity": 72
+            },
+            {
+              "key": "48113",
+              "label": "Dallas County, TX",
+              "opportunity": 63
+            },
+            {
+              "key": "48029",
+              "label": "Bexar County, TX",
+              "opportunity": 57
+            }
+          ],
+          "reasons": [
+            "Best counties: Harris County, TX (72), Dallas County, TX (63), Bexar County, TX (57).",
+            "research only, class B, 6 item(s) outstanding."
+          ],
+          "nextStep": "Submit the policy for legal review."
+        },
+        {
+          "key": "GA",
+          "label": "Georgia",
+          "kind": "state",
+          "rank": 2,
+          "priority": 17,
+          "opportunity": 58,
+          "feasibility": 0.3,
+          "status": "RESEARCH_ONLY",
+          "classification": "B",
+          "classificationProposed": true,
+          "topCounties": [
+            {
+              "key": "13121",
+              "label": "Fulton County, GA",
+              "opportunity": 66
+            },
+            {
+              "key": "13089",
+              "label": "DeKalb County, GA",
+              "opportunity": 55
+            }
+          ],
+          "reasons": [
+            "Best counties: Fulton County, GA (66), DeKalb County, GA (55).",
+            "research only, class B, 6 item(s) outstanding."
+          ],
+          "nextStep": "Submit the policy for legal review."
+        },
+        {
+          "key": "TN",
+          "label": "Tennessee",
+          "kind": "state",
+          "rank": 3,
+          "priority": 15,
+          "opportunity": 49,
+          "feasibility": 0.3,
+          "status": "RESEARCH_ONLY",
+          "classification": "B",
+          "classificationProposed": true,
+          "topCounties": [
+            {
+              "key": "47157",
+              "label": "Shelby County, TN",
+              "opportunity": 61
+            },
+            {
+              "key": "47037",
+              "label": "Davidson County, TN",
+              "opportunity": 37
+            }
+          ],
+          "reasons": [
+            "Best counties: Shelby County, TN (61), Davidson County, TN (37).",
+            "research only, class B, 6 item(s) outstanding."
+          ],
+          "nextStep": "Submit the policy for legal review."
+        },
+        {
+          "key": "AZ",
+          "label": "Arizona",
+          "kind": "state",
+          "rank": 4,
+          "priority": 15,
+          "opportunity": 61,
+          "feasibility": 0.24,
+          "status": "RESEARCH_ONLY",
+          "classification": "C",
+          "classificationProposed": true,
+          "topCounties": [
+            {
+              "key": "04013",
+              "label": "Maricopa County, AZ",
+              "opportunity": 70
+            },
+            {
+              "key": "04019",
+              "label": "Pima County, AZ",
+              "opportunity": 52
+            }
+          ],
+          "reasons": [
+            "Best counties: Maricopa County, AZ (70), Pima County, AZ (52).",
+            "research only, class C, 6 item(s) outstanding."
+          ],
+          "nextStep": "Answer the open questions, then submit the policy for legal review."
+        }
+      ],
+      "coverage": {
+        "counties": 14,
+        "states": 4,
+        "unscoredStates": 47
+      },
+      "kpis": {
+        "total": 51,
+        "research": {
+          "count": 4,
+          "withResearch": 51,
+          "withDataAccess": 4
+        },
+        "technical": {
+          "count": 0
+        },
+        "active": {
+          "count": 0,
+          "transactionEnabled": 0
+        }
+      }
+    },
+    "tx": {
+      "scope": "TX",
+      "asOf": "2026-10-22T12:00:00.000Z",
+      "market": {
+        "state": "TX",
+        "name": "Texas",
+        "status": "RESEARCH_ONLY",
+        "classification": "B",
+        "classificationProposed": true,
+        "nextStep": "Submit the policy for legal review."
+      },
+      "candidates": [
+        {
+          "key": "48201",
+          "label": "Harris County, TX",
+          "kind": "county",
+          "rank": 1,
+          "score": 71,
+          "opportunity": 74,
+          "sales12m": 1840,
+          "medianPrice": 245000,
+          "investorPurchases12m": 212,
+          "distinctInvestors12m": 70,
+          "cashShare": 0.41,
+          "latestSale": "2026-09-30",
+          "sources": [
+            "county_csv"
+          ],
+          "components": [
+            {
+              "label": "Investor activity",
+              "points": 20,
+              "max": 20,
+              "basis": "recorded",
+              "detail": "212 entity purchases in 12 months"
+            },
+            {
+              "label": "Cash share",
+              "points": 4,
+              "max": 10,
+              "basis": "recorded",
+              "detail": "41% of sales without a mortgage"
+            },
+            {
+              "label": "Resale spreads",
+              "points": 6,
+              "max": 10,
+              "basis": "estimate",
+              "detail": "Few matched resales; spread estimated"
+            },
+            {
+              "label": "Halo outcomes",
+              "points": 0,
+              "max": 10,
+              "basis": "unknown",
+              "detail": "No Halo closings here yet"
+            },
+            {
+              "label": "Legal standing",
+              "points": 3,
+              "max": 10,
+              "basis": "policy",
+              "detail": "Research only, class B proposed"
+            }
+          ]
+        },
+        {
+          "key": "48113",
+          "label": "Dallas County, TX",
+          "kind": "county",
+          "rank": 2,
+          "score": 63,
+          "opportunity": 66,
+          "sales12m": 1290,
+          "medianPrice": 245000,
+          "investorPurchases12m": 141,
+          "distinctInvestors12m": 47,
+          "cashShare": 0.37,
+          "latestSale": "2026-09-30",
+          "sources": [
+            "county_csv"
+          ],
+          "components": [
+            {
+              "label": "Investor activity",
+              "points": 20,
+              "max": 20,
+              "basis": "recorded",
+              "detail": "141 entity purchases in 12 months"
+            },
+            {
+              "label": "Cash share",
+              "points": 4,
+              "max": 10,
+              "basis": "recorded",
+              "detail": "37% of sales without a mortgage"
+            },
+            {
+              "label": "Resale spreads",
+              "points": 6,
+              "max": 10,
+              "basis": "estimate",
+              "detail": "Few matched resales; spread estimated"
+            },
+            {
+              "label": "Halo outcomes",
+              "points": 0,
+              "max": 10,
+              "basis": "unknown",
+              "detail": "No Halo closings here yet"
+            },
+            {
+              "label": "Legal standing",
+              "points": 3,
+              "max": 10,
+              "basis": "policy",
+              "detail": "Research only, class B proposed"
+            }
+          ]
+        },
+        {
+          "key": "48029",
+          "label": "Bexar County, TX",
+          "kind": "county",
+          "rank": 3,
+          "score": 58,
+          "opportunity": 60,
+          "sales12m": 980,
+          "medianPrice": 245000,
+          "investorPurchases12m": 96,
+          "distinctInvestors12m": 32,
+          "cashShare": 0.35,
+          "latestSale": "2026-09-30",
+          "sources": [
+            "county_csv"
+          ],
+          "components": [
+            {
+              "label": "Investor activity",
+              "points": 20,
+              "max": 20,
+              "basis": "recorded",
+              "detail": "96 entity purchases in 12 months"
+            },
+            {
+              "label": "Cash share",
+              "points": 4,
+              "max": 10,
+              "basis": "recorded",
+              "detail": "35% of sales without a mortgage"
+            },
+            {
+              "label": "Resale spreads",
+              "points": 6,
+              "max": 10,
+              "basis": "estimate",
+              "detail": "Few matched resales; spread estimated"
+            },
+            {
+              "label": "Halo outcomes",
+              "points": 0,
+              "max": 10,
+              "basis": "unknown",
+              "detail": "No Halo closings here yet"
+            },
+            {
+              "label": "Legal standing",
+              "points": 3,
+              "max": 10,
+              "basis": "policy",
+              "detail": "Research only, class B proposed"
+            }
+          ]
+        },
+        {
+          "key": "48439",
+          "label": "Tarrant County, TX",
+          "kind": "county",
+          "rank": 4,
+          "score": 52,
+          "opportunity": 54,
+          "sales12m": 1105,
+          "medianPrice": 245000,
+          "investorPurchases12m": 77,
+          "distinctInvestors12m": 25,
+          "cashShare": 0.31,
+          "latestSale": "2026-09-30",
+          "sources": [
+            "county_csv"
+          ],
+          "components": [
+            {
+              "label": "Investor activity",
+              "points": 19,
+              "max": 20,
+              "basis": "recorded",
+              "detail": "77 entity purchases in 12 months"
+            },
+            {
+              "label": "Cash share",
+              "points": 3,
+              "max": 10,
+              "basis": "recorded",
+              "detail": "31% of sales without a mortgage"
+            },
+            {
+              "label": "Resale spreads",
+              "points": 6,
+              "max": 10,
+              "basis": "estimate",
+              "detail": "Few matched resales; spread estimated"
+            },
+            {
+              "label": "Halo outcomes",
+              "points": 0,
+              "max": 10,
+              "basis": "unknown",
+              "detail": "No Halo closings here yet"
+            },
+            {
+              "label": "Legal standing",
+              "points": 3,
+              "max": 10,
+              "basis": "policy",
+              "detail": "Research only, class B proposed"
+            }
+          ]
+        }
+      ],
+      "coverage": {
+        "counties": 4,
+        "states": 1
+      },
+      "kpis": {
+        "total": 51,
+        "research": {
+          "count": 4,
+          "withResearch": 51,
+          "withDataAccess": 4
+        },
+        "technical": {
+          "count": 0
+        },
+        "active": {
+          "count": 0,
+          "transactionEnabled": 0
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-no-data",
+      "title": "No recorded sales anywhere: nothing to explain, and the gap is the brief",
+      "base": "us",
+      "context": {
+        "candidates": [],
+        "coverage": {
+          "counties": 0,
+          "states": 0,
+          "unscoredStates": 51
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_data",
+        "recommendation": "hold",
+        "actions": [
+          "record_market_brief"
+        ],
+        "brief": {
+          "keys": [],
+          "minDataGaps": 1
+        }
+      }
+    },
+    {
+      "id": "rule-all-zero",
+      "title": "Candidates with no opportunity score are not explained",
+      "base": "us",
+      "context": {
+        "candidates": [
+          {
+            "key": "FL",
+            "label": "Florida",
+            "kind": "state",
+            "rank": 1,
+            "priority": 0,
+            "opportunity": 0,
+            "feasibility": 0.24,
+            "status": "RESEARCH_ONLY",
+            "classification": "A",
+            "reasons": [
+              "No recorded sales on file yet: opportunity unknown."
+            ]
+          }
+        ],
+        "coverage": {
+          "counties": 0,
+          "states": 0,
+          "unscoredStates": 50
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_data",
+        "recommendation": "hold"
+      }
+    },
+    {
+      "id": "us-brief-keeps-rank-order",
+      "title": "Nationwide: the brief follows Halo's ranking and drops a state that is not a candidate",
+      "base": "us",
+      "context": {},
+      "reply": {
+        "summary": "Texas and Georgia lead on investor activity in their largest counties; both are research only, with drafts that still need counsel review. Arizona's counties score well but its proposed class C means a licence or registration question to settle first.",
+        "priorities": [
+          {
+            "key": "GA",
+            "why": "Fulton County (66) has the second-highest county opportunity among candidates.",
+            "risks": "Class B is proposed from research, not approved.",
+            "verify": [
+              "Check that Fulton's investor purchases are not a few large entities."
+            ]
+          },
+          {
+            "key": "TX",
+            "why": "Ranked first: Harris (72), Dallas (63) and Bexar (57) give the best three-county opportunity.",
+            "risks": "The policy is a research draft; counsel has not reviewed it.",
+            "verify": [
+              "Confirm the Harris County sales cover the full 12 months."
+            ]
+          },
+          {
+            "key": "CA",
+            "why": "Large market.",
+            "risks": "",
+            "verify": []
+          },
+          {
+            "key": "TN",
+            "why": "Shelby County (61) carries Tennessee; Davidson is much weaker (37).",
+            "risks": "One strong county is a concentration risk.",
+            "verify": [
+              "Import Davidson County resales to firm up the spread estimate."
+            ]
+          }
+        ],
+        "data_gaps": [
+          "Resale spreads are estimated in every county: few matched resales.",
+          "No Halo closings yet, so the outcome component is unknown everywhere."
+        ],
+        "rationale": "Explained the top three by rank; Arizona is fourth because its class lowers feasibility."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "tier": "mid",
+        "recommendation": "brief",
+        "actions": [
+          "record_market_brief"
+        ],
+        "brief": {
+          "keys": [
+            "TX",
+            "GA",
+            "TN"
+          ],
+          "minDataGaps": 1
+        }
+      }
+    },
+    {
+      "id": "tx-county-brief",
+      "title": "Texas counties: Harris and Dallas explained from their recorded components",
+      "base": "tx",
+      "context": {},
+      "reply": {
+        "summary": "Harris and Dallas lead Texas on recorded investor purchases and cash share; resale spreads are estimated and Halo has no closings in either yet.",
+        "priorities": [
+          {
+            "key": "48201",
+            "why": "212 entity purchases in 12 months and 41% cash sales, both recorded.",
+            "risks": "Resale spread is an estimate.",
+            "verify": [
+              "Match resales by APN to measure the spread."
+            ]
+          },
+          {
+            "key": "48113",
+            "why": "141 entity purchases and 37% cash sales, recorded.",
+            "risks": "Fewer distinct investors than Harris.",
+            "verify": [
+              "Check how many purchases come from the top five buyers."
+            ]
+          }
+        ],
+        "data_gaps": [
+          "Halo outcomes are unknown in every county."
+        ],
+        "rationale": "Top two by rank; the legal component is the same research-only standing for all four."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "brief",
+        "brief": {
+          "keys": [
+            "48201",
+            "48113"
+          ]
+        }
+      }
+    },
+    {
+      "id": "brief-without-candidates",
+      "title": "A brief that names no candidate explains nothing and is held",
+      "base": "tx",
+      "context": {},
+      "reply": {
+        "summary": "Travis County looks promising.",
+        "priorities": [
+          {
+            "key": "48453",
+            "why": "Austin growth.",
+            "risks": "",
+            "verify": []
+          }
+        ],
+        "data_gaps": [],
+        "rationale": "Austin."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "hold",
+        "brief": {
+          "keys": []
+        }
+      }
+    },
+    {
+      "id": "clearance-claim-refused",
+      "title": "A brief that says a state is cleared to operate in is refused, not recorded",
+      "base": "us",
+      "context": {},
+      "modes": [
+        "offline"
+      ],
+      "reply": {
+        "summary": "Texas is approved for wholesaling and should be activated first.",
+        "priorities": [
+          {
+            "key": "TX",
+            "why": "Best counties.",
+            "risks": "",
+            "verify": []
+          }
+        ],
+        "data_gaps": [],
+        "rationale": "Texas first."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    },
+    {
+      "id": "reply-not-json",
+      "title": "A prose brief is rejected, not parsed",
+      "base": "us",
+      "context": {},
+      "modes": [
+        "offline"
+      ],
+      "reply": "Texas, then Georgia.",
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    }
+  ]
+}

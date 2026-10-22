@@ -17,6 +17,7 @@ import {
   TRANSACTION_STRUCTURES,
   JurisdictionResearchSchema,
   MarketPolicyContentSchema,
+  applyMarketProposal,
   channelAllowed,
   coverageKpis,
   deadlineFrom,
@@ -32,6 +33,8 @@ import {
   type ActivationStatus,
   type AuthorizationKind,
   type EligibilityInput,
+  type JurisdictionResearch,
+  type MarketDraftProposal,
   type MarketActivity,
   type MarketClassification,
   type MarketEvaluation,
@@ -1227,6 +1230,96 @@ export class MarketsService {
       details: { imported, skipped, overwrite: !!input.overwrite },
     });
     return { imported, skipped };
+  }
+
+  /** The bundled research for a jurisdiction, or null when none is bundled. */
+  research(state: string): JurisdictionResearch | null {
+    const code = this.code(state);
+    const raw = JURISDICTION_RESEARCH.find(
+      (x) => (x as { code?: string }).code === code,
+    );
+    return raw ? JurisdictionResearchSchema.parse(raw) : null;
+  }
+
+  /**
+   * A Market Expansion proposal a person approved (docs/markets.md s11):
+   * written into the editable draft, filling only what is still unknown and
+   * marking every answer it adds as unverified. It never touches an
+   * approved version, the requested status or a class a person set, and it
+   * is refused while counsel has the draft, so what counsel reviews does
+   * not change under them.
+   */
+  async applyAgentProposal(
+    accountId: string,
+    state: string,
+    userId: string,
+    proposal: MarketDraftProposal,
+    runId: string,
+  ) {
+    const r = await this.one(accountId, state);
+    if (r.market.draftStatus === 'in_review') {
+      throw new BadRequestException(
+        `Counsel is reviewing the ${r.market.state} draft. Return it to draft before adding the agent's proposal.`,
+      );
+    }
+    if (!r.draft) {
+      throw new BadRequestException(
+        `The ${r.market.state} draft is not valid: ${r.draftError}`,
+      );
+    }
+    // Sources are taken from the bundled research by id, never from the
+    // proposal's own copy: a run's decision is data, not a citation.
+    const research = this.research(r.market.state);
+    const bundled = new Map(
+      (research ? draftFromResearch(research).content.sources : []).map((s) => [
+        s.id,
+        s,
+      ]),
+    );
+    const out = applyMarketProposal(
+      r.draft,
+      r.market.classification as MarketClassification,
+      {
+        ...proposal,
+        sources: proposal.sources
+          .map((s) => bundled.get(s.id))
+          .filter((s): s is NonNullable<typeof s> => !!s),
+      },
+      runId,
+    );
+    const parsed = MarketPolicyContentSchema.safeParse(out.content);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        `The proposal would make the draft invalid: ${parsed.error.issues
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join('; ')}`,
+      );
+    }
+    await this.prisma.market.update({
+      where: { id: r.market.id },
+      data: {
+        draft: asJson(parsed.data),
+        ...(out.classification ? { classification: out.classification } : {}),
+        draftUpdatedAt: new Date(),
+        draftUpdatedBy: userId,
+      },
+    });
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'market.draft.agent_proposal',
+      resource: `market:${r.market.state}`,
+      details: {
+        automationRunId: runId,
+        ...out.applied,
+        classification: out.classification,
+      },
+    });
+    return {
+      state: r.market.state,
+      ...out.applied,
+      classification: out.classification,
+    };
   }
 
   // ------------------------------------------------------------ self-test

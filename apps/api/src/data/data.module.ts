@@ -10,6 +10,7 @@ import { PropertyFactsService } from './property-facts.service';
 import { RecordedSalesService } from './recorded-sales.service';
 import { InvestorDiscoveryService } from './investor-discovery.service';
 import { MarketIntelligenceService } from './market-intelligence.service';
+import { MarketAgentContextService } from './market-agent-context.service';
 import { DataController } from './data.controller';
 
 /**
@@ -31,8 +32,13 @@ import { DataController } from './data.controller';
     RecordedSalesService,
     InvestorDiscoveryService,
     MarketIntelligenceService,
+    MarketAgentContextService,
     DataAccessService,
   ],
-  exports: [PropertyFactsService, RecordedSalesService],
+  exports: [
+    PropertyFactsService,
+    RecordedSalesService,
+    MarketAgentContextService,
+  ],
 })
 export class DataModule {}

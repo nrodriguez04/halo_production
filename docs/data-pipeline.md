@@ -109,6 +109,13 @@ Routes:
 - `GET /market-intelligence?level=county|zip&state=`;
 - `GET /market-intelligence/recommendations`.
 
+**Analyst brief.** The Market Intelligence agent explains this ranking: why the leaders rank where they do, their risks and what to verify, plus the data gaps that limit it. Ask for a brief on the Market Intelligence page, nationwide or for one state.
+- **It cannot change the ranking.** Priorities naming anything but a ranked candidate are dropped, and the rest are kept in Halo's order.
+- **It changes nothing else.** Its only action records the brief on the run.
+- **No data, no model call.** With no recorded sales it holds and says what data is missing.
+- **No clearance claims.** A brief that calls a market legal, approved or cleared is refused.
+- See docs/agent-design.md s3.6.
+
 **Not yet:**
 - metro (CBSA) level, which needs a county-to-CBSA crosswalk;
 - aggregation in SQL for very large sale tables. Today sales are aggregated in memory, which is fine to roughly a few hundred thousand rows per tenant.

@@ -415,7 +415,7 @@ Tenant admins have all of them.
 ## 11. Not operational yet
 
 - **Contract text is counsel's.** Halo fills blanks in approved .docx or .txt templates; it never writes clauses. Generated agreements are drafts a person reads before sending for signature. No template is approved until counsel's version is uploaded and approved per state.
-- **No market is approved.** All 51 have research drafts; none operates until counsel approves its policy and a person activates it (docs/markets.md s11).
+- **No market is approved.** All 51 have research drafts; none operates until counsel approves its policy and a person activates it (docs/markets.md s12).
 - **Email delivery needs `EMAIL_FROM`, `EMAIL_POSTAL_ADDRESS`, `PUBLIC_API_URL` and `PUBLIC_APP_URL`, and the email switch on.** Until then, launches are refused at creation with the reason.
 - **Buyer sourcing from public records is manual.** Purchases are entered with their recording reference; no deed-records provider is integrated.
 - **Buyer replies by text are not linked to buyers.** Email only.

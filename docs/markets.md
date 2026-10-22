@@ -187,7 +187,42 @@ DocuSign completion never moves a deal into marketing.
 
 Tenant admins have all three. The two new permissions must be added to the identity provider's roles for anyone else.
 
-## 11. Not operational yet
+## 11. The Market Expansion agent
+
+The agent prepares a state for counsel. It reads the market's draft, the questions the draft leaves unknown and the bundled research. It proposes:
+- answers to those questions, each citing a source the draft or the research holds;
+- questions for counsel;
+- licences and registrations to track;
+- a class;
+- the steps from here to a first lawful transaction;
+- the risks.
+
+Ask for a proposal on the market's **Expansion agent** tab. The proposal also appears in the Agents approval queue.
+
+**It never self-approves.** Its only action is a proposal that waits for a person (`deals:approve`). Accepting it writes into the editable draft and nowhere else. The draft then goes through the same submit and counsel approval as any other. No action exists that submits, approves, activates or changes a status.
+
+Rules enforced in code, whatever the model writes (`sanitizeMarketProposal`, then `applyMarketProposal` against the draft as it is at approval):
+
+| Rule | Effect |
+|---|---|
+| Only unknown questions | An answer a person or counsel gave is never overwritten. One given between the run and the approval wins. |
+| Unknown is never permission | A yes, no or conditional with no source the context holds becomes unknown, and a made-up source id is dropped. |
+| No permissive class on open questions | Class A or B is not proposed while a question an approval needs is unknown. A class that differs from one a person set becomes a counsel question, not a change. |
+| Marked unverified | Every answer it adds carries "Proposed by the Market Expansion agent, not verified; counsel to confirm" and the run id. |
+| Sources from the research | A source it adds comes from the bundled research by id, never from the run's own copy. |
+| Not while counsel has the draft | Approval is refused while the draft is in review. The run stays open. |
+| No clearance claims | A reply that says a market is legal, approved, cleared or safe to operate in is refused, not recorded. |
+
+The agent also holds without asking a model when:
+- a person blocked or restricted the market;
+- counsel is reviewing the draft;
+- the market is already active;
+- there is no research;
+- the draft has no unknowns.
+
+**Not yet: web research.** The agent works from the bundled research and the sources already cited. It does not search the web or read statutes it was not given. Fresh research needs a search-capable model route, which is not built.
+
+## 12. Not operational yet
 
 - **No market is approved.** Counsel must review each policy. The bundled research is a starting point, and its low-confidence states need the most work.
 - **No template is approved.** Counsel's documents must be uploaded and approved per state. The starter scaffolds are not legal text.

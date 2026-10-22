@@ -74,6 +74,34 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
 - **Autonomy:** none outward. It never accepts, rejects or counters an offer and never moves a deal: a person negotiates and sends the assignment. Opt-outs are recorded at once (rule or confident model), like the Outreach Drafter.
 - **Model tier:** mid.
 
+### 3.6 Market Intelligence
+- **Trigger:** by hand, from the Market Intelligence page (nationwide, or one state) or the Agents page. No sweep: a brief costs a model call and the data changes slowly.
+- **Reads:** Halo's own ranking, already computed (docs/data-pipeline.md s5). Nationwide, that is the states with a scored opportunity, each with its priority, opportunity, feasibility, status, class and best counties. For one state, it is its counties with every score component and its basis. It also reads the coverage counts and the three coverage KPIs. The api builds this (`MarketAgentContextService`); the worker never reads research or sales itself.
+- **Produces:** a brief: a summary, at most five priorities (why each ranks where it does, its risks, what to verify) and the data gaps.
+- **Autonomy:** the brief is recorded on the run (`record_market_brief`, autonomous), and nothing else changes. Priorities are bound to the ranked candidates and kept in Halo's order. A reply that calls a market legal, approved or cleared is refused. With no recorded sales, the rule `no_data` holds without a model call.
+- **Model tier:** mid. Prompt `market_intelligence.v1`.
+
+### 3.7 Market Expansion
+- **Trigger:** by hand, from a market's Expansion agent tab or the Agents page.
+- **Reads:**
+  - the market: requested and effective status, draft status, class, approved version, next step, what is missing;
+  - the draft: answers, requirements, disclosures, deadlines, open questions, steps, sources;
+  - the questions the draft leaves unknown;
+  - the bundled research: findings, sources normalized as an import would store them, pending bills, open questions;
+  - the authorizations on file;
+  - the state's best counties.
+- **Produces:** a proposal for the draft:
+  - sourced answers to unknown questions;
+  - counsel questions;
+  - requirements;
+  - a class;
+  - activation steps;
+  - risks.
+- **Autonomy:** none. `propose_market_draft` is gated: a person (`deals:approve`) accepts it into the editable draft, marked as unverified, and counsel still reviews and approves the policy. No action exists that submits, approves, activates or changes a status. The rules in docs/markets.md s11 run in code, before the proposal is shown and again when it is applied.
+- **Holds without a model:** a market a person blocked or restricted; a draft in counsel review; an active market; no research; a draft with nothing unknown.
+- **Model tier:** strong. Prompt `market_expansion.v1`.
+- **Not yet: web research.** The agent works only from what it is given.
+
 Not in the first release: anything that negotiates price autonomously, anything that signs or sends contracts, anything that calls.
 
 ## 4. Triggers
@@ -146,6 +174,28 @@ The recommended defaults were adopted:
 6. [done] The golden-set eval in CI ([agent-eval.md](agent-eval.md)).
 7. [done] Buyer Responder: buyer replies to a blast are classified and answered as drafts for approval (s3.5).
 8. [next] Autonomy `standard` for tenants that opt in after reviewing their runs.
+9. [done 2026-10-22] Market Intelligence and Market Expansion (s3.6, s3.7), with golden sets (7 and 16 cases). The recorded replies are written by hand: the live agreement for these two prompts has not been measured. CI measures it when the eval key is configured.
+
+## 12. The twelve roles
+
+The directive names twelve agent roles. Halo fills each one with a model agent only where judgement over text is the job. Where the answer must be the same every time, a deterministic service fills it, because a gate that depends on a model's mood is not a gate (docs/contract-flipping.md s8).
+
+| Role | Filled by | Model? |
+|---|---|---|
+| Acquisition | Lead Analyst (s3.1): scores leads, recommends qualify or disqualify, drafts the first touch | yes |
+| Property Intelligence | enrichment and `PropertyFactsService` (ATTOM facts on the lead's property, with source and quality); the Lead Analyst and Underwriter read it | no |
+| Underwriting | Deal Underwriter (s3.2) for ARV and repairs. The MAO and offer range come from the deterministic `underwriteDeal` | judgement only |
+| Seller Relations | Outreach Drafter (s3.3): classifies replies, drafts answers and follow-ups for approval | yes |
+| Negotiation | the Outreach Drafter (seller replies; the strong tier above the value threshold) and the Buyer Responder (captures buyer offers). A person sets every price and accepts every offer | drafts only |
+| Contract | `TemplatesService` (state-selected, counsel-approved templates, required fields, PDFs) and the purchase-agreement checks | no |
+| Buyer Intelligence | `InvestorDiscoveryService` (recorded purchases, entity matching, inferred buy box) and the Matcher's deterministic buy-box scoring | no |
+| Disposition | Disposition Matcher (s3.4) and Buyer Responder (s3.5) | yes |
+| Transaction Coordinator | the closing file, the deadline calculations, the disposition sweep and the eligibility gate | no |
+| Compliance | the market gates, the disposition gate, the message classes and switches, consent, opt-outs and quiet hours | no, by design |
+| Market Intelligence | Market Intelligence (s3.6) over the deterministic ranking | explains only |
+| Market Expansion | Market Expansion (s3.7) | proposes only |
+
+**Runtime.** Every agent runs in the TypeScript worker on BullMQ; the CrewAI decision is in docs/crewai-evaluation.md.
 
 Each step is its own PR with its agent's eval in CI.
 
@@ -167,5 +217,5 @@ Each step is its own PR with its agent's eval in CI.
 - **Buyer price (2026-10-13)**: the Matcher used to score buyers against, and show its model, the offer made to the seller (then the MAO), so an approved blast could ask buyers for the contract price and leave no assignment fee; the legacy flyer, the legacy blast and `GET /buyers/match/:dealId` did the same. All of them now use the buyer price. The Matcher's model sees only `deal.askingPrice`, ARV and repairs (no offer, MAO or Underwriter offer range), its prompt is `disposition_matcher.v2`, and its decision summary names the price and how it was reached. The fee is `ControlPlane.defaultAssignmentFee` (Agents page) or the deal's `deal_economics.assignmentFee`; the deal page shows the buyer price and edits the asking price, contract price and fee. The Underwriter's MAO subtracts the same fee (`deal.assignmentFee` in its context, prompt `deal_underwriter.v2`).
 - **Buyer Responder (2026-10-13)**: `apps/worker/src/agents/buyer-responder.agent.ts` and `buyer-context.ts`; prompt `buyer_responder.v1`; budget bucket `agent:buyer_responder`. The inbound email webhook queues it (`trigger: inbound`, the message id) for a buyer reply tied to a deal; replies are linked to the deal of the email they answer by subject before falling back to the latest one. A draft (`draft_message` with `recipientType: buyer` and the `buyerId`) is created on approval through `CommunicationsService.create` to the address the buyer wrote from (else the buyer's address on file), so DNC, consent, quiet hours and the Texas disclosure gate apply at send. Found while building it: the Outreach Drafter's seller thread was every message on the deal, buyer blasts and buyer replies included, so a seller-facing draft could see (and repeat) the buyer price and buyer emails counted as follow-ups to the seller; the seller thread is now the lead's messages plus deal messages to the seller's own number or address. Opt-out phrases now also catch "stop sending me deals" and "no more deals/offers".
 - **Contract flipping (2026-10-21)** (docs/contract-flipping.md): the Buyer Responder now captures a price a buyer names as an agent-captured offer on the deal (`record_buyer_offer`, autonomous because it only records what the buyer wrote; an agent-captured offer cannot be accepted until a person confirms the amount). Approving a Disposition Matcher blast also checks the disposition gate and is refused while a buyer campaign is already running for the deal, so buyers are never reached twice for one contract. Approved seller drafts now go to the communications approval queue (`requestSend`); before, they stayed `draft` and nothing submitted them. The deterministic roles in the brief (contract verification, buyer ranking, pricing, transaction coordination, compliance) are services, not agents: see docs/contract-flipping.md s8.
-- **Not yet**: self-scheduled follow-ups (the sweep covers them), the `standard` autonomy opt-in review, buyer replies by text (buyers are emailed today), an export that turns reviewed runs into anonymized golden cases, CrewAI runtime.
+- **Not yet**: self-scheduled follow-ups (the sweep covers them), the `standard` autonomy opt-in review, an export that turns reviewed runs into anonymized golden cases, CrewAI runtime (not adopted: docs/crewai-evaluation.md). Buyer replies by text now reach the Buyer Responder (docs/communications.md s6).
 - **After the audit (2026-10-13)**: the Lead Analyst prompt is `lead_analyst.v2` (contacts are looked up after scoring, so a missing phone or email does not lower the score); skip trace runs right after the Analyst scores a lead at or above the cost-control threshold (60) and did not disqualify it (`AgentOrchestrationService.skipTraceAfterScore`), because the enrichment job's skip trace is score-gated and a new lead has no score yet; the first message that reaches a seller moves the deal `new -> contacted`; buyer-facing steps for Texas deals require the equitable-interest disclosure.

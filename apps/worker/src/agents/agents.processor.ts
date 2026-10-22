@@ -26,6 +26,12 @@ import { DispositionMatcherAgent } from './disposition-matcher.agent';
 import { loadBuyerReplyContext } from './buyer-context';
 import { BuyerResponderAgent } from './buyer-responder.agent';
 import {
+  loadMarketExpansionContext,
+  loadMarketIntelligenceContext,
+} from './market-context';
+import { MarketIntelligenceAgent } from './market-intelligence.agent';
+import { MarketExpansionAgent } from './market-expansion.agent';
+import {
   AgentOutputError,
   LeadAnalystAgent,
   type LeadAnalystResult,
@@ -44,6 +50,8 @@ const RELEASED = new Set<AgentJobPayload['agent']>([
   'outreach_drafter',
   'disposition_matcher',
   'buyer_responder',
+  'market_intelligence',
+  'market_expansion',
 ]);
 
 type AgentRunResult = LeadAnalystResult & { context: object };
@@ -121,7 +129,12 @@ export class AgentsProcessor extends WorkerHost {
     try {
       const result = await this.runAgent(p, controlPlane.agentModels, run.id);
       if (!result) {
-        const noun = p.entityType === 'deal' ? 'Deal' : 'Lead';
+        const noun =
+          p.entityType === 'deal'
+            ? 'Deal'
+            : p.entityType === 'market'
+              ? 'Market'
+              : 'Lead';
         await recordAgentDecision(p.accountId, run.id, {
           status: 'FAILED',
           error: `${noun} ${p.entityId} not found`,
@@ -171,6 +184,16 @@ export class AgentsProcessor extends WorkerHost {
       const ctx = await loadBuyerReplyContext(p);
       if (!ctx) return null;
       const agent = new BuyerResponderAgent({ models });
+      return withContext(ctx, agent.run(ctx, p.accountId, runId));
+    }
+    if (p.agent === 'market_intelligence') {
+      const ctx = await loadMarketIntelligenceContext(p.entityId, p.accountId);
+      const agent = new MarketIntelligenceAgent({ models });
+      return withContext(ctx, agent.run(ctx, p.accountId, runId));
+    }
+    if (p.agent === 'market_expansion') {
+      const ctx = await loadMarketExpansionContext(p.entityId, p.accountId);
+      const agent = new MarketExpansionAgent({ models });
       return withContext(ctx, agent.run(ctx, p.accountId, runId));
     }
     if (p.agent === 'outreach_drafter') {

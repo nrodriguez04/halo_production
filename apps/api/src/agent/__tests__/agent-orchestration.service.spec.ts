@@ -17,6 +17,7 @@ const prisma = {
   marketingMaterial: { create: jest.fn() },
   buyer: { findMany: jest.fn(), findFirst: jest.fn() },
   dispositionCampaign: { findFirst: jest.fn() },
+  market: { findMany: jest.fn() },
 };
 const communications = { create: jest.fn() };
 jest.mock('../../pii/contact-crypto', () => ({
@@ -44,6 +45,7 @@ const offers = { recordFromAgent: jest.fn() };
 const eligibility = { assertEligible: jest.fn(), currentAgreement: jest.fn() };
 const disclosure = { assertEquitableInterest: jest.fn() };
 const skipTrace = { traceLead: jest.fn() };
+const markets = { applyAgentProposal: jest.fn() };
 
 const service = () =>
   new AgentOrchestrationService(
@@ -61,6 +63,7 @@ const service = () =>
     skipTrace as any,
     offers as any,
     eligibility as any,
+    markets as any,
   );
 
 const baseRun = {
@@ -1627,6 +1630,151 @@ describe('AgentOrchestrationService', () => {
         { action: draft, result: 'failed', detail: 'buyer not found' },
       ]);
       expect(automation.approveRun).toHaveBeenCalled();
+    });
+  });
+
+  describe('market agents', () => {
+    const marketRun = (over: Record<string, unknown> = {}) => ({
+      ...baseRun,
+      entityType: 'market',
+      entityId: 'TX',
+      ...over,
+    });
+    const brief: AgentDecision = {
+      agent: 'market_intelligence',
+      promptVersion: 'market_intelligence.v1',
+      model: 'gpt-4o',
+      recommendation: 'brief',
+      summary: 'Two priorities',
+      rationale: 'r',
+      hardRule: null,
+      actions: [
+        {
+          type: 'record_market_brief',
+          brief: {
+            scope: 'US',
+            asOf: '2026-10-22T00:00:00.000Z',
+            summary: 's',
+            priorities: [],
+            dataGaps: [],
+          },
+        },
+      ],
+    };
+    const proposal = {
+      state: 'FL',
+      classification: null,
+      classificationReason: '',
+      answers: [],
+      counselQuestions: ['Which form?'],
+      requirements: [],
+      activationSteps: [],
+      risks: [],
+      sources: [],
+    };
+    const expansion: AgentDecision = {
+      agent: 'market_expansion',
+      promptVersion: 'market_expansion.v1',
+      model: 'gpt-4o',
+      recommendation: 'propose',
+      summary: 'One question for counsel',
+      rationale: 'r',
+      hardRule: null,
+      actions: [{ type: 'propose_market_draft', proposal, gated: true }],
+    };
+
+    it('records a brief at once and changes nothing else', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(marketRun());
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: brief,
+      });
+      expect(automation.completeRun).toHaveBeenCalled();
+      expect(markets.applyAgentProposal).not.toHaveBeenCalled();
+      expect(timeline.appendEvent).not.toHaveBeenCalled();
+    });
+
+    it('holds a proposal for a person, whatever the autonomy', async () => {
+      controlPlane.getStatus.mockResolvedValue({ agentAutonomy: 'standard' });
+      prisma.automationRun.findFirst.mockResolvedValue(marketRun());
+      await service().recordDecision('acct', 'run-1', {
+        status: 'AWAITING_APPROVAL',
+        decision: expansion,
+      });
+      expect(prisma.automationRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'AWAITING_APPROVAL' }),
+        }),
+      );
+      expect(markets.applyAgentProposal).not.toHaveBeenCalled();
+    });
+
+    const awaitingProposal = () =>
+      marketRun({
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          ...expansion,
+          outcomes: [{ action: expansion.actions[0], result: 'pending' }],
+        },
+      });
+
+    it("on approval writes the proposal into the run's market draft as the approver", async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(awaitingProposal());
+      markets.applyAgentProposal.mockResolvedValue({
+        state: 'TX',
+        answers: [],
+        skipped: [],
+        questions: 1,
+        steps: 0,
+        requirements: 0,
+        sources: 0,
+        classification: null,
+      });
+      await service().approve('acct', 'run-1', 'user-9');
+      // The run's market (TX), not the state named inside the decision (FL).
+      expect(markets.applyAgentProposal).toHaveBeenCalledWith(
+        'acct',
+        'TX',
+        'user-9',
+        proposal,
+        'run-1',
+      );
+      expect(automation.approveRun).toHaveBeenCalled();
+    });
+
+    it('leaves the run open when the draft is with counsel', async () => {
+      prisma.automationRun.findFirst.mockResolvedValue(awaitingProposal());
+      markets.applyAgentProposal.mockRejectedValue(
+        new BadRequestException('Counsel is reviewing the TX draft.'),
+      );
+      await expect(
+        service().approve('acct', 'run-1', 'user-9'),
+      ).rejects.toThrow('Counsel is reviewing');
+      expect(automation.approveRun).not.toHaveBeenCalled();
+    });
+
+    it('labels market runs with the state, or Nationwide', async () => {
+      prisma.automationRun.findMany.mockResolvedValue([
+        { ...marketRun(), id: 'r1' },
+        { ...marketRun({ entityId: 'US' }), id: 'r2' },
+      ]);
+      prisma.lead.findMany.mockResolvedValue([]);
+      prisma.market.findMany.mockResolvedValue([
+        { state: 'TX', requestedStatus: 'RESEARCH_ONLY' },
+      ]);
+      const runs = await service().listRuns('acct', {
+        entityType: 'market',
+      });
+      expect(runs.map((r) => r.entity?.label)).toEqual(['Texas', 'Nationwide']);
+      expect(runs.map((r) => r.entity?.status)).toEqual([
+        'research only',
+        'all markets',
+      ]);
+      expect(prisma.automationRun.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ entityType: 'market' }),
+        }),
+      );
     });
   });
 });
