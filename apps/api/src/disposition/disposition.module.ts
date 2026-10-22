@@ -8,7 +8,6 @@ import { DocumentsModule } from '../documents/documents.module';
 import { BuyersModule } from '../buyers/buyers.module';
 import { DispositionGateModule } from './disposition-gate.module';
 import { PurchaseAgreementsService } from './purchase-agreements.service';
-import { JurisdictionPoliciesService } from './jurisdiction-policies.service';
 import { ClosingService } from './closing.service';
 import { OffersService } from './offers.service';
 import { CampaignsService } from './campaigns.service';
@@ -19,17 +18,14 @@ import { BuyerMessagingService } from './buyer-messaging.service';
 import { PublicDealPagesService } from './public-deal-pages.service';
 import { CommandCenterService } from './command-center.service';
 import { DispositionSweepService } from './disposition-sweep.service';
-import { AgreementDraftingService } from './agreement-drafting.service';
 import { TaxSalesService } from './tax-sales.service';
 import {
-  AgreementTemplatesController,
   AssignmentsController,
   CampaignsController,
   ClosingIssuesController,
   CommandCenterController,
   DealDispositionController,
   DealPackagesController,
-  JurisdictionPoliciesController,
   OffersController,
   ShareLinksController,
 } from './disposition.controller';
@@ -59,15 +55,12 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     ShareLinksController,
     AssignmentsController,
     ClosingIssuesController,
-    JurisdictionPoliciesController,
     CommandCenterController,
-    AgreementTemplatesController,
     PublicDealPagesController,
   ],
   providers: [
     PrismaService,
     PurchaseAgreementsService,
-    JurisdictionPoliciesService,
     ClosingService,
     OffersService,
     CampaignsService,
@@ -78,7 +71,6 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     PublicDealPagesService,
     CommandCenterService,
     DispositionSweepService,
-    AgreementDraftingService,
     TaxSalesService,
   ],
   exports: [

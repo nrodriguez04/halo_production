@@ -5,13 +5,11 @@ import {
   type AcquisitionType,
   type Assignability,
   type DispositionEligibility,
-  type JurisdictionPolicyStatus,
-  type PermissionValue,
+  type EligibilityMarket,
   type PurchaseAgreementStatus,
   type RequiredDisclosure,
   type TaxSaleInterestType,
   type TaxSaleTitleStatus,
-  type TriState,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { ComplianceBlockedException } from '../compliance/compliance-blocked.exception';
@@ -20,6 +18,7 @@ import {
   CHECKLIST_TAG_PREFIX,
   WHOLESALE_CHECKLIST,
 } from '../documents/documents.checklist';
+import { MarketsService } from '../markets/markets.service';
 
 export const DISPOSITION_NOT_ELIGIBLE = 'DISPOSITION_NOT_ELIGIBLE';
 
@@ -59,7 +58,10 @@ const AGREEMENT_SELECT = {
  */
 @Injectable()
 export class DispositionEligibilityService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private markets: MarketsService,
+  ) {}
 
   /** The seller contract Halo is currently relying on: the newest one. */
   async currentAgreement(accountId: string, dealId: string) {
@@ -91,43 +93,61 @@ export class DispositionEligibilityService {
       deal.property?.state ?? deal.lead?.canonicalState ?? null,
     );
 
-    const [agreement, policy, issues] = await Promise.all([
+    const [agreement, market, issues, closing] = await Promise.all([
       this.prisma.purchaseAgreement.findFirst({
         where: { accountId, dealId },
         orderBy: { createdAt: 'desc' },
         select: AGREEMENT_SELECT,
       }),
-      state
-        ? this.prisma.jurisdictionPolicy.findUnique({
-            where: { accountId_state: { accountId, state } },
-          })
-        : Promise.resolve(null),
+      this.markets.evaluate(accountId, state),
       this.prisma.closingIssue.findMany({
         where: { accountId, dealId, status: 'open', severity: 'blocking' },
         select: { kind: true, description: true },
       }),
+      this.prisma.closingFile.findUnique({
+        where: { dealId },
+        select: { structure: true },
+      }),
     ]);
 
+    // Disclosures a buyer must have before the contract is marketed: the
+    // built-in Texas notice, plus what the approved policy lists.
+    const policyNotices = (market?.approved?.disclosures ?? []).filter(
+      (d) => d.audience === 'buyer' && d.timing === 'before_marketing',
+    );
     const requiredKeys = new Set<string>([
       ...(state ? (BUILT_IN_BUYER_DISCLOSURES[state] ?? []) : []),
-      ...(policy?.status === 'reviewed' ? policy.buyerDisclosureKeys : []),
+      ...policyNotices.map((d) => d.key),
     ]);
     const disclosures = await this.disclosuresOnFile(
       accountId,
       deal.id,
       deal.leadId,
       Array.from(requiredKeys),
+      Object.fromEntries(policyNotices.map((d) => [d.key, d.title])),
     );
-    const licenseOnFile = policy?.licenseDocumentId
-      ? !!(await this.prisma.document.findFirst({
-          where: {
-            id: policy.licenseDocumentId,
-            accountId,
-            status: 'active',
-          },
-          select: { id: true },
-        }))
-      : false;
+    const structure: 'assignment' | 'double_close' =
+      closing?.structure === 'double_close' ? 'double_close' : 'assignment';
+    const marketInput: EligibilityMarket | null = market
+      ? {
+          status: market.evaluation.effectiveStatus,
+          version: market.version,
+          buyerMarketing: market.evaluation.activities.buyer_marketing,
+          structure,
+          structureAllowed: market.evaluation.activities[structure],
+          conditions: market.approved?.structures[structure].conditions ?? null,
+          missingAuthorizations: market.requirements
+            .filter(
+              (q) =>
+                !q.met &&
+                q.appliesTo.some(
+                  (a) => a === 'buyer_marketing' || a === structure,
+                ),
+            )
+            .map((q) => q.label),
+          nextStep: market.evaluation.nextStep,
+        }
+      : null;
 
     const result = evaluateDispositionEligibility({
       now,
@@ -143,6 +163,10 @@ export class DispositionEligibilityService {
           }
         : null,
       state,
+      cancellationWindows: this.markets.cancellationWindows(
+        market,
+        agreement?.executedAt ?? null,
+      ),
       agreement: agreement
         ? {
             status: agreement.status as PurchaseAgreementStatus,
@@ -157,17 +181,7 @@ export class DispositionEligibilityService {
             earnestMoneyDepositedAt: agreement.earnestMoneyDepositedAt,
           }
         : null,
-      policy: policy
-        ? {
-            status: policy.status as JurisdictionPolicyStatus,
-            assignmentAllowed: policy.assignmentAllowed as PermissionValue,
-            licenseRequired: policy.licenseRequired as TriState,
-            licenseOnFile,
-            buyerDisclosureKeys: policy.buyerDisclosureKeys,
-            reviewExpiresAt: policy.reviewExpiresAt,
-            conditions: policy.conditions,
-          }
-        : null,
+      market: marketInput,
       disclosures,
       blockingIssues: issues,
     });
@@ -205,6 +219,7 @@ export class DispositionEligibilityService {
     dealId: string,
     leadId: string | null,
     keys: string[],
+    titles: Record<string, string> = {},
   ): Promise<RequiredDisclosure[]> {
     if (keys.length === 0) return [];
     const tags = keys.map((k) => `${CHECKLIST_TAG_PREFIX}${k}`);
@@ -220,7 +235,10 @@ export class DispositionEligibilityService {
     const have = new Set(docs.flatMap((d) => d.tags));
     return keys.map((key) => ({
       key,
-      title: WHOLESALE_CHECKLIST.find((i) => i.key === key)?.title ?? key,
+      title:
+        WHOLESALE_CHECKLIST.find((i) => i.key === key)?.title ??
+        titles[key] ??
+        key,
       satisfied: have.has(`${CHECKLIST_TAG_PREFIX}${key}`),
     }));
   }

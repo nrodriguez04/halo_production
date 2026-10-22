@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
@@ -22,7 +21,6 @@ import { piiViewer } from '../auth/pii-access';
 import { BuyerIntelligenceService } from '../buyers/buyer-intelligence.service';
 import { DispositionEligibilityService } from './eligibility.service';
 import { PurchaseAgreementsService } from './purchase-agreements.service';
-import { JurisdictionPoliciesService } from './jurisdiction-policies.service';
 import { ClosingService } from './closing.service';
 import { OffersService } from './offers.service';
 import { CampaignsService } from './campaigns.service';
@@ -30,7 +28,6 @@ import { DealPackagesService } from './deal-packages.service';
 import { ShareLinksService } from './share-links.service';
 import { AssignmentsService } from './assignments.service';
 import { CommandCenterService } from './command-center.service';
-import { AgreementDraftingService } from './agreement-drafting.service';
 import { TaxSalesService } from './tax-sales.service';
 import {
   AcceptOfferSchema,
@@ -45,7 +42,6 @@ import {
   EndCampaignSchema,
   ExtendAgreementSchema,
   FeeReceivedSchema,
-  JurisdictionPolicySchema,
   MarkExecutedSchema,
   MilestoneUpdateSchema,
   PrepareCampaignSchema,
@@ -53,8 +49,6 @@ import {
   RecordAgreementSchema,
   RecordOfferSchema,
   ResolveIssueSchema,
-  ReviewPolicySchema,
-  StateParamSchema,
   TerminateAgreementSchema,
   UpdateAgreementSchema,
   UpdateCampaignSchema,
@@ -117,21 +111,6 @@ const PackageEditSchema = z
       )
       .max(10)
       .optional(),
-  })
-  .strict();
-
-const AgreementKindSchema = z.enum(['purchase_agreement', 'assignment']);
-const GenerateAgreementSchema = z
-  .object({
-    kind: AgreementKindSchema,
-    templateDocumentId: z.string().trim().min(1).max(64).optional(),
-  })
-  .strict();
-const ReviewTemplateSchema = z
-  .object({
-    kind: AgreementKindSchema,
-    /** Two-letter state, or null for a template valid in every state. */
-    jurisdiction: z.string().trim().length(2).nullable().optional(),
   })
   .strict();
 
@@ -200,7 +179,6 @@ export class DealDispositionController {
     private links: ShareLinksService,
     private assignments: AssignmentsService,
     private buyers: BuyerIntelligenceService,
-    private drafting: AgreementDraftingService,
     private taxSales: TaxSalesService,
   ) {}
 
@@ -235,34 +213,6 @@ export class DealDispositionController {
     );
   }
 
-  @Get('agreement-templates')
-  agreementTemplates(
-    @CurrentAccountId() a: string,
-    @Param('dealId') dealId: string,
-    @Query('kind') kind: string,
-  ) {
-    return this.drafting.templatesForDeal(
-      a,
-      dealId,
-      AgreementKindSchema.parse(kind),
-    );
-  }
-
-  @Post('agreements/generate')
-  generateAgreement(
-    @CurrentAccountId() a: string,
-    @CurrentUserId() u: string,
-    @Param('dealId') dealId: string,
-    @Body() body: unknown,
-  ) {
-    return this.drafting.generate(
-      a,
-      dealId,
-      u,
-      input(GenerateAgreementSchema, body),
-    );
-  }
-
   @Get('workspace')
   workspace(
     @CurrentAccountId() a: string,
@@ -284,6 +234,15 @@ export class DealDispositionController {
   @Get('purchase-agreement')
   agreement(@CurrentAccountId() a: string, @Param('dealId') dealId: string) {
     return this.agreements.get(a, dealId);
+  }
+
+  /** What Halo checked about the executed contract before a person verifies it. */
+  @Get('purchase-agreement/checks')
+  agreementChecks(
+    @CurrentAccountId() a: string,
+    @Param('dealId') dealId: string,
+  ) {
+    return this.agreements.automatedChecks(a, dealId);
   }
 
   @Post('purchase-agreement')
@@ -854,103 +813,6 @@ export class ClosingIssuesController {
       u,
       ResolveIssueSchema.parse(body).resolution,
     );
-  }
-}
-
-@Controller('agreement-templates')
-@UseGuards(AuthGuard, PermissionsGuard)
-export class AgreementTemplatesController {
-  constructor(private drafting: AgreementDraftingService) {}
-
-  @Get()
-  list(@CurrentAccountId() a: string) {
-    return this.drafting.listTemplates(a);
-  }
-
-  @Post(':id/review')
-  @Permissions('compliance:write')
-  review(
-    @CurrentAccountId() a: string,
-    @CurrentUserId() u: string,
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
-    return this.drafting.reviewTemplate(
-      a,
-      id,
-      u,
-      input(ReviewTemplateSchema, body),
-    );
-  }
-}
-
-// ---------------------------------------------------- jurisdiction rules
-
-@Controller('compliance/jurisdictions')
-@UseGuards(AuthGuard, PermissionsGuard)
-export class JurisdictionPoliciesController {
-  constructor(private policies: JurisdictionPoliciesService) {}
-
-  @Get()
-  list(@CurrentAccountId() a: string) {
-    return this.policies.list(a);
-  }
-
-  @Get(':state')
-  get(@CurrentAccountId() a: string, @Param('state') state: string) {
-    return this.policies.get(a, StateParamSchema.parse(state));
-  }
-
-  @Put(':state')
-  @Permissions('compliance:write')
-  upsert(
-    @CurrentAccountId() a: string,
-    @CurrentUserId() u: string,
-    @Param('state') state: string,
-    @Body() body: unknown,
-  ) {
-    return this.policies.upsert(
-      a,
-      StateParamSchema.parse(state),
-      u,
-      JurisdictionPolicySchema.parse(body),
-    );
-  }
-
-  @Post(':state/from-template')
-  @Permissions('compliance:write')
-  fromTemplate(
-    @CurrentAccountId() a: string,
-    @CurrentUserId() u: string,
-    @Param('state') state: string,
-  ) {
-    return this.policies.fromTemplate(a, StateParamSchema.parse(state), u);
-  }
-
-  @Post(':state/review')
-  @Permissions('compliance:write')
-  review(
-    @CurrentAccountId() a: string,
-    @CurrentUserId() u: string,
-    @Param('state') state: string,
-    @Body() body: unknown,
-  ) {
-    return this.policies.review(
-      a,
-      StateParamSchema.parse(state),
-      u,
-      input(ReviewPolicySchema, body),
-    );
-  }
-
-  @Delete(':state')
-  @Permissions('compliance:write')
-  retire(
-    @CurrentAccountId() a: string,
-    @CurrentUserId() u: string,
-    @Param('state') state: string,
-  ) {
-    return this.policies.retire(a, StateParamSchema.parse(state), u);
   }
 }
 

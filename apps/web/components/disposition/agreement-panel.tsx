@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useApiQuery } from '@/lib/api-query';
 import { FileCheck2, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +31,23 @@ const VERIFY_ITEMS: Array<{ key: string; label: string }> = [
   { key: 'closing_deadline', label: 'Closing deadline matches' },
   { key: 'assignment_clause', label: 'The assignment clause says what is recorded here' },
   { key: 'signatures', label: 'Every party signed and dated' },
+  {
+    key: 'legal_sufficiency',
+    label: 'The agreement is legally sufficient for this state: a counsel-approved template, or counsel reviewed it',
+  },
+  {
+    key: 'disclosures',
+    label: 'The seller received every disclosure the state requires, in the required form, before signing',
+  },
 ];
+
+interface AutomatedCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  blocking: boolean;
+  detail: string;
+}
 
 const ASSIGNABILITY = [
   { value: 'unknown', label: 'Not yet determined' },
@@ -158,6 +175,10 @@ export function AgreementPanel({ dealId, agreement }: { dealId: string; agreemen
   );
 
   const allChecked = VERIFY_ITEMS.every((i) => checked[i.key]);
+  const checks = useApiQuery<{ checks: AutomatedCheck[] }>(`/deals/${dealId}/purchase-agreement/checks`, {
+    enabled: verifyOpen,
+  });
+  const blocked = (checks.data?.checks ?? []).some((c) => c.blocking && !c.passed);
 
   return (
     <div className="space-y-4">
@@ -248,7 +269,7 @@ export function AgreementPanel({ dealId, agreement }: { dealId: string; agreemen
               </Button>
               {open.status !== 'executed' && (
                 <>
-                  <GenerateAgreementButton dealId={dealId} kind="purchase_agreement" label="Generate from reviewed template" />
+                  <GenerateAgreementButton dealId={dealId} kind="purchase_agreement" label="Generate from approved template" />
                   <div className="min-w-64 flex-1">
                     <DocumentSelect dealId={dealId} value={executedDoc} onChange={setExecutedDoc} placeholder="Executed copy…" />
                   </div>
@@ -306,6 +327,19 @@ export function AgreementPanel({ dealId, agreement }: { dealId: string; agreemen
               and assign the contract.
             </DialogDescription>
           </DialogHeader>
+          {checks.data && (
+            <div className="space-y-1 rounded-md border border-border bg-secondary/30 p-3">
+              <p className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Checked by Halo</p>
+              {checks.data.checks.map((c) => (
+                <p key={c.key} className="text-caption">
+                  <span className={c.passed ? 'text-emerald-400' : c.blocking ? 'text-destructive' : 'text-amber-400'}>
+                    {c.passed ? '✓' : c.blocking ? '✕' : '!'}
+                  </span>{' '}
+                  <span className="font-medium">{c.label}:</span> <span className="text-muted-foreground">{c.detail}</span>
+                </p>
+              ))}
+            </div>
+          )}
           <ul className="space-y-2">
             {VERIFY_ITEMS.map((i) => (
               <li key={i.key} className="flex items-start gap-2">
@@ -325,7 +359,7 @@ export function AgreementPanel({ dealId, agreement }: { dealId: string; agreemen
             <Button variant="outline" onClick={() => setVerifyOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!allChecked} loading={verify.isPending} onClick={() => verify.mutate()}>
+            <Button disabled={!allChecked || blocked} loading={verify.isPending} onClick={() => verify.mutate()}>
               Verify
             </Button>
           </DialogFooter>

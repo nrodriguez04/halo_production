@@ -23,12 +23,10 @@ import { TimelineService } from '../timeline/timeline.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { AuditService } from '../audit/audit.service';
 import { brandName } from '../communications/outbound-content';
-import { normalizeState } from '../compliance/disclosure-gate.service';
 import { DispositionEligibilityService } from './eligibility.service';
-import {
-  AssignmentsService,
-  assertStructureAllowed,
-} from './assignments.service';
+import { MarketsService } from '../markets/markets.service';
+import { assertStructureAllowed } from './structure-gate';
+import { AssignmentsService } from './assignments.service';
 import { BuyerMessagingService, greetingName } from './buyer-messaging.service';
 import { buyerEvent, daysBetween, dealEvent } from './timeline-events';
 
@@ -73,6 +71,7 @@ export class OffersService {
     private eligibility: DispositionEligibilityService,
     private assignments: AssignmentsService,
     private messaging: BuyerMessagingService,
+    private markets: MarketsService,
   ) {}
 
   async list(accountId: string, dealId: string) {
@@ -801,13 +800,10 @@ export class OffersService {
       });
     }
 
-    const state = normalizeState(eligibility.state);
-    const policy = state
-      ? await this.prisma.jurisdictionPolicy.findUnique({
-          where: { accountId_state: { accountId, state } },
-        })
-      : null;
-    assertStructureAllowed(input.structure, policy);
+    assertStructureAllowed(
+      input.structure,
+      await this.markets.evaluate(accountId, eligibility.state),
+    );
 
     const assignment = await this.assignments.createFromOffer(accountId, {
       dealId: offer.dealId,

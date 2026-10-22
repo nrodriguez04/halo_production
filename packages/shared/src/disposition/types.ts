@@ -54,6 +54,8 @@ export const AGREEMENT_VERIFICATION_KEYS = [
   'closing_deadline',
   'assignment_clause',
   'signatures',
+  'legal_sufficiency',
+  'disclosures',
 ] as const;
 export type AgreementVerificationKey =
   (typeof AGREEMENT_VERIFICATION_KEYS)[number];
@@ -69,6 +71,10 @@ export const AGREEMENT_VERIFICATION_LABEL: Record<
   closing_deadline: 'Closing deadline matches',
   assignment_clause: 'The assignment clause says what we recorded',
   signatures: 'Every party signed and dated',
+  legal_sufficiency:
+    'The agreement is legally sufficient for this state: a counsel-approved template, or counsel reviewed it',
+  disclosures:
+    'The seller received every disclosure the state requires, in the required form, before signing',
 };
 
 // ---------------------------------------------------- Jurisdiction policies
@@ -111,6 +117,7 @@ export const DISPOSITION_CHECK_KEYS = [
   'earnest_money',
   'jurisdiction_policy',
   'license',
+  'cancellation_period',
   'buyer_disclosures',
   'blocking_issues',
 ] as const;

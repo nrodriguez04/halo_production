@@ -10,6 +10,7 @@ import { PolicyViolationError, assertPolicy } from '@halo/shared';
 import * as crypto from 'crypto';
 import type { Readable } from 'stream';
 import { PrismaService } from '../../prisma.service';
+import { MarketsService } from '../../markets/markets.service';
 import { ControlPlaneService } from '../../control-plane/control-plane.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { DealsService } from '../../deals/deals.service';
@@ -117,6 +118,7 @@ export class DocuSignService {
     private agreements: PurchaseAgreementsService,
     private assignments: AssignmentsService,
     private eligibility: DispositionEligibilityService,
+    private markets: MarketsService,
   ) {}
 
   // ------------------------------------------------------------ auth
@@ -271,6 +273,14 @@ export class DocuSignService {
       );
     }
     const purpose = envelopePurpose(input);
+    if (purpose === 'purchase_agreement') {
+      await this.markets.assertAllowed(
+        accountId,
+        deal.property?.state ?? deal.lead?.canonicalState ?? null,
+        'seller_contracting',
+        'Sending a purchase agreement to the seller',
+      );
+    }
     if (purpose === 'assignment') {
       // An assignment transfers our position: only the one a person approved,
       // to that buyer, while the deal may still be assigned.

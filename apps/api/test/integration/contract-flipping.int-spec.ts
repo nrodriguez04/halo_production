@@ -1,44 +1,33 @@
 /**
  * The contract-flipping lifecycle against a real Postgres
- * (docs/contract-flipping.md s9). Every service is the real one; only the
- * BullMQ queue (nothing is ever sent) and the HTTP auth guards are stubbed.
+ * (docs/contract-flipping.md s9, docs/markets.md s9). Every service is the
+ * real one; only the BullMQ queue (nothing is ever sent), object storage
+ * (in memory) and the HTTP auth guards are stubbed.
  *
  * Every record here is a SYNTHETIC fixture on its own throwaway tenant:
- * no real buyer, seller, property, offer or fee. Run against a scratch
- * database only:
+ * no real buyer, seller, property, offer, fee, policy or template. Run
+ * against a scratch database only:
  *
  *   INTEGRATION_DATABASE_URL=postgresql://... npm run test:integration -w @halo/api
  *
  * Without INTEGRATION_DATABASE_URL the suite is skipped.
  */
 import { randomUUID } from 'crypto';
-import { Test, TestingModule } from '@nestjs/testing';
-import { Global, Module } from '@nestjs/common';
-
-const DB = process.env.INTEGRATION_DATABASE_URL;
-if (DB) process.env.DATABASE_URL = DB;
-process.env.PII_ENCRYPTION_KEY_V1 =
-  process.env.PII_ENCRYPTION_KEY_V1 ?? '11'.repeat(32);
-process.env.PII_ENCRYPTION_KEY_CURRENT_VERSION =
-  process.env.PII_ENCRYPTION_KEY_CURRENT_VERSION ?? '1';
-process.env.PII_INDEX_KEY = process.env.PII_INDEX_KEY ?? '22'.repeat(32);
-process.env.PUBLIC_APP_URL = 'https://app.synthetic.test';
-process.env.NODE_ENV = 'test';
-
+import type { TestingModule } from '@nestjs/testing';
+import {
+  ALL_CONFIRMED,
+  USER,
+  buildModule,
+  d,
+  describeDb,
+  fixtures,
+  objects,
+  queue,
+  synthMarketContent,
+} from './harness';
 import { PrismaService } from '../../src/prisma.service';
-import { DispositionModule } from '../../src/disposition/disposition.module';
-import { ComplianceModule } from '../../src/compliance/compliance.module';
-import { ControlPlaneModule } from '../../src/control-plane/control-plane.module';
-import { PIIModule } from '../../src/pii/pii.module';
-import { LeadPiiModule } from '../../src/leads/lead-pii.module';
-import { AuditModule } from '../../src/audit/audit.module';
-import { OpsAlertService } from '../../src/alerts/ops-alert.service';
-import { QueueService } from '../../src/queues/queue.service';
-import { AuthGuard } from '../../src/auth/auth.guard';
-import { PermissionsGuard } from '../../src/auth/permissions.guard';
 import { DealsService } from '../../src/deals/deals.service';
 import { PurchaseAgreementsService } from '../../src/disposition/purchase-agreements.service';
-import { JurisdictionPoliciesService } from '../../src/disposition/jurisdiction-policies.service';
 import { DispositionEligibilityService } from '../../src/disposition/eligibility.service';
 import { BuyerIntelligenceService } from '../../src/buyers/buyer-intelligence.service';
 import { CampaignsService } from '../../src/disposition/campaigns.service';
@@ -53,53 +42,10 @@ import {
 } from '../../src/disposition/deal-packages.service';
 import { OptOutService } from '../../src/compliance/opt-out.service';
 import { protectBuyerContact } from '../../src/buyers/buyer-pii';
-import { StorageService } from '../../src/storage/storage.service';
-import { AgreementDraftingService } from '../../src/disposition/agreement-drafting.service';
 import { TaxSalesService } from '../../src/disposition/tax-sales.service';
-import { Readable } from 'stream';
-
-@Global()
-@Module({
-  providers: [
-    {
-      provide: OpsAlertService,
-      useValue: { send: jest.fn(), configured: () => false },
-    },
-  ],
-  exports: [OpsAlertService],
-})
-class TestAlertsModule {}
-
-/** Object storage in memory: the suite never touches a real bucket. */
-const objects = new Map<string, Buffer>();
-const memoryStorage = {
-  upload: jest.fn(
-    async (tenant: string, category: string, name: string, body: Buffer) => {
-      const key = `${tenant}/${category}/${name}`;
-      objects.set(key, Buffer.from(body));
-      return { key };
-    },
-  ),
-  download: jest.fn(async (key: string) => ({
-    body: Readable.from([objects.get(key) ?? Buffer.alloc(0)]),
-    contentType: 'text/plain',
-  })),
-  delete: jest.fn(async (key: string) => void objects.delete(key)),
-};
-
-const d = (days: number) => new Date(Date.now() + days * 86_400_000);
-const USER = 'synthetic-operator';
-const ALL_CONFIRMED = {
-  parties: true,
-  property: true,
-  purchase_price: true,
-  earnest_money: true,
-  closing_deadline: true,
-  assignment_clause: true,
-  signatures: true,
-} as const;
-
-const describeDb = DB ? describe : describe.skip;
+import { MarketsService } from '../../src/markets/markets.service';
+import { TemplatesService } from '../../src/templates/templates.service';
+import { buildDocx } from '../../src/templates/template-files';
 
 describeDb(
   'contract flipping, end to end (synthetic fixtures, real database)',
@@ -108,7 +54,6 @@ describeDb(
     let prisma: PrismaService;
     let deals: DealsService;
     let agreements: PurchaseAgreementsService;
-    let policies: JurisdictionPoliciesService;
     let eligibility: DispositionEligibilityService;
     let intel: BuyerIntelligenceService;
     let campaigns: CampaignsService;
@@ -119,38 +64,16 @@ describeDb(
     let center: CommandCenterService;
     let packages: DealPackagesService;
     let optOut: OptOutService;
-    let drafting: AgreementDraftingService;
-    const queue = {
-      enqueueCommunication: jest.fn().mockResolvedValue({}),
-      enqueueAgent: jest.fn().mockResolvedValue({}),
-    };
-    const tenants: string[] = [];
+    let markets: MarketsService;
+    let templates: TemplatesService;
+    let fx: ReturnType<typeof fixtures>;
 
     beforeAll(async () => {
-      moduleRef = await Test.createTestingModule({
-        imports: [
-          TestAlertsModule,
-          ComplianceModule,
-          ControlPlaneModule,
-          PIIModule,
-          LeadPiiModule,
-          AuditModule,
-          DispositionModule,
-        ],
-      })
-        .overrideProvider(QueueService)
-        .useValue(queue)
-        .overrideProvider(StorageService)
-        .useValue(memoryStorage)
-        .overrideGuard(AuthGuard)
-        .useValue({ canActivate: () => true })
-        .overrideGuard(PermissionsGuard)
-        .useValue({ canActivate: () => true })
-        .compile();
+      moduleRef = await buildModule();
+      fx = fixtures(moduleRef);
       prisma = moduleRef.get(PrismaService);
       deals = moduleRef.get(DealsService);
       agreements = moduleRef.get(PurchaseAgreementsService);
-      policies = moduleRef.get(JurisdictionPoliciesService);
       eligibility = moduleRef.get(DispositionEligibilityService);
       intel = moduleRef.get(BuyerIntelligenceService);
       campaigns = moduleRef.get(CampaignsService);
@@ -161,29 +84,14 @@ describeDb(
       center = moduleRef.get(CommandCenterService);
       packages = moduleRef.get(DealPackagesService);
       optOut = moduleRef.get(OptOutService);
-      drafting = moduleRef.get(AgreementDraftingService);
+      markets = moduleRef.get(MarketsService);
+      templates = moduleRef.get(TemplatesService);
     });
 
     afterAll(async () => {
       if (!prisma) return;
       // Best-effort cleanup of every synthetic tenant (cascades remove children).
-      for (const accountId of tenants) {
-        await prisma.closingFile.deleteMany({ where: { accountId } });
-        await prisma.deal.deleteMany({ where: { accountId } });
-        await prisma.buyer.deleteMany({ where: { accountId } });
-        await prisma.lead.deleteMany({ where: { accountId } });
-        await prisma.property.deleteMany({ where: { accountId } });
-        await prisma.document.deleteMany({ where: { accountId } });
-        await prisma.message.deleteMany({ where: { accountId } });
-        await prisma.consent.deleteMany({ where: { accountId } });
-        await prisma.dNCList.deleteMany({ where: { accountId } });
-        await prisma.jurisdictionPolicy.deleteMany({ where: { accountId } });
-        await prisma.timelineEvent.deleteMany({
-          where: { tenantId: accountId },
-        });
-        await prisma.auditLog.deleteMany({ where: { accountId } });
-        await prisma.controlPlane.deleteMany({ where: { accountId } });
-      }
+      await fx.cleanup();
       await moduleRef?.close();
     });
 
@@ -194,84 +102,34 @@ describeDb(
 
     // ------------------------------------------------------------ fixtures
 
-    function tenant() {
-      const id = `synthetic-${randomUUID()}`;
-      tenants.push(id);
-      return id;
-    }
+    const tenant = () => fx.tenant();
+    const doc = (...args: Parameters<ReturnType<typeof fixtures>['doc']>) =>
+      fx.doc(...args);
+    const seedDeal = (accountId: string, state = 'GA') =>
+      fx.seedDeal(accountId, state);
+    /** GA (or another state) approved by counsel, with templates, for disposition. */
+    const approvedMarket = (
+      ...args: Parameters<ReturnType<typeof fixtures>['approvedMarket']>
+    ) => fx.approvedMarket(...args);
 
-    async function doc(
-      accountId: string,
-      title: string,
-      link: { dealId?: string; buyerId?: string; leadId?: string },
-      tags: string[] = [],
-      category = 'contract',
-    ) {
-      return prisma.document.create({
-        data: {
-          accountId,
-          category,
-          title: `SYNTHETIC ${title}`,
-          storageKey: `synthetic/${randomUUID()}`,
-          fileName: 'synthetic.pdf',
-          contentType: 'application/pdf',
-          sizeBytes: 1,
-          tags,
-          ...link,
+    /** A SYNTHETIC Texas policy: the buyer notice the built-in Texas gate also requires. */
+    const TX_CONTENT = synthMarketContent((c) => {
+      c.answers.disclosures_required = {
+        answer: 'yes',
+        note: 'SYNTHETIC',
+        sourceIds: [],
+      };
+      c.disclosures = [
+        {
+          key: 'equitable_interest_disclosure',
+          title: 'Equitable interest disclosure',
+          audience: 'buyer',
+          timing: 'before_marketing',
+          templateKind: 'buyer_disclosure',
+          sourceIds: [],
         },
-      });
-    }
-
-    async function seedDeal(accountId: string, state = 'GA') {
-      const lead = await prisma.lead.create({
-        data: {
-          accountId,
-          status: 'qualified',
-          canonicalAddress: '100 Synthetic Test St',
-          canonicalCity: 'Atlanta',
-          canonicalState: state,
-          canonicalZip: '30310',
-          canonicalOwner: 'SYNTHETIC Seller',
-        },
-      });
-      const property = await prisma.property.create({
-        data: {
-          accountId,
-          leadId: lead.id,
-          address: '100 Synthetic Test St',
-          city: 'Atlanta',
-          state,
-          zip: '30310',
-        },
-      });
-      return prisma.deal.create({
-        data: {
-          accountId,
-          leadId: lead.id,
-          propertyId: property.id,
-          stage: 'negotiating',
-          arv: 260_000,
-          repairEstimate: 40_000,
-          mao: 130_000,
-          offerAmount: 120_000,
-        },
-      });
-    }
-
-    async function reviewedPolicy(
-      accountId: string,
-      state = 'GA',
-      extra: Record<string, unknown> = {},
-    ) {
-      await policies.upsert(accountId, state, USER, {
-        assignmentAllowed: 'allowed',
-        licenseRequired: 'no',
-        ...extra,
-      });
-      return policies.review(accountId, state, USER, {
-        references: 'SYNTHETIC counsel memo for tests',
-      });
-    }
+      ];
+    });
 
     async function executedAgreement(
       accountId: string,
@@ -357,10 +215,10 @@ describeDb(
       return { ...b, email };
     }
 
-    /** Executed, verified, policy reviewed: the deal is marketed. */
+    /** Executed, verified, in an approved market: the deal is marketed. */
     async function marketableDeal(accountId: string) {
       const deal = await seedDeal(accountId);
-      await reviewedPolicy(accountId);
+      await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id);
       const verified = await agreements.verify(accountId, deal.id, USER, {
         confirmations: ALL_CONFIRMED,
@@ -406,7 +264,16 @@ describeDb(
       const accountId = tenant();
       const deal = await seedDeal(accountId);
 
-      // Executed but not verified, and no GA policy: held for review.
+      // In a research-only market, Halo may not even record a seller contract.
+      await expect(executedAgreement(accountId, deal.id)).rejects.toThrow(
+        'Recording a seller contract is not allowed in GA',
+      );
+      // Counsel approved GA; a person allowed acquisition only, for now.
+      await approvedMarket(accountId, 'GA', {
+        status: 'APPROVED_FOR_ACQUISITION',
+      });
+
+      // Executed but not verified, and GA not approved for disposition: held for review.
       await executedAgreement(accountId, deal.id);
       let e = await eligibility.evaluate(accountId, deal.id);
       expect(e.status).toBe('review_required');
@@ -422,12 +289,15 @@ describeDb(
         await prisma.closingFile.count({ where: { dealId: deal.id } }),
       ).toBe(1);
 
-      // Verifying alone is not enough while the state is unreviewed.
+      // Verifying alone is not enough while the market is acquisition-only.
       const first = await agreements.verify(accountId, deal.id, USER, {
         confirmations: ALL_CONFIRMED,
       });
       expect(first.stageChanged).toBeNull();
-      await reviewedPolicy(accountId);
+      await markets.setStatus(accountId, 'GA', USER, {
+        status: 'APPROVED_FOR_DISPOSITION',
+        note: 'SYNTHETIC: disposition approved',
+      });
       e = await eligibility.evaluate(accountId, deal.id);
       expect(e.status).toBe('eligible');
       await deals.updateStage(deal.id, accountId, 'marketing', USER);
@@ -631,7 +501,7 @@ describeDb(
     it('holds a contract that prohibits assignment out of marketing', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId);
-      await reviewedPolicy(accountId);
+      await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id, {
         assignability: 'prohibited',
       });
@@ -654,6 +524,7 @@ describeDb(
     it('refuses to verify an agreement whose assignment clause nobody read', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId);
+      await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id, { assignability: 'unknown' });
       await expect(
         agreements.verify(accountId, deal.id, USER, {
@@ -909,7 +780,7 @@ describeDb(
     it('requires the Texas equitable-interest notice before a Texas deal is marketed', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId, 'TX');
-      await reviewedPolicy(accountId, 'TX');
+      await approvedMarket(accountId, 'TX', { content: TX_CONTENT });
       await executedAgreement(accountId, deal.id);
       const verified = await agreements.verify(accountId, deal.id, USER, {
         confirmations: ALL_CONFIRMED,
@@ -1006,107 +877,186 @@ describeDb(
       expect(ranked[1].reasons).toContain('Underwriting says pass');
     });
 
-    it('fills only a reviewed template, only from recorded terms, and refuses a missing value', async () => {
+    it('generates documents only from templates counsel approved for the state, as .docx or .txt with a PDF', async () => {
       const accountId = tenant();
       process.env.HALO_CONTRACTING_ENTITY = 'SYNTHETIC Acquisitions LLC';
       const deal = await seedDeal(accountId);
-      const wording =
-        'SYNTHETIC PURCHASE AGREEMENT\nSeller {{seller_name}} sells to {{buyer_entity}} the property at {{property_address}}, ' +
-        '{{property_city}}, {{property_state}} for {{purchase_price}}. Earnest money {{earnest_money}} due {{earnest_money_due}}. ' +
-        'Close by {{closing_deadline}}. Buyer may assign this agreement.\n[SELLER_SIGNATURE]';
-      const key = `${accountId}/documents/template.txt`;
-      objects.set(key, Buffer.from(wording));
-      const template = await prisma.document.create({
-        data: {
-          accountId,
-          category: 'agreement_template',
-          title: 'SYNTHETIC GA purchase agreement',
-          storageKey: key,
-          fileName: 'template.txt',
-          contentType: 'text/plain',
-          sizeBytes: wording.length,
-          jurisdiction: 'GA',
-          tags: [],
-        },
+      await approvedMarket(accountId, 'GA', {
+        status: 'APPROVED_FOR_ACQUISITION',
       });
-
-      // Not reviewed yet: nothing to fill from.
       await agreements.record(accountId, deal.id, USER, {
         status: 'draft',
         purchasePrice: 120_000,
-        earnestMoneyAmount: 1_000,
         closingDeadline: new Date('2026-11-20T12:00:00Z'),
         assignability: 'permitted',
       } as never);
-      await expect(
-        drafting.generate(accountId, deal.id, USER, {
-          kind: 'purchase_agreement',
-        }),
-      ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'NO_REVIEWED_TEMPLATE' }),
-      });
 
-      await drafting.reviewTemplate(accountId, template.id, USER, {
-        kind: 'purchase_agreement',
-      });
-      // Reviewed, but the earnest money due date is not on the record.
+      // The approved text template asks for earnest money, which is not on the record.
       await expect(
-        drafting.generate(accountId, deal.id, USER, {
+        templates.generate(accountId, deal.id, USER, {
           kind: 'purchase_agreement',
         }),
       ).rejects.toMatchObject({
         response: expect.objectContaining({
           code: 'TEMPLATE_INCOMPLETE',
-          missing: ['earnest_money_due'],
+          missing: ['earnest_money'],
         }),
       });
-
-      await agreements.update(accountId, deal.id, USER, {
-        earnestMoneyDueAt: new Date('2026-10-24T12:00:00Z'),
-      });
-      const out = await drafting.generate(accountId, deal.id, USER, {
-        kind: 'purchase_agreement',
-      });
-      const doc = await prisma.document.findUnique({
-        where: { id: out.documentId },
-      });
-      expect(doc).toMatchObject({
-        dealId: deal.id,
-        category: 'contract',
-        contentType: 'text/plain',
-      });
-      const text = objects.get(doc!.storageKey)!.toString('utf8');
-      expect(text).toContain(
-        'Seller SYNTHETIC Seller sells to SYNTHETIC Acquisitions LLC',
-      );
-      expect(text).toContain(
-        'for $120,000.00. Earnest money $1,000.00 due October 24, 2026. Close by November 20, 2026.',
-      );
-      expect(text).toContain('[SELLER_SIGNATURE]');
-      expect(text).not.toMatch(/\{\{/);
-
-      // A template asking for a field Halo does not know cannot be reviewed.
-      const badKey = `${accountId}/documents/bad.txt`;
-      objects.set(badKey, Buffer.from('Seller SSN: {{seller_ssn}}'));
-      const bad = await prisma.document.create({
-        data: {
-          accountId,
-          category: 'agreement_template',
-          title: 'bad',
-          storageKey: badKey,
-          fileName: 'bad.txt',
-          contentType: 'text/plain',
-          sizeBytes: 1,
-          tags: [],
-        },
-      });
+      // No seller disclosure template exists for GA at all.
       await expect(
-        drafting.reviewTemplate(accountId, bad.id, USER, {
-          kind: 'purchase_agreement',
+        templates.generate(accountId, deal.id, USER, {
+          kind: 'seller_disclosure',
         }),
       ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'TEMPLATE_UNKNOWN_FIELDS' }),
+        response: expect.objectContaining({ code: 'NO_APPROVED_TEMPLATE' }),
       });
+      await agreements.update(accountId, deal.id, USER, {
+        earnestMoneyAmount: 1_000,
+      });
+
+      // Counsel's Word version, approved for GA, takes over from the text one.
+      const docx = buildDocx([
+        { text: 'SYNTHETIC PURCHASE AGREEMENT', style: 'title' },
+        {
+          text: 'Seller {{ seller_name }} sells to {{buyer_entity}} the property at {{property_address}}, {{property_city}}, {{property_state}}.',
+        },
+        {
+          text: 'Price {{purchase_price}}; earnest money {{earnest_money}}; close by {{closing_deadline}}.',
+        },
+        { text: '[SELLER_SIGNATURE]' },
+      ]);
+      const word = await fx.approvedTemplate(
+        accountId,
+        'purchase_agreement',
+        ['GA'],
+        { buffer: docx, fileName: 'pa.docx' },
+      );
+      expect(word).toMatchObject({ status: 'approved', format: 'docx' });
+      const out = await templates.generate(accountId, deal.id, USER, {
+        kind: 'purchase_agreement',
+      });
+      expect(out.templateVersionId).toBe(word.id);
+      expect(out.pdfDocumentId).toBeNull();
+      expect(out.pdfNote).toContain('PDF_CONVERTER_URL');
+      const generated = await prisma.document.findUnique({
+        where: { id: out.documentId },
+      });
+      expect(generated).toMatchObject({
+        dealId: deal.id,
+        category: 'contract',
+        fileName: `purchase_agreement-${deal.id}.docx`,
+      });
+      const PizZip = (await import('pizzip')).default;
+      const body = new PizZip(objects.get(generated!.storageKey)!)
+        .file('word/document.xml')!
+        .asText();
+      expect(body).toContain(
+        'Seller SYNTHETIC Seller sells to SYNTHETIC Acquisitions LLC',
+      );
+      expect(body).toContain(
+        'Price $120,000.00; earnest money $1,000.00; close by November 20, 2026.',
+      );
+      expect(body).not.toMatch(/\{\{/);
+      const generation = await prisma.documentGeneration.findUnique({
+        where: { id: out.generationId },
+      });
+      expect(generation).toMatchObject({
+        templateVersionId: word.id,
+        kind: 'purchase_agreement',
+        state: 'GA',
+        status: 'draft',
+      });
+
+      // Retire the Word version: the text one is used again, and it comes with a PDF.
+      await templates.retire(accountId, word.id, USER, 'SYNTHETIC: testing');
+      const txt = await templates.generate(accountId, deal.id, USER, {
+        kind: 'purchase_agreement',
+      });
+      expect(txt.pdfDocumentId).toBeTruthy();
+      const pdf = await prisma.document.findUnique({
+        where: { id: txt.pdfDocumentId! },
+      });
+      expect(objects.get(pdf!.storageKey)!.subarray(0, 5).toString()).toBe(
+        '%PDF-',
+      );
+
+      // A template asking for a field Halo does not know stays a draft and cannot be approved.
+      const bad = await doc(
+        accountId,
+        'bad template',
+        {},
+        [],
+        'agreement_template',
+        {
+          text: `{{seller_ssn}} {{seller_name}} {{buyer_entity}} {{property_address}} {{purchase_price}} {{earnest_money}} {{closing_deadline}}`,
+          fileName: 'bad.txt',
+        },
+      );
+      const created = await templates.create(accountId, USER, {
+        kind: 'purchase_agreement',
+        name: 'SYNTHETIC bad',
+        documentId: bad.id,
+        states: ['GA'],
+      });
+      expect(created.version).toMatchObject({
+        status: 'draft',
+        unknownFields: ['seller_ssn'],
+      });
+      const approval = await doc(accountId, 'approval', {}, [], 'compliance');
+      await expect(
+        templates.approve(accountId, created.version.id, USER, {
+          counselName: 'SYNTHETIC Counsel',
+          approvalDocumentId: approval.id,
+          attest: true,
+        }),
+      ).rejects.toThrow('unknown field {{seller_ssn}}');
+
+      // A file changed after upload cannot be approved.
+      const ok = await doc(
+        accountId,
+        'ok template',
+        {},
+        [],
+        'agreement_template',
+        {
+          text: '{{seller_name}} {{buyer_entity}} {{property_address}} {{purchase_price}} {{earnest_money}} {{closing_deadline}}',
+          fileName: 'ok.txt',
+        },
+      );
+      const fresh = await templates.create(accountId, USER, {
+        kind: 'purchase_agreement',
+        name: 'SYNTHETIC tampered',
+        documentId: ok.id,
+        states: ['GA'],
+      });
+      expect(fresh.version.status).toBe('validated');
+      objects.set(ok.storageKey, Buffer.from('{{seller_name}} edited'));
+      await expect(
+        templates.approve(accountId, fresh.version.id, USER, {
+          counselName: 'SYNTHETIC Counsel',
+          approvalDocumentId: approval.id,
+          attest: true,
+        }),
+      ).rejects.toThrow('changed after it was uploaded');
+
+      // Starter scaffolds install for every kind, apply nowhere, and cannot be approved.
+      const starters = await templates.installStarters(accountId, USER);
+      expect(starters.installed).toHaveLength(5);
+      const scaffold = await prisma.documentTemplateVersion.findFirst({
+        where: {
+          accountId,
+          template: { name: 'Starter scaffold: purchase agreement' },
+        },
+      });
+      expect(scaffold).toMatchObject({ status: 'validated', states: [] });
+      await expect(
+        templates.approve(accountId, scaffold!.id, USER, {
+          counselName: 'SYNTHETIC Counsel',
+          approvalDocumentId: approval.id,
+          attest: true,
+          states: ['GA'],
+        }),
+      ).rejects.toThrow('not legal text');
     });
 
     it('launches a campaign once and accepts one offer per deal, even when two happen at once', async () => {
@@ -1153,7 +1103,7 @@ describeDb(
     it('holds a tax-sale deal until a deed, an ended redemption and insurable title are verified', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId);
-      await reviewedPolicy(accountId);
+      await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id);
       await agreements.verify(accountId, deal.id, USER, {
         confirmations: ALL_CONFIRMED,
@@ -1223,6 +1173,7 @@ describeDb(
     it('puts what needs a person at the top of the attention list', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId);
+      await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id);
       const items = await center.attention(accountId);
       expect(items[0]).toMatchObject({

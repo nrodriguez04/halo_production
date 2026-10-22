@@ -69,6 +69,17 @@ services:
       timeout: 20s
       retries: 3
 
+  # LibreOffice behind an HTTP API: converts generated Word documents to
+  # PDF. Reached only from the api over the compose network.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: halo-gotenberg
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --api-timeout=60s
+      - --chromium-disable-routes=true
+
   # One-shot: applies pending migrations then exits. api and worker wait for it
   # to complete successfully, so a deploy can never serve traffic against an
   # unmigrated schema. Runs from /app, hence the explicit --schema.
@@ -144,6 +155,8 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.haloacquisitions.com/api}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
       HALO_CONTRACTING_ENTITY: ${HALO_CONTRACTING_ENTITY:-}
+      # Word-to-PDF for generated documents (docs/markets.md s6).
+      PDF_CONVERTER_URL: ${PDF_CONVERTER_URL:-http://gotenberg:3000}
       DISPOSITION_SWEEP: ${DISPOSITION_SWEEP:-on}
       DISPOSITION_SWEEP_HOUR_UTC: ${DISPOSITION_SWEEP_HOUR_UTC:-13}
       EMAIL_FROM: ${EMAIL_FROM:-}

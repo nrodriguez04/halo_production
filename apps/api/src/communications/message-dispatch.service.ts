@@ -7,6 +7,7 @@ import {
 import type { Message } from '@prisma/client';
 import { assertPolicy, PolicyViolationError } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
+import { MarketsService } from '../markets/markets.service';
 import { ComplianceService } from '../compliance/compliance.service';
 import { ComplianceBlockedException } from '../compliance/compliance-blocked.exception';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
@@ -56,6 +57,7 @@ export class MessageDispatchService {
     private deals: DealsService,
     private disclosure: DisclosureGateService,
     private eligibility: DispositionEligibilityService,
+    private markets: MarketsService,
   ) {}
 
   async sendApproved(
@@ -176,12 +178,71 @@ export class MessageDispatchService {
    * approved at 16:00 can be delivered at 23:00 after a backlog, and the
    * contact can reply STOP in between. Only this check sees that state.
    */
+  /**
+   * The market gate (docs/markets.md s3): a seller is contacted only where
+   * the market allows seller outreach, and a contract is marketed to buyers
+   * only on a channel the approved policy permits. Replies to a buyer are
+   * not marketing and pass.
+   */
+  private async assertMarket(message: Message, channel: 'sms' | 'email') {
+    const meta = (message.metadata ?? {}) as Record<string, unknown>;
+    const toBuyer =
+      meta.recipientType === 'buyer' || meta.type === 'buyer_blast';
+    const marketing =
+      toBuyer &&
+      (meta.type === 'buyer_blast' ||
+        (typeof meta.type === 'string' &&
+          DISPOSITION_MARKETING_TYPES.has(meta.type)));
+    if (toBuyer && !marketing) return;
+    const state = await this.messageState(message);
+    if (marketing) {
+      await this.markets.assertChannel(
+        message.accountId,
+        state,
+        channel === 'email' ? 'investor_email' : 'investor_sms',
+        'Marketing this contract to buyers',
+      );
+      return;
+    }
+    if (message.leadId || message.dealId) {
+      await this.markets.assertAllowed(
+        message.accountId,
+        state,
+        'seller_outreach',
+        'Contacting this seller',
+      );
+    }
+  }
+
+  private async messageState(message: Message): Promise<string | null> {
+    if (message.dealId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: message.dealId, accountId: message.accountId },
+        select: {
+          property: { select: { state: true } },
+          lead: { select: { canonicalState: true } },
+        },
+      });
+      const s = deal?.property?.state ?? deal?.lead?.canonicalState;
+      if (s) return s;
+    }
+    if (message.leadId) {
+      const lead = await this.prisma.lead.findFirst({
+        where: { id: message.leadId, accountId: message.accountId },
+        select: { canonicalState: true },
+      });
+      return lead?.canonicalState ?? null;
+    }
+    return null;
+  }
+
   private async assertSendable(
     message: Message,
     channel: 'sms' | 'email',
     recipient: string,
   ) {
     await this.assertBuyerDisclosure(message);
+    await this.assertMarket(message, channel);
     const [controlPlane, facts] = await Promise.all([
       this.controlPlane.getStatus(message.accountId, { provision: false }),
       this.compliance.getFacts({

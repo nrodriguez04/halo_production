@@ -45,6 +45,8 @@ import { EmailSendModule } from './integrations/email/email-send.module';
 import { SkipTraceModule } from './skip-trace/skip-trace.module';
 import { LeadLifecycleModule } from './lead-lifecycle/lead-lifecycle.module';
 import { DispositionModule } from './disposition/disposition.module';
+import { MarketsModule } from './markets/markets.module';
+import { TemplatesModule } from './templates/templates.module';
 import { PrismaService } from './prisma.service';
 import { AuditModule } from './audit/audit.module';
 
@@ -108,6 +110,8 @@ import { AuditModule } from './audit/audit.module';
     SkipTraceModule,
     LeadLifecycleModule,
     DispositionModule,
+    MarketsModule,
+    TemplatesModule,
   ],
   providers: [PrismaService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
   exports: [PrismaService],
