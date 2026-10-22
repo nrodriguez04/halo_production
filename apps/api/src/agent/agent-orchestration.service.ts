@@ -40,6 +40,8 @@ import { DisclosureGateService } from '../compliance/disclosure-gate.service';
 import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
 import { thresholdFor } from '../cost-control/policy/lead-score-thresholds';
 import { openValue } from '../pii/contact-crypto';
+import { OffersService } from '../disposition/offers.service';
+import { DispositionEligibilityService } from '../disposition/eligibility.service';
 
 const TRIGGER_TYPE: Record<AgentTrigger, AutomationTriggerType> = {
   lifecycle: AutomationTriggerType.API,
@@ -103,6 +105,8 @@ export class AgentOrchestrationService {
     private communications: CommunicationsService,
     private disclosure: DisclosureGateService,
     private skipTrace: LeadSkipTraceService,
+    private offers: OffersService,
+    private eligibility: DispositionEligibilityService,
   ) {}
 
   /** Queue an agent for an entity. Returns false when the control plane is off. */
@@ -291,6 +295,27 @@ export class AgentOrchestrationService {
         run.entityId,
         'marketing this deal to buyers',
       );
+      // A blast markets the contract like a campaign does: only while the
+      // deal passes the disposition gate, and never alongside a campaign
+      // already reaching the same buyers (docs/contract-flipping.md s5).
+      await this.eligibility.assertEligible(
+        accountId,
+        run.entityId,
+        'marketing this deal to buyers',
+      );
+      const campaign = await this.prisma.dispositionCampaign.findFirst({
+        where: {
+          accountId,
+          dealId: run.entityId,
+          status: { in: ['active', 'paused'] },
+        },
+        select: { id: true },
+      });
+      if (campaign) {
+        throw new BadRequestException(
+          'A buyer campaign is already running for this deal; outreach goes through it. Reject this blast, or end the campaign first.',
+        );
+      }
     }
 
     const applied: AppliedAction[] = [];
@@ -629,6 +654,10 @@ export class AgentOrchestrationService {
             out.push(await this.rankBuyers(accountId, run, decision, action));
             break;
           }
+          case 'record_buyer_offer': {
+            out.push(await this.recordBuyerOffer(accountId, run, action));
+            break;
+          }
           case 'queue_buyer_blast':
           case 'transition_deal':
           case 'draft_message':
@@ -789,10 +818,22 @@ export class AgentOrchestrationService {
             : undefined,
         },
       );
+      // The person approved the run, so the draft goes to the approval
+      // queue like a buyer draft does. It used to stay a `draft` that no
+      // screen submitted, so approved seller replies never reached anyone.
+      let submitted = '';
+      try {
+        await this.agentService.requestSend(draft.message.id, accountId, {
+          agentName: agent,
+          automationRunId: run.id,
+        });
+      } catch (err) {
+        submitted = `; left as a draft: ${(err as Error).message}`;
+      }
       return {
         action,
         result: 'applied',
-        detail: `message:${draft.message.id}`,
+        detail: `message:${draft.message.id}${submitted}`,
       };
     } catch (err) {
       // A compliance refusal (DNC, missing consent, quiet hours) leaves the
@@ -1031,6 +1072,53 @@ export class AgentOrchestrationService {
       action,
       result: 'applied',
       detail: `${action.shortlist.length} buyer(s) shortlisted of ${action.consideredCount}`,
+    };
+  }
+
+  /**
+   * A price a buyer named in a reply, recorded as an agent-captured offer
+   * on the deal (docs/contract-flipping.md s5). It is a fact for a person
+   * to confirm: an agent-captured offer cannot be accepted until someone
+   * checks the amount against the message. Deals without an executed seller
+   * contract have nothing to offer on, and the capture is skipped.
+   */
+  private async recordBuyerOffer(
+    accountId: string,
+    run: { id: string; entityType: string | null; entityId: string | null },
+    action: Extract<AgentAction, { type: 'record_buyer_offer' }>,
+  ): Promise<AppliedAction> {
+    if (run.entityType !== 'deal' || !run.entityId) {
+      throw new Error('no deal on this run');
+    }
+    const agreement = await this.eligibility.currentAgreement(
+      accountId,
+      run.entityId,
+    );
+    if (!agreement || agreement.status !== 'executed') {
+      return {
+        action,
+        result: 'skipped',
+        detail: 'no executed seller contract on this deal to take offers on',
+      };
+    }
+    const message = await this.prisma.message.findFirst({
+      where: { id: action.messageId, accountId, direction: 'inbound' },
+      select: { channel: true },
+    });
+    const offer = await this.offers.recordFromAgent(accountId, run.entityId, {
+      buyerId: action.buyerId,
+      amount: action.amount,
+      kind: action.kind,
+      source: message?.channel === 'sms' ? 'sms' : 'email',
+      sourceMessageId: action.messageId,
+      conditions: action.terms ?? undefined,
+      confidence: action.confidence,
+      automationRunId: run.id,
+    });
+    return {
+      action,
+      result: 'applied',
+      detail: `offer:${offer.id} (to be confirmed by a person)`,
     };
   }
 

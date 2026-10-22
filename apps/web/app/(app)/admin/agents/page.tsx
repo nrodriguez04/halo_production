@@ -50,10 +50,13 @@ interface AgentAction {
     | 'flag_contact'
     | 'transition_deal'
     | 'rank_buyers'
-    | 'queue_buyer_blast';
+    | 'queue_buyer_blast'
+    | 'record_buyer_offer';
   shortlist?: Array<{ buyerId: string; name: string; rank: number; fit: string; reason: string }>;
   consideredCount?: number;
   buyerIds?: string[];
+  amount?: number;
+  kind?: string;
   body?: string;
   intent?: string;
   confidence?: number;
@@ -235,6 +238,8 @@ function describeAction(action: AgentAction): string {
         : `Rank buyers: none of ${action.consideredCount ?? 0} fit`;
     case 'queue_buyer_blast':
       return `Draft the buyer blast to ${action.buyerIds?.length ?? 0} buyer(s) (emails go to the approval queue)`;
+    case 'record_buyer_offer':
+      return `Record the buyer's ${action.kind === 'indication' ? 'indication' : 'offer'} of ${money(action.amount ?? null)} on the deal, for a person to confirm`;
     default:
       return action.type;
   }

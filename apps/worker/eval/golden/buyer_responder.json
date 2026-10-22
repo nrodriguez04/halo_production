@@ -378,7 +378,8 @@
         ],
         "noActions": [
           "transition_deal",
-          "queue_buyer_blast"
+          "queue_buyer_blast",
+          "record_buyer_offer"
         ],
         "mentions": [
           "proof of funds"
@@ -438,7 +439,8 @@
         ],
         "noActions": [
           "transition_deal",
-          "queue_buyer_blast"
+          "queue_buyer_blast",
+          "record_buyer_offer"
         ]
       }
     },
@@ -495,7 +497,8 @@
         ],
         "actions": [
           "classify_inbound:offer:model",
-          "draft_message:email:buyer"
+          "draft_message:email:buyer",
+          "record_buyer_offer:written_offer"
         ],
         "noActions": [
           "transition_deal",
@@ -556,7 +559,8 @@
           "interested"
         ],
         "actions": [
-          "draft_message:email:buyer"
+          "draft_message:email:buyer",
+          "record_buyer_offer:written_offer"
         ],
         "noActions": [
           "transition_deal",
@@ -617,7 +621,8 @@
         ],
         "noActions": [
           "transition_deal",
-          "queue_buyer_blast"
+          "queue_buyer_blast",
+          "record_buyer_offer"
         ]
       }
     },
