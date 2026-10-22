@@ -115,5 +115,5 @@ CI now builds all three images on every push (`docker-images`) and runs the inte
 - **Market intelligence has no metro (CBSA) level.** Aggregation is in memory, which is fine to a few hundred thousand sales per tenant.
 - **Resend inbound email is not handled.** Inbound uses SendGrid Inbound Parse.
 - **State holidays and split-state time zones are approximations** in deadline counting (markets.md s5).
-- **Production dependencies carry known advisories:** 52, of which 3 are critical. Several need major upgrades, so this is a separate task.
+- **Production dependencies carry 14 known advisories** (none critical; 52 before). None of the 14 is reachable at runtime: they are Tailwind 3's build-time tooling and Nest 10 code paths the api does not use. See [DEPENDENCY_SECURITY.md](DEPENDENCY_SECURITY.md).
 - **The two newest agent prompts are unmeasured against live models.** Their golden replies are written by hand.
