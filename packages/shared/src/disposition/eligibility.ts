@@ -6,11 +6,9 @@ import type {
   DispositionEligibility,
   DispositionEligibilityStatus,
   GateCheck,
-  JurisdictionPolicyStatus,
-  PermissionValue,
   PurchaseAgreementStatus,
-  TriState,
 } from './types';
+import { ACTIVATION_LABEL, type ActivationStatus } from '../markets/policy';
 
 /**
  * The disposition gate: whether a deal may be marketed to buyers and
@@ -39,15 +37,31 @@ export interface EligibilityAgreement {
   earnestMoneyDepositedAt: Date | null;
 }
 
-export interface EligibilityPolicy {
-  status: JurisdictionPolicyStatus;
-  assignmentAllowed: PermissionValue;
-  licenseRequired: TriState;
-  licenseOnFile: boolean;
-  /** Checklist keys that must be on file for the deal before buyer marketing. */
-  buyerDisclosureKeys: string[];
-  reviewExpiresAt: Date | null;
+/**
+ * The deal's market, as `evaluateMarket` (markets/evaluate.ts) sees it:
+ * whether contracts there may be marketed, and whether the structure the
+ * deal will close by is available.
+ */
+export interface EligibilityMarket {
+  status: ActivationStatus;
+  /** The approved policy version relied on, if any. */
+  version: number | null;
+  buyerMarketing: { allowed: boolean; reason: string };
+  /** The structure the closing file plans: assignment unless changed. */
+  structure: 'assignment' | 'double_close';
+  structureAllowed: { allowed: boolean; reason: string };
+  /** Conditions the approved policy attaches to that structure. */
   conditions: string | null;
+  /** Licences and registrations the market requires that are not in place. */
+  missingAuthorizations: string[];
+  /** What would move the market forward, from the evaluation. */
+  nextStep: string | null;
+}
+
+/** A statutory window during which the seller may still cancel. */
+export interface EligibilityCancellationWindow {
+  label: string;
+  endsAt: Date;
 }
 
 export interface RequiredDisclosure {
@@ -76,8 +90,10 @@ export interface EligibilityInput {
   state: string | null;
   /** The current seller contract, if one is recorded. */
   agreement: EligibilityAgreement | null;
-  /** This tenant's policy for the state, if one exists. */
-  policy: EligibilityPolicy | null;
+  /** The deal's market, evaluated; null when the state is unknown. */
+  market: EligibilityMarket | null;
+  /** Seller cancellation windows from the approved policy, if any. */
+  cancellationWindows?: EligibilityCancellationWindow[];
   /**
    * Every disclosure the deal needs before buyer marketing, with whether it
    * is on file for the deal or its lead: the policy's keys plus the
@@ -101,8 +117,9 @@ const CHECK_LABEL: Record<GateCheck['key'], string> = {
   assignment_rights: 'Contract may be assigned',
   contract_live: 'Contract still in force',
   earnest_money: 'Earnest money deposited on time',
-  jurisdiction_policy: 'State rules reviewed',
-  license: 'Licensing requirement met',
+  jurisdiction_policy: 'Market approved for disposition',
+  license: 'Licences and registrations in place',
+  cancellation_period: 'Seller cancellation window closed',
   buyer_disclosures: 'Buyer disclosures on file',
   blocking_issues: 'No blocking title or closing issue',
 };
@@ -317,7 +334,7 @@ function agreementChecks(input: EligibilityInput): GateCheck[] {
   return out;
 }
 
-function policyChecks(input: EligibilityInput): GateCheck[] {
+function marketChecks(input: EligibilityInput): GateCheck[] {
   const state = input.state;
   if (!state) {
     return [
@@ -329,92 +346,85 @@ function policyChecks(input: EligibilityInput): GateCheck[] {
       ),
     ];
   }
-  const p = input.policy;
-  if (!p || p.status !== 'reviewed') {
+  const m = input.market;
+  if (!m) {
     return [
       check(
         'jurisdiction_policy',
         'review',
-        p
-          ? `The ${state} policy is ${p.status}, not reviewed.`
-          : `No policy is recorded for ${state}. Halo does not assume wholesaling is permitted there.`,
-        `Record what counsel confirmed about assigning contracts in ${state} on the Compliance page and mark it reviewed.`,
-      ),
-    ];
-  }
-  if (p.reviewExpiresAt && p.reviewExpiresAt.getTime() <= input.now.getTime()) {
-    return [
-      check(
-        'jurisdiction_policy',
-        'review',
-        `The ${state} review lapsed on ${day(p.reviewExpiresAt)}.`,
-        `Re-confirm the ${state} rules and renew the review.`,
+        `There is no market record for ${state}. Halo does not assume wholesaling is permitted there.`,
+        'Open the market on the Markets page.',
       ),
     ];
   }
   const out: GateCheck[] = [];
-  switch (p.assignmentAllowed) {
-    case 'allowed':
-      out.push(
-        check(
-          'jurisdiction_policy',
-          'pass',
-          `${state} rules reviewed: assignment is allowed.`,
-        ),
-      );
-      break;
-    case 'conditional':
-      out.push(
-        check(
-          'jurisdiction_policy',
-          'pass',
-          `${state} rules reviewed: assignment is allowed on conditions${p.conditions ? `: ${p.conditions}` : ''}.`,
-        ),
-      );
-      break;
-    case 'prohibited':
-      out.push(
-        check(
-          'jurisdiction_policy',
-          'fail',
-          `The reviewed ${state} policy does not allow assigning this contract.`,
-          'Do not market this contract. Discuss another structure with counsel.',
-        ),
-      );
-      break;
-    default:
-      out.push(
-        check(
-          'jurisdiction_policy',
-          'review',
-          `The ${state} policy does not say whether assignment is allowed.`,
-          `Record whether ${state} allows assignment and on what conditions.`,
-        ),
-      );
-  }
-  if (p.licenseRequired === 'yes') {
-    out.push(
-      p.licenseOnFile
-        ? check('license', 'pass', `${state} requires a license, and one is on file.`)
-        : check(
-            'license',
-            'fail',
-            `${state} requires a license for this activity, and none is on file.`,
-            'Upload the license to the documents library and link it on the policy.',
-          ),
-    );
-  } else if (p.licenseRequired === 'unknown') {
+  const label = ACTIVATION_LABEL[m.status];
+  if (m.status === 'RESTRICTED' || m.status === 'BLOCKED') {
     out.push(
       check(
-        'license',
+        'jurisdiction_policy',
+        'fail',
+        `${state} is ${label.toLowerCase()}: contracts there are not marketed.`,
+        'A person with markets:activate changes the market status once the reason is resolved.',
+      ),
+    );
+  } else if (!m.buyerMarketing.allowed) {
+    out.push(
+      check(
+        'jurisdiction_policy',
         'review',
-        `Whether ${state} requires a license has not been recorded.`,
-        `Record whether ${state} requires a license on the policy.`,
+        `${state} is ${label.toLowerCase()}. ${m.buyerMarketing.reason}`,
+        m.nextStep ?? `Approve ${state} for disposition on the Markets page.`,
+      ),
+    );
+  } else if (!m.structureAllowed.allowed) {
+    out.push(
+      check(
+        'jurisdiction_policy',
+        'fail',
+        `${state}: ${m.structureAllowed.reason}`,
+        m.structure === 'assignment'
+          ? 'Do not assign this contract. Change the closing structure to one the policy allows, or have counsel revise the policy.'
+          : 'Change the closing structure to one the policy allows, or have counsel revise the policy.',
       ),
     );
   } else {
     out.push(
-      check('license', 'pass', `${state} requires no license for this activity.`),
+      check(
+        'jurisdiction_policy',
+        'pass',
+        `${state} is approved for disposition${m.version ? ` (policy v${m.version})` : ''}; ${m.structure.replace('_', ' ')} is available${m.conditions ? ` on conditions: ${m.conditions}` : ''}.`,
+      ),
+    );
+  }
+  out.push(
+    m.missingAuthorizations.length
+      ? check(
+          'license',
+          'fail',
+          `Not in place: ${m.missingAuthorizations.join('; ')}.`,
+          `Record and verify each one on the ${state} market page.`,
+        )
+      : check('license', 'pass', `Every licence and registration ${state} requires for this is in place.`),
+  );
+  const open = (input.cancellationWindows ?? []).filter((w) => w.endsAt.getTime() > input.now.getTime());
+  if (open.length) {
+    const last = open.reduce((a, b) => (a.endsAt > b.endsAt ? a : b));
+    out.push(
+      check(
+        'cancellation_period',
+        'fail',
+        `${last.label} until ${last.endsAt.toISOString().slice(0, 16).replace('T', ' ')} UTC.`,
+        'Buyer marketing starts once the window has closed.',
+      ),
+    );
+  } else {
+    out.push(
+      check(
+        'cancellation_period',
+        'pass',
+        (input.cancellationWindows ?? []).length ? 'The seller cancellation window has closed.' : 'No seller cancellation window applies.',
+      ),
     );
   }
   return out;
@@ -550,7 +560,7 @@ export function evaluateDispositionEligibility(
   const checks = [
     ...(tax ? [tax] : []),
     ...agreementChecks(input),
-    ...policyChecks(input),
+    ...marketChecks(input),
     disclosureCheck(input),
     issuesCheck(input),
   ];

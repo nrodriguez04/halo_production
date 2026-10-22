@@ -70,6 +70,7 @@ const assignments = {
   onEnvelopeCompleted: jest.fn(),
 };
 const eligibility = { assertEligible: jest.fn() };
+const markets = { assertAllowed: jest.fn() };
 
 const service = () =>
   new DocuSignService(
@@ -85,6 +86,7 @@ const service = () =>
     agreements as any,
     assignments as any,
     eligibility as any,
+    markets as any,
   );
 
 const deal = {

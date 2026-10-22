@@ -76,37 +76,20 @@ How an agreement gets there:
   - Extensions: `/extend` needs the signed extension in the library.
   - Termination: `/terminate` ends every campaign and revokes every buyer link at once.
 
-### Agreements from reviewed templates
+### Agreements from approved templates
 
-The wording is the operator's (and counsel's); Halo fills only the blanks.
+The wording is counsel's; Halo fills only the blanks. Templates are versioned `.docx` or `.txt` files that counsel approves per state (docs/markets.md s6). `POST /deals/:id/documents/generate {kind}` fills the approved template for the deal's state:
+- a purchase agreement from the recorded terms, before it is signed;
+- an assignment from the approved assignment, only while the deal is eligible;
+- disclosures and notices the state's policy requires.
 
-1. **Upload.** A template is a `.txt` file in the documents library (category `agreement_template`) with `{{field}}` blanks.
-2. **Review.** A person with `compliance:write` marks it reviewed for a kind (`purchase_agreement` or `assignment`) and a state, or for every state, on the State Rules page. The blanks are checked at review: a template that asks for a field Halo cannot fill cannot be reviewed.
-3. **Generate.** `POST /deals/:id/agreements/generate {kind}` fills the reviewed template for the deal's state (falling back to one for every state):
-   - a purchase agreement from the recorded terms, before it is signed;
-   - an assignment from the approved assignment, only while the deal is eligible.
+A blank with no value on record refuses the whole generation, so a half-filled agreement never reaches a signer. The draft (with a PDF where one can be made) is sent for signature from the Contracts card.
 
-   A blank with no value on record refuses the whole generation and names what is missing, so a half-filled agreement never reaches a signer.
-4. **Send.** The result is a draft `.txt` document on the deal (tags `generated`, `draft:<kind>`), sent for signature from the Contracts card. DocuSign accepts text and the anchors work in it.
+## 4. State rules: markets
 
-Fields are listed in `packages/shared/src/disposition/agreement-templates.ts`. `{{buyer_entity}}` and `{{assignor_entity}}` come from `HALO_CONTRACTING_ENTITY`.
+Each state's rules are its market (docs/markets.md): a draft policy built from research, counsel's approved version, the licences and registrations it requires, and the status a person set. The disposition gate asks the market whether contracts may be marketed there, whether the deal's closing structure is available, whether the required authorizations are in place, and whether a seller cancellation window is still open.
 
-## 4. State rules
-
-`jurisdiction_policies` holds one row per state per tenant. It records what the operator, with counsel, has confirmed:
-- whether assignment is allowed (`allowed`, `conditional`, `prohibited` or `unknown`), and the conditions;
-- whether a double close is allowed;
-- whether a licence is required, and the licence document;
-- whether public marketing is allowed;
-- the checklist documents buyers must receive (`buyerDisclosureKeys`);
-- the references the review relied on, and when the review expires.
-
-The rules:
-- **Only `reviewed` policies count.** Without a reviewed policy for the deal's state, the deal is `review_required`.
-- **A review must answer the two questions the gate turns on:** whether assignment is allowed, and whether a licence is required.
-- **Editing a reviewed answer puts the policy back to draft.**
-- **Templates are pointers, not answers.** `POST /compliance/jurisdictions/TX/from-template` pre-fills Texas's disclosure item and the statutes to check. Every legal question stays `unknown`.
-- **The Texas equitable-interest gate stays in place.** Texas deals always need the notice on file (docs/documents-and-compliance.md), whatever the policy says.
+The Texas equitable-interest gate stays in place: Texas deals always need the notice on file (docs/documents-and-compliance.md), whatever the policy says.
 
 ### Tax-sale deals
 
@@ -133,8 +116,9 @@ The opportunity ranking marks an unverified tax-sale deal down, and the Contract
 | Contract may be assigned | prohibited; consent required without the consent | clause unknown |
 | Contract still in force | deadline passed | deadline not recorded |
 | Earnest money on time | due and not deposited | |
-| State rules reviewed | policy prohibits | no policy, draft, lapsed, unknown answer, unknown state |
-| Licence | required and not on file | unknown |
+| Market approved for disposition | market restricted or blocked; planned structure not available | below disposition (research, pending review or requirements, acquisition only), unknown state |
+| Licences and registrations | a required one missing, unverified or expired | |
+| Seller cancellation window closed | window still open | |
 | Buyer disclosures | any required document missing | |
 | No blocking issue | an open blocking title/closing issue | |
 
@@ -423,14 +407,14 @@ Roles that need no judgement are deterministic services, not models. Where an ag
 
 Permissions:
 - `deals:approve`: set the offer to the seller; verify a tax-sale interest; verify, extend or terminate a contract; launch or resume a campaign; approve a package; counter, reject or accept an offer; verify proof of funds; execute or cancel an assignment; confirm a closing; record the fee; cancel a closing.
-- `compliance:write`: edit or review jurisdiction policies.
+- `compliance:write`, `compliance:approve`, `markets:activate`: market policies, approvals, templates and activation (docs/markets.md s10).
 
-Tenant admins have both.
+Tenant admins have all of them.
 
 ## 11. Not operational yet
 
-- **Contract text is the operator's.** Halo fills blanks; it never writes clauses. Templates must be plain text (.txt); Word templates are sent as they are, unfilled. Generated agreements are drafts a person reads before sending for signature.
-- **State rules start empty by design.** No state is marketable until its policy is reviewed.
+- **Contract text is counsel's.** Halo fills blanks in approved .docx or .txt templates; it never writes clauses. Generated agreements are drafts a person reads before sending for signature. No template is approved until counsel's version is uploaded and approved per state.
+- **No market is approved.** All 51 have research drafts; none operates until counsel approves its policy and a person activates it (docs/markets.md s11).
 - **Email delivery needs `EMAIL_FROM`, `EMAIL_POSTAL_ADDRESS`, `PUBLIC_API_URL` and `PUBLIC_APP_URL`, and the email switch on.** Until then, launches are refused at creation with the reason.
 - **Buyer sourcing from public records is manual.** Purchases are entered with their recording reference; no deed-records provider is integrated.
 - **Buyer replies by text are not linked to buyers.** Email only.

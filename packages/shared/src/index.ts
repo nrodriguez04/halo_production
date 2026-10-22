@@ -17,6 +17,9 @@ export * from './utils/buyer-price';
 // Contract flipping: disposition gate, buyer ranking, fee pricing, closing
 export * from './disposition';
 
+// Markets: the 51 jurisdictions, their policies, activation and coverage
+export * from './markets';
+
 // Policy and state machine
 export * from './policy';
 export * from './state-machine/deal-stage';

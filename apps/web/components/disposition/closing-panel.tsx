@@ -280,7 +280,7 @@ function AssignmentCard({ dealId, assignment, buyerName }: { dealId: string; ass
               (purpose: assignment), or record the signed copy here once both parties have signed.
             </p>
             {assignment.status === 'draft' && (
-              <GenerateAgreementButton dealId={dealId} kind="assignment" label="Generate assignment from template" />
+              <GenerateAgreementButton dealId={dealId} kind="assignment_agreement" label="Generate assignment from approved template" />
             )}
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-64 flex-1">

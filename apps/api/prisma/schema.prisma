@@ -76,16 +76,16 @@ model Account {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
+  id            String    @id @default(cuid())
+  email         String    @unique
   name          String?
   emailVerified DateTime?
   image         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  memberships   Membership[]
-  sessions      Session[]
+  memberships Membership[]
+  sessions    Session[]
 
   @@map("users")
 }
@@ -97,8 +97,8 @@ model Membership {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   roles   MembershipRole[]
 
   @@unique([accountId, userId])
@@ -182,20 +182,20 @@ model VerificationToken {
 
 // Leads
 model Lead {
-  id          String   @id @default(cuid())
-  accountId   String
-  status      String   @default("new") // new, enriched, underwriting, contacted, etc.
-  score       Float?
-  tags        String[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  accountId String
+  status    String   @default("new") // new, enriched, underwriting, contacted, etc.
+  score     Float?
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Canonical fields (reconciled)
-  canonicalAddress String?
-  canonicalCity    String?
-  canonicalState   String?
-  canonicalZip     String?
-  canonicalOwner   String?
+  canonicalAddress   String?
+  canonicalCity      String?
+  canonicalState     String?
+  canonicalZip       String?
+  canonicalOwner     String?
   // Contact PII is stored encrypted (pii-envelope JSON) with a blind-index
   // hash for exact-match lookups; there is no plaintext column. Reads go
   // through lead-pii.ts (reveal / present). See docs/pii-encryption-design.md.
@@ -225,14 +225,14 @@ model SourceRecord {
   id          String   @id @default(cuid())
   leadId      String?
   propertyId  String?
-  provider    String   // attom, google, etc.
+  provider    String // attom, google, etc.
   endpoint    String
   requestHash String
   response    Json
   trustWeight Float    @default(1.0)
   createdAt   DateTime @default(now())
 
-  lead     Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   property Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
@@ -261,9 +261,9 @@ model Property {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  lead          Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  sourceRecords SourceRecord[]
-  deals         Deal[]
+  lead                Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sourceRecords       SourceRecord[]
+  deals               Deal[]
   underwritingResults UnderwritingResult[]
 
   @@index([apn])
@@ -277,27 +277,27 @@ model Property {
 
 // Deals
 model Deal {
-  id          String   @id @default(cuid())
-  accountId   String
-  leadId      String?
-  propertyId  String?
-  stage       String   @default("new") // new, contacted, negotiating, under_contract, marketing, assigned, closed, lost
-  arv         Float?
-  repairEstimate Float?
-  mao         Float?
-  offerAmount Float?
+  id              String   @id @default(cuid())
+  accountId       String
+  leadId          String?
+  propertyId      String?
+  stage           String   @default("new") // new, contacted, negotiating, under_contract, marketing, assigned, closed, lost
+  arv             Float?
+  repairEstimate  Float?
+  mao             Float?
+  offerAmount     Float?
   /// standard | tax_sale. A tax-sale deal is marketed only once the interest
   /// it acquired is verified (tax_sale_interests).
-  acquisitionType String @default("standard")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  acquisitionType String   @default("standard")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  contracts Contract[]
-  underwritingResult UnderwritingResult?
-  marketingMaterials MarketingMaterial[]
-  economics          DealEconomics?
+  lead                 Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  property             Property?             @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  contracts            Contract[]
+  underwritingResult   UnderwritingResult?
+  marketingMaterials   MarketingMaterial[]
+  economics            DealEconomics?
   purchaseAgreements   PurchaseAgreement[]
   dealPackages         DealPackage[]
   dispositionCampaigns DispositionCampaign[]
@@ -317,18 +317,18 @@ model Deal {
 
 // Contracts (DocuSign)
 model Contract {
-  id              String   @id @default(cuid())
-  dealId          String
-  docusignEnvelopeId String? @unique
-  status          String   // draft, sent, delivered, completed, declined, voided
+  id                 String   @id @default(cuid())
+  dealId             String
+  docusignEnvelopeId String?  @unique
+  status             String // draft, sent, delivered, completed, declined, voided
   /// What the envelope is: purchase_agreement (with the seller), assignment
   /// (with the cash buyer) or other. Null on envelopes sent before it existed.
-  purpose         String?
-  pdfUrl          String?
+  purpose            String?
+  pdfUrl             String?
   /// What was sent and to whom (roles only, never addresses): documents, recipients, subject, signed copy.
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
@@ -339,27 +339,27 @@ model Contract {
 
 // Communications
 model Message {
-  id              String   @id @default(cuid())
-  accountId       String
-  leadId          String?
-  dealId          String?
-  channel         String   // sms, email
-  direction       String   // inbound, outbound
-  status          String   // draft, pending_approval, approved, sent, delivered, failed
-  content         String
-  metadata        Json?
+  id               String    @id @default(cuid())
+  accountId        String
+  leadId           String?
+  dealId           String?
+  channel          String // sms, email
+  direction        String // inbound, outbound
+  status           String // draft, pending_approval, approved, sent, delivered, failed
+  content          String
+  metadata         Json?
   // External party (recipient if outbound, sender if inbound), encrypted
   // with a blind index. See communications/message-counterparty.ts.
   counterpartyEnc  String?
   counterpartyHash String?
-  approvedAt      DateTime?
-  approvedBy      String?
-  sentAt          DateTime?
-  source          String?  // e.g. "agent", "user", "system"
-  automationRunId String?
-  agentName       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  approvedAt       DateTime?
+  approvedBy       String?
+  sentAt           DateTime?
+  source           String? // e.g. "agent", "user", "system"
+  automationRunId  String?
+  agentName        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   automationRun AutomationRun? @relation("AutomationRunMessages", fields: [automationRunId], references: [id])
 
@@ -375,41 +375,41 @@ model Message {
 
 // Buyers
 model Buyer {
-  id          String   @id @default(cuid())
-  accountId   String
-  name        String
+  id              String    @id @default(cuid())
+  accountId       String
+  name            String
   // Contact PII: envelope ciphertext + blind index, no plaintext column, as
   // on leads. Reads go through buyers/buyer-pii.ts (mask) or PIIService.
-  emailEnc    String?
-  emailHash   String?
-  phoneEnc    String?
-  phoneHash   String?
+  emailEnc        String?
+  emailHash       String?
+  phoneEnc        String?
+  phoneHash       String?
   /// Stated buy box: locations, priceRange {min,max}, propertyTypes,
   /// maxRepairEstimate, minARV, strategies. What the buyer told us, not
   /// evidence of what they buy (that is buyer_transactions).
-  preferences Json?
-  engagementScore Float @default(0.0)
-  lastContacted DateTime?
-  company     String?
+  preferences     Json?
+  engagementScore Float     @default(0.0)
+  lastContacted   DateTime?
+  company         String?
   /// active | inactive | do_not_market
-  status      String   @default("active")
+  status          String    @default("active")
   /// Where the record came from: manual | import | inbound_inquiry |
   /// deal_page | referral | public_record, with a free-text detail.
-  source       String  @default("manual")
-  sourceDetail String?
+  source          String    @default("manual")
+  sourceDetail    String?
   /// cash | hard_money | private_money | conventional | unknown
-  fundingType  String  @default("unknown")
+  fundingType     String    @default("unknown")
   /// Proof of funds: none | requested | received | verified | expired | rejected.
   /// Only `verified` (a person checked the document) counts as proof.
-  pofStatus     String    @default("none")
-  pofAmount     Float?
-  pofDocumentId String?
-  pofVerifiedAt DateTime?
-  pofVerifiedBy String?
-  pofExpiresAt  DateTime?
-  notes         String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  pofStatus       String    @default("none")
+  pofAmount       Float?
+  pofDocumentId   String?
+  pofVerifiedAt   DateTime?
+  pofVerifiedBy   String?
+  pofExpiresAt    DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   transactions BuyerTransaction[]
   offers       BuyerOffer[]
@@ -424,49 +424,49 @@ model Buyer {
 
 // Control plane
 model ControlPlane {
-  id        String   @id @default(cuid())
+  id                        String   @id @default(cuid())
   /// Owning tenant. The reserved value "GLOBAL" is a platform-wide master
   /// switch: a flag is only on if BOTH the tenant row and the GLOBAL row
   /// (when present) allow it, and the effective cap is the lower of the two.
   /// Before this column existed there was a single unscoped row, so one
   /// tenant flipping a switch changed behaviour for every tenant.
-  accountId String
-  enabled   Boolean  @default(true)
-  smsEnabled Boolean @default(true)
-  emailEnabled Boolean @default(true)
-  docusignEnabled Boolean @default(true)
-  externalDataEnabled Boolean @default(true)
-  aiDailyCostCap Float @default(2.0)
-  apiDailyCostCap  Float    @default(50)
-  aiEnabled      Boolean @default(true)
+  accountId                 String
+  enabled                   Boolean  @default(true)
+  smsEnabled                Boolean  @default(true)
+  emailEnabled              Boolean  @default(true)
+  docusignEnabled           Boolean  @default(true)
+  externalDataEnabled       Boolean  @default(true)
+  aiDailyCostCap            Float    @default(2.0)
+  apiDailyCostCap           Float    @default(50)
+  aiEnabled                 Boolean  @default(true)
   /// Agent autonomy tier (docs/agent-design.md s5): draft_only keeps every
   /// agent action approval-gated; standard lets agents apply the autonomous
   /// tier (scores, notes, hard-rule disqualifies) on their own.
-  agentAutonomy  String  @default("draft_only")
+  agentAutonomy             String   @default("draft_only")
   /// Model per tier, e.g. {"cheap":"gpt-4o-mini","mid":"gpt-4o","strong":"claude-opus-5-5"}; null = platform default.
-  agentModels    Json?
+  agentModels               Json?
   /// New leads moved to enriching automatically, up to autoEnrichDailyCap per UTC day.
-  autoEnrichEnabled  Boolean @default(true)
-  autoEnrichDailyCap Int     @default(20)
+  autoEnrichEnabled         Boolean  @default(true)
+  autoEnrichDailyCap        Int      @default(20)
   /// Wholesale fee in dollars: added to the seller price to get the buyers'
   /// price, subtracted in the Underwriter's MAO. A deal's own fee
   /// (deal_economics.assignmentFee) overrides it.
-  defaultAssignmentFee Int @default(10000)
+  defaultAssignmentFee      Int      @default(10000)
   /// Contract flipping (docs/contract-flipping.md). The least net profit a
   /// deal may be assigned for; offers below it are recommended for rejection.
-  minNetProfit         Int     @default(5000)
+  minNetProfit              Int      @default(5000)
   /// Our typical costs paid out of the fee, used when a deal records none.
-  dispositionCosts     Int     @default(0)
+  dispositionCosts          Int      @default(0)
   /// Below this underwriting confidence the ARV is shown to buyers as unconfirmed.
-  minUnderwritingConfidence Float @default(0.5)
+  minUnderwritingConfidence Float    @default(0.5)
   /// A buyer's proof of funds must be verified before an offer is accepted.
-  requireVerifiedPof   Boolean @default(true)
+  requireVerifiedPof        Boolean  @default(true)
   /// on_funds_received | on_closing_confirmed
-  revenueRecognition   String  @default("on_funds_received")
-  campaignFollowUpDays Int     @default(3)
-  campaignMaxFollowUps Int     @default(2)
-  updatedAt DateTime @updatedAt
-  updatedBy String?
+  revenueRecognition        String   @default("on_funds_received")
+  campaignFollowUpDays      Int      @default(3)
+  campaignMaxFollowUps      Int      @default(2)
+  updatedAt                 DateTime @updatedAt
+  updatedBy                 String?
 
   @@unique([accountId])
   @@map("control_plane")
@@ -474,16 +474,16 @@ model ControlPlane {
 
 // Integration secrets — keys are AES-256-GCM encrypted at rest
 model IntegrationSecret {
-  id            String   @id @default(cuid())
-  provider      String   // e.g. "twilio", "docusign", "attom", "openai"
-  keyName       String   // e.g. "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"
-  encryptedValue String  // AES-256-GCM ciphertext (base64)
-  iv            String   // initialization vector (base64)
-  tag           String   // auth tag (base64)
-  maskedHint    String   // last 4 chars for UI display, e.g. "••••a1b2"
-  setBy         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  provider       String // e.g. "twilio", "docusign", "attom", "openai"
+  keyName        String // e.g. "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"
+  encryptedValue String // AES-256-GCM ciphertext (base64)
+  iv             String // initialization vector (base64)
+  tag            String // auth tag (base64)
+  maskedHint     String // last 4 chars for UI display, e.g. "••••a1b2"
+  setBy          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([provider, keyName])
   @@map("integration_secrets")
@@ -495,16 +495,16 @@ model IntegrationSecret {
 // every tenant's check). Contacts are ciphertext + blind index only; the
 // migration adds CHECK ("phoneHash" IS NOT NULL OR "emailHash" IS NOT NULL).
 model DNCList {
-  id          String   @id @default(cuid())
-  accountId   String
-  phoneEnc    String?
-  phoneHash   String?
-  emailEnc    String?
-  emailHash   String?
-  source      String   // manual, stop_keyword, unsubscribe_link, external
-  reason      String?
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime? // null = permanent
+  id        String    @id @default(cuid())
+  accountId String
+  phoneEnc  String?
+  phoneHash String?
+  emailEnc  String?
+  emailHash String?
+  source    String // manual, stop_keyword, unsubscribe_link, external
+  reason    String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // null = permanent
 
   @@unique([accountId, phoneHash])
   @@unique([accountId, emailHash])
@@ -514,22 +514,22 @@ model DNCList {
 
 // Compliance: Consent records
 model Consent {
-  id          String   @id @default(cuid())
-  accountId   String
-  leadId      String?
+  id        String    @id @default(cuid())
+  accountId String
+  leadId    String?
   // Contact PII: ciphertext + blind index only (see DNCList).
-  phoneEnc    String?
-  phoneHash   String?
-  emailEnc    String?
-  emailHash   String?
-  channel     String   // sms, email, call
-  source      String   // manual, form, verbal, implied
-  evidence    Json?    // proof/documentation
-  grantedAt   DateTime @default(now())
-  revokedAt   DateTime?
-  expiresAt   DateTime?
+  phoneEnc  String?
+  phoneHash String?
+  emailEnc  String?
+  emailHash String?
+  channel   String // sms, email, call
+  source    String // manual, form, verbal, implied
+  evidence  Json? // proof/documentation
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+  expiresAt DateTime?
 
-  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([accountId])
   @@index([leadId])
@@ -540,14 +540,14 @@ model Consent {
 
 // Compliance: Quiet hours configuration
 model QuietHours {
-  id          String   @id @default(cuid())
-  accountId   String
-  timezone    String   @default("America/Los_Angeles")
-  startHour   Int      @default(20) // 8 PM
-  endHour     Int      @default(9)   // 9 AM
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  accountId String
+  timezone  String   @default("America/Los_Angeles")
+  startHour Int      @default(20) // 8 PM
+  endHour   Int      @default(9) // 9 AM
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([accountId])
   @@map("quiet_hours")
@@ -555,15 +555,15 @@ model QuietHours {
 
 // PII Encryption envelopes
 model PIIEnvelope {
-  id          String   @id @default(cuid())
-  accountId   String
-  leadId      String?
-  propertyId  String?
-  fieldName   String   // phone, email, ownerName, etc.
+  id             String   @id @default(cuid())
+  accountId      String
+  leadId         String?
+  propertyId     String?
+  fieldName      String // phone, email, ownerName, etc.
   encryptedValue String
-  keyVersion  Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  keyVersion     Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([accountId])
   @@index([leadId])
@@ -573,16 +573,16 @@ model PIIEnvelope {
 
 // Job queues (BullMQ)
 model JobQueue {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   queueName   String
   jobId       String
-  status      String   // pending, active, completed, failed, delayed
+  status      String // pending, active, completed, failed, delayed
   data        Json?
   result      Json?
   error       String?
-  attempts    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   completedAt DateTime?
 
   @@index([queueName])
@@ -593,18 +593,18 @@ model JobQueue {
 
 // Underwriting results
 model UnderwritingResult {
-  id              String   @id @default(cuid())
-  dealId          String   @unique
-  propertyId      String?
-  arv             Float?
-  repairEstimate  Float?
-  mao             Float?
-  confidence      Float?
-  rationale       String?
-  compsSummary    Json?
+  id                 String   @id @default(cuid())
+  dealId             String   @unique
+  propertyId         String?
+  arv                Float?
+  repairEstimate     Float?
+  mao                Float?
+  confidence         Float?
+  rationale          String?
+  compsSummary       Json?
   evaluationMetadata Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   deal     Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
   property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
@@ -615,14 +615,14 @@ model UnderwritingResult {
 
 // Marketing materials
 model MarketingMaterial {
-  id          String   @id @default(cuid())
-  dealId      String
-  type        String   // flyer, video_script, buyer_blast
-  content     String?  // text content
-  fileUrl     String?  // PDF, video URL
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  dealId    String
+  type      String // flyer, video_script, buyer_blast
+  content   String? // text content
+  fileUrl   String? // PDF, video URL
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
@@ -632,20 +632,20 @@ model MarketingMaterial {
 }
 
 model JobRun {
-  id              String          @id @default(cuid())
+  id              String           @id @default(cuid())
   tenantId        String
   kind            JobRunKind
   entityType      JobRunEntityType
   entityId        String
-  status          JobRunStatus    @default(QUEUED)
-  attempts        Int             @default(0)
+  status          JobRunStatus     @default(QUEUED)
+  attempts        Int              @default(0)
   error           String?
   resultJson      Json?
   resultHash      String?
   actorId         String?
   automationRunId String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([tenantId, kind, entityId])
   @@index([tenantId, status])
@@ -654,7 +654,7 @@ model JobRun {
 }
 
 model TimelineEvent {
-  id          String           @id @default(cuid())
+  id          String             @id @default(cuid())
   tenantId    String
   entityType  TimelineEntityType
   entityId    String
@@ -662,7 +662,7 @@ model TimelineEvent {
   payloadJson Json?
   actorId     String?
   actorType   TimelineActorType
-  createdAt   DateTime         @default(now())
+  createdAt   DateTime           @default(now())
 
   @@index([tenantId, entityType, entityId, createdAt])
   @@index([tenantId, eventType, createdAt])
@@ -689,42 +689,42 @@ enum AutomationTriggerType {
 }
 
 model AutomationRun {
-  id                String              @id @default(cuid())
-  tenantId          String
-  source            String              @default("agent")
-  agentName         String?
-  workflowName      String?
-  entityType        String?
-  entityId          String?
-  status            AutomationRunStatus @default(QUEUED)
-  startedAt         DateTime?
-  completedAt       DateTime?
+  id                 String                @id @default(cuid())
+  tenantId           String
+  source             String                @default("agent")
+  agentName          String?
+  workflowName       String?
+  entityType         String?
+  entityId           String?
+  status             AutomationRunStatus   @default(QUEUED)
+  startedAt          DateTime?
+  completedAt        DateTime?
   triggerType        AutomationTriggerType @default(API)
-  inputJson         Json?
-  outputJson        Json?
-  decisionJson      Json?
-  errorJson         Json?
-  approvalRequired  Boolean             @default(false)
-  approvedByUserId  String?
-  approvedAt        DateTime?
-  modelProvider     String?
-  modelName         String?
-  promptVersion     String?
-  estimatedValueUsd Float?
-  realizedValueUsd  Float?
-  aiCostUsd         Float?              @default(0)
-  messageCostUsd    Float?              @default(0)
-  toolCostUsd       Float?              @default(0)
-  otherCostUsd      Float?              @default(0)
+  inputJson          Json?
+  outputJson         Json?
+  decisionJson       Json?
+  errorJson          Json?
+  approvalRequired   Boolean               @default(false)
+  approvedByUserId   String?
+  approvedAt         DateTime?
+  modelProvider      String?
+  modelName          String?
+  promptVersion      String?
+  estimatedValueUsd  Float?
+  realizedValueUsd   Float?
+  aiCostUsd          Float?                @default(0)
+  messageCostUsd     Float?                @default(0)
+  toolCostUsd        Float?                @default(0)
+  otherCostUsd       Float?                @default(0)
   humanReviewMinutes Float?
-  parentRunId       String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  parentRunId        String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  parentRun  AutomationRun?  @relation("RunHierarchy", fields: [parentRunId], references: [id])
-  childRuns  AutomationRun[] @relation("RunHierarchy")
-  messages   Message[]       @relation("AutomationRunMessages")
-  replay     AgentRunReplay?
+  parentRun AutomationRun?  @relation("RunHierarchy", fields: [parentRunId], references: [id])
+  childRuns AutomationRun[] @relation("RunHierarchy")
+  messages  Message[]       @relation("AutomationRunMessages")
+  replay    AgentRunReplay?
 
   @@index([tenantId, status])
   @@index([tenantId, entityType, entityId])
@@ -753,34 +753,34 @@ model AgentRunReplay {
 }
 
 model DealEconomics {
-  id               String   @id @default(cuid())
-  dealId           String   @unique
-  tenantId         String
-  contractPrice    Float?
-  assignmentPrice  Float?
-  assignmentFee    Float?
-  purchasePrice    Float?
-  salePrice        Float?
-  closingCosts     Float?
-  marketingCost    Float?
-  skipTraceCost    Float?
-  smsCost          Float?
-  emailCost        Float?
-  aiCostAllocated  Float?
-  toolingCost      Float?
-  laborCost        Float?
-  otherCost        Float?
-  grossRevenue     Float?
-  netProfit        Float?
-  roiPercent       Float?
+  id              String    @id @default(cuid())
+  dealId          String    @unique
+  tenantId        String
+  contractPrice   Float?
+  assignmentPrice Float?
+  assignmentFee   Float?
+  purchasePrice   Float?
+  salePrice       Float?
+  closingCosts    Float?
+  marketingCost   Float?
+  skipTraceCost   Float?
+  smsCost         Float?
+  emailCost       Float?
+  aiCostAllocated Float?
+  toolingCost     Float?
+  laborCost       Float?
+  otherCost       Float?
+  grossRevenue    Float?
+  netProfit       Float?
+  roiPercent      Float?
   /// projected | realized | lost. grossRevenue/netProfit are projections
   /// until the configured recognition event; realizedFee is money received.
-  revenueStatus    String   @default("projected")
-  realizedFee      Float?
-  realizedAt       DateTime?
-  notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  revenueStatus   String    @default("projected")
+  realizedFee     Float?
+  realizedAt      DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
@@ -816,18 +816,18 @@ model AuditLog {
 // (rows tagged metadata.legacy) and dropped.
 
 model IntegrationProvider {
-  id                String   @id @default(cuid())
-  key               String   @unique // 'attom' | 'rentcast' | 'openai' | 'twilio' | ...
-  displayName       String
-  category          String   // 'property_data' | 'ai' | 'comms' | 'skip_trace' | 'geocoding' | 'esign'
-  enabled           Boolean  @default(true)
-  isFallbackFor     String?  // provider key this can substitute for
-  defaultCostUsd    Float    @default(0)
-  rateLimitPerMin   Int?
-  concurrencyLimit  Int?
-  metadata          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(cuid())
+  key              String   @unique // 'attom' | 'rentcast' | 'openai' | 'twilio' | ...
+  displayName      String
+  category         String // 'property_data' | 'ai' | 'comms' | 'skip_trace' | 'geocoding' | 'esign'
+  enabled          Boolean  @default(true)
+  isFallbackFor    String? // provider key this can substitute for
+  defaultCostUsd   Float    @default(0)
+  rateLimitPerMin  Int?
+  concurrencyLimit Int?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   pricingRules ProviderPricingRule[]
   costEvents   IntegrationCostEvent[]
@@ -837,14 +837,14 @@ model IntegrationProvider {
 }
 
 model ProviderPricingRule {
-  id          String   @id @default(cuid())
+  id          String              @id @default(cuid())
   providerId  String
   provider    IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  action      String   // matches CostIntent.action
+  action      String // matches CostIntent.action
   unitCostUsd Float
-  unit        String   // 'per_call' | 'per_1k_input_tokens' | 'per_1k_output_tokens' | 'per_record' | 'per_segment'
-  pricePer    Float    @default(1)
-  effectiveAt DateTime @default(now())
+  unit        String // 'per_call' | 'per_1k_input_tokens' | 'per_1k_output_tokens' | 'per_record' | 'per_segment'
+  pricePer    Float               @default(1)
+  effectiveAt DateTime            @default(now())
   expiresAt   DateTime?
   notes       String?
 
@@ -853,13 +853,13 @@ model ProviderPricingRule {
 }
 
 model ProviderRateLimit {
-  id          String   @id @default(cuid())
+  id          String              @id @default(cuid())
   providerId  String
   provider    IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  scope       String   // 'global' | 'per_account'
-  windowSec   Int      // 60 = per minute
+  scope       String // 'global' | 'per_account'
+  windowSec   Int // 60 = per minute
   maxRequests Int
-  enabled     Boolean  @default(true)
+  enabled     Boolean             @default(true)
 
   @@unique([providerId, scope, windowSec])
   @@map("provider_rate_limits")
@@ -867,10 +867,10 @@ model ProviderRateLimit {
 
 model IntegrationBudgetBucket {
   id              String   @id @default(cuid())
-  accountId       String   // 'GLOBAL' for cross-tenant caps
-  scope           String   // 'global' | 'provider' | 'workflow' | 'campaign' | 'lead'
-  scopeRef        String   // provider key, workflow name, campaignId, leadId, or 'ALL'
-  period          String   // 'day' | 'week' | 'month'
+  accountId       String // 'GLOBAL' for cross-tenant caps
+  scope           String // 'global' | 'provider' | 'workflow' | 'campaign' | 'lead'
+  scopeRef        String // provider key, workflow name, campaignId, leadId, or 'ALL'
+  period          String // 'day' | 'week' | 'month'
   hardCapUsd      Float
   softCapUsd      Float?
   currentSpendUsd Float    @default(0)
@@ -887,31 +887,31 @@ model IntegrationBudgetBucket {
 }
 
 model IntegrationCostEvent {
-  id               String   @id @default(cuid())
+  id               String              @id @default(cuid())
   accountId        String
   providerId       String
   provider         IntegrationProvider @relation(fields: [providerId], references: [id])
-  providerKey      String   // denormalized for fast group-by
+  providerKey      String // denormalized for fast group-by
   action           String
-  reservationId    String   @unique
+  reservationId    String              @unique
   estimatedCostUsd Float
   actualCostUsd    Float?
-  status           String   // 'reserved' | 'completed' | 'errored' | 'cancelled' | 'cache_hit'
-  decision         String   // CostDecision.kind
+  status           String // 'reserved' | 'completed' | 'errored' | 'cancelled' | 'cache_hit'
+  decision         String // CostDecision.kind
   durationMs       Int?
   responseCode     Int?
-  retryCount       Int      @default(0)
+  retryCount       Int                 @default(0)
   leadId           String?
   propertyId       String?
   dealId           String?
   campaignId       String?
   automationRunId  String?
-  actor            String   // 'user' | 'system' | 'worker'
+  actor            String // 'user' | 'system' | 'worker'
   userId           String?
   metadata         Json?
   bucketIds        String[] // budget buckets debited
   idempotencyKey   String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime            @default(now())
   completedAt      DateTime?
 
   @@index([accountId, createdAt])
@@ -927,8 +927,8 @@ model IntegrationUsageAggregate {
   accountId    String
   providerKey  String
   action       String
-  period       String   // 'day' | 'month'
-  periodKey    String   // '2026-05-02' | '2026-05'
+  period       String // 'day' | 'month'
+  periodKey    String // '2026-05-02' | '2026-05'
   callCount    Int      @default(0)
   totalCostUsd Float    @default(0)
   cacheHits    Int      @default(0)
@@ -943,15 +943,15 @@ model IntegrationUsageAggregate {
 }
 
 model IntegrationFeatureFlag {
-  id        String   @id @default(cuid())
-  accountId String   // 'GLOBAL' for org-wide defaults
-  flag      String   // e.g. 'provider.realie', 'provider.openai'
-  enabled   Boolean  @default(false)
+  id        String    @id @default(cuid())
+  accountId String // 'GLOBAL' for org-wide defaults
+  flag      String // e.g. 'provider.realie', 'provider.openai'
+  enabled   Boolean   @default(false)
   reason    String?
   enabledAt DateTime?
   expiresAt DateTime?
   updatedBy String?
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
 
   @@unique([accountId, flag])
   @@index([accountId, enabled])
@@ -961,10 +961,10 @@ model IntegrationFeatureFlag {
 model ManualBudgetOverride {
   id             String   @id @default(cuid())
   accountId      String
-  scope          String   // 'lead' | 'campaign' | 'workflow'
+  scope          String // 'lead' | 'campaign' | 'workflow'
   scopeRef       String
   reason         String
-  approvedBy     String   // userId
+  approvedBy     String // userId
   extraBudgetUsd Float
   expiresAt      DateTime
   consumed       Boolean  @default(false)
@@ -978,7 +978,7 @@ model CachedProviderResponse {
   id           String   @id @default(cuid())
   accountId    String
   providerKey  String
-  cacheKey     String   // sha256(provider + action + canonical(payload))
+  cacheKey     String // sha256(provider + action + canonical(payload))
   payload      Json
   responseCode Int?
   fetchedAt    DateTime @default(now())
@@ -992,13 +992,13 @@ model CachedProviderResponse {
 }
 
 model LeadEnrichmentJob {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   accountId      String
   leadId         String
-  stage          String   // 'queued' | 'normalizing' | 'cheap_filters' | 'attom' | 'rentcast' | 'scoring' | 'skip_trace' | 'completed' | 'rejected'
+  stage          String // 'queued' | 'normalizing' | 'cheap_filters' | 'attom' | 'rentcast' | 'scoring' | 'skip_trace' | 'completed' | 'rejected'
   rejectedReason String?
-  totalCostUsd   Float    @default(0)
-  startedAt      DateTime @default(now())
+  totalCostUsd   Float     @default(0)
+  startedAt      DateTime  @default(now())
   completedAt    DateTime?
   metadata       Json?
 
@@ -1006,7 +1006,6 @@ model LeadEnrichmentJob {
   @@index([leadId])
   @@map("lead_enrichment_jobs")
 }
-
 
 /// A target market the sourcing scheduler pulls leads for on a cadence
 /// (docs/sourcing-markets.md). One row per area per tenant; `sources` are
@@ -1042,7 +1041,7 @@ model SourcingMarket {
 model Document {
   id           String   @id @default(cuid())
   accountId    String
-  category     String   // agreement_template | contract | disclosure | compliance | closing | marketing | other
+  category     String // agreement_template | contract | disclosure | compliance | closing | marketing | other
   title        String
   description  String?
   storageKey   String
@@ -1052,7 +1051,7 @@ model Document {
   dealId       String?
   leadId       String?
   buyerId      String?
-  jurisdiction String?  // two-letter state the document is specific to, if any
+  jurisdiction String? // two-letter state the document is specific to, if any
   status       String   @default("active") // active | archived
   tags         String[]
   uploadedBy   String?
@@ -1122,40 +1121,198 @@ model PurchaseAgreement {
   @@map("purchase_agreements")
 }
 
-/// What the operator, with counsel, has confirmed about wholesaling in one
-/// state. Nothing is assumed: a deal in a state without a reviewed policy is
-/// held for review before it can be marketed or assigned.
-model JurisdictionPolicy {
-  id                     String    @id @default(cuid())
-  accountId              String
-  state                  String
-  /// draft | reviewed | retired. Only reviewed policies are relied on.
-  status                 String    @default("draft")
-  /// allowed | conditional | prohibited | unknown
-  assignmentAllowed      String    @default("unknown")
-  doubleCloseAllowed     String    @default("unknown")
-  /// yes | no | unknown
-  licenseRequired        String    @default("unknown")
-  licenseDocumentId      String?
-  /// May the contract be advertised to buyers we have no relationship with.
-  publicMarketingAllowed String    @default("unknown")
-  /// Checklist keys that must be on file for the deal before buyer marketing.
-  buyerDisclosureKeys    String[]
-  /// Checklist keys that must be on file before the seller contract is relied on.
-  sellerDisclosureKeys   String[]
-  conditions             String?
-  /// Statutes, counsel memo: what the review relied on.
-  references             String?
-  reviewedBy             String?
-  reviewedAt             DateTime?
-  reviewExpiresAt        DateTime?
-  notes                  String?
-  updatedBy              String?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+// =============================================================================
+// Markets (docs/markets.md)
+// =============================================================================
+// One market per jurisdiction per tenant. Research and counsel's answers
+// live in a draft; the gates rely only on the last version counsel
+// approved, which is never edited. A person sets how far a market may
+// operate, and Halo refuses any status the approved policy and the
+// requirements on file do not support.
+
+/// A jurisdiction Halo may operate in, for one tenant.
+model Market {
+  id                 String    @id @default(cuid())
+  accountId          String
+  /// Two-letter code: the 50 states and DC.
+  state              String
+  /// The draft's proposed classification: unclassified | A | B | C | D | E.
+  classification     String    @default("unclassified")
+  /// MarketPolicyContent (packages/shared markets/policy.ts): research and answers, unreviewed.
+  draft              Json
+  /// draft | in_review
+  draftStatus        String    @default("draft")
+  draftUpdatedAt     DateTime?
+  draftUpdatedBy     String?
+  submittedAt        DateTime?
+  submittedBy        String?
+  /// When bundled research was last imported into the draft, and its date.
+  researchImportedAt DateTime?
+  researchDate       String?
+  researchConfidence String?
+  /// The policy version the gates rely on.
+  approvedVersionId  String?
+  /// What a person asked for (ACTIVATION_STATUSES). The effective status is
+  /// the lower of this and what the approved policy and requirements allow.
+  requestedStatus    String    @default("RESEARCH_ONLY")
+  statusNote         String?
+  statusSetBy        String?
+  statusSetAt        DateTime?
+  /// The person responsible for operations in the market.
+  operatorUserId     String?
+  operatorName       String?
+  selfTestAt         DateTime?
+  selfTestPassed     Boolean?
+  selfTestResult     Json?
+  /// Set whenever the policy, a template or an authorization changes; a
+  /// self-test older than this is stale.
+  configChangedAt    DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@unique([accountId, state])
-  @@map("jurisdiction_policies")
+  @@map("markets")
+}
+
+/// An approved policy: a snapshot of the draft as counsel approved it.
+/// Never updated except to record when a later version superseded it.
+model MarketPolicyVersion {
+  id              String    @id @default(cuid())
+  accountId       String
+  state           String
+  version         Int
+  classification  String
+  content         Json
+  approvedBy      String
+  approvedAt      DateTime  @default(now())
+  counselName     String
+  counselFirm     String?
+  /// Counsel's memo or approval letter, in the documents library.
+  memoDocumentId  String
+  /// The statement the approver confirmed.
+  attestation     String
+  reviewExpiresAt DateTime?
+  supersededAt    DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([accountId, state, version])
+  @@index([accountId, state])
+  @@map("market_policy_versions")
+}
+
+/// A licence, registration or partner agreement a market requires.
+model MarketAuthorization {
+  id           String    @id @default(cuid())
+  accountId    String
+  state        String
+  /// AUTHORIZATION_KINDS
+  kind         String
+  holderName   String
+  /// company | operator | broker_partner
+  holderType   String    @default("company")
+  holderUserId String?
+  /// Licence or registration number.
+  identifier   String?
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  documentId   String?
+  /// pending | active | expired | revoked
+  status       String    @default("pending")
+  verifiedAt   DateTime?
+  verifiedBy   String?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([accountId, state])
+  @@map("market_authorizations")
+}
+
+/// A reusable document: purchase and assignment agreements, disclosures,
+/// notices. The text is counsel's; Halo fills merge fields.
+model DocumentTemplate {
+  id            String    @id @default(cuid())
+  accountId     String
+  /// TEMPLATE_KINDS
+  kind          String
+  name          String
+  description   String?
+  /// For a disclosure template: the policy disclosure key it produces.
+  disclosureKey String?
+  createdBy     String?
+  retiredAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  versions DocumentTemplateVersion[]
+
+  @@index([accountId, kind])
+  @@map("document_templates")
+}
+
+/// One uploaded revision of a template. Its file and fields never change;
+/// a new upload is a new version. Only an approved version generates
+/// documents, and only in the jurisdictions it was approved for.
+model DocumentTemplateVersion {
+  id                 String           @id @default(cuid())
+  accountId          String
+  templateId         String
+  template           DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version            Int
+  /// The source file in the documents library.
+  documentId         String
+  /// docx | txt
+  format             String
+  sha256             String
+  /// Merge fields the file uses, and any the registry does not know.
+  fields             String[]
+  unknownFields      String[]
+  /// Fields every template of this kind must contain that this one lacks.
+  missingRequired    String[]
+  /// Jurisdiction codes it applies to; "ALL" for every jurisdiction.
+  states             String[]
+  /// draft | validated | approved | retired
+  status             String           @default("draft")
+  counselName        String?
+  counselFirm        String?
+  approvalDocumentId String?
+  attestation        String?
+  approvedBy         String?
+  approvedAt         DateTime?
+  retiredAt          DateTime?
+  notes              String?
+  createdBy          String?
+  createdAt          DateTime         @default(now())
+
+  @@unique([templateId, version])
+  @@index([accountId, status])
+  @@map("document_template_versions")
+}
+
+/// A document Halo filled from an approved template: what went in, what
+/// came out, and where it went. Lets a signed copy be traced to its source.
+model DocumentGeneration {
+  id                String   @id @default(cuid())
+  accountId         String
+  dealId            String?
+  templateVersionId String
+  kind              String
+  state             String?
+  /// The merge values used, as filled.
+  values            Json
+  documentId        String
+  pdfDocumentId     String?
+  sha256            String
+  /// draft | sent | executed | void
+  status            String   @default("draft")
+  envelopeId        String?
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([accountId, dealId])
+  @@map("document_generations")
 }
 
 /// A purchase a buyer made, with where we learned of it. Public-record and
@@ -1494,28 +1651,28 @@ model ClosingIssue {
 /// advertised price is not a purchasable interest: a lien certificate is not
 /// ownership, a bid is nothing until confirmed, and an owner can redeem.
 model TaxSaleInterest {
-  id               String    @id @default(cuid())
-  accountId        String
-  dealId           String    @unique
+  id                 String    @id @default(cuid())
+  accountId          String
+  dealId             String    @unique
   /// tax_deed | tax_lien_certificate | auction_bid | unknown
-  interestType     String    @default("unknown")
-  county           String?
-  auctionDate      DateTime?
-  advertisedPrice  Float?
-  winningBid       Float?
-  redemptionEndsAt DateTime?
-  redeemed         Boolean   @default(false)
+  interestType       String    @default("unknown")
+  county             String?
+  auctionDate        DateTime?
+  advertisedPrice    Float?
+  winningBid         Float?
+  redemptionEndsAt   DateTime?
+  redeemed           Boolean   @default(false)
   /// unverified | clouded | quiet_title_needed | insurable
-  titleStatus      String    @default("unverified")
+  titleStatus        String    @default("unverified")
   /// yes | no | unknown
-  transferable     String    @default("unknown")
+  transferable       String    @default("unknown")
   /// Deed, certificate or county record in the documents library.
   evidenceDocumentId String?
-  verifiedAt       DateTime?
-  verifiedBy       String?
-  notes            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  verifiedAt         DateTime?
+  verifiedBy         String?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 

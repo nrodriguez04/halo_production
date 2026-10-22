@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { MessageDispatchService } from '../message-dispatch.service';
+import { MarketsService } from '../../markets/markets.service';
 import { PrismaService } from '../../prisma.service';
 import { ComplianceService } from '../../compliance/compliance.service';
 import { ComplianceBlockedException } from '../../compliance/compliance-blocked.exception';
@@ -23,8 +24,10 @@ describe('MessageDispatchService', () => {
   let prisma: {
     message: { findFirst: jest.Mock };
     deal: { findFirst: jest.Mock };
+    lead: { findFirst: jest.Mock };
   };
   let deals: { updateStage: jest.Mock };
+  let markets: { assertAllowed: jest.Mock; assertChannel: jest.Mock };
   let eligibility: any;
   let disclosure: { assertEquitableInterest: jest.Mock };
   let compliance: { getFacts: jest.Mock };
@@ -50,6 +53,13 @@ describe('MessageDispatchService', () => {
     prisma = {
       message: { findFirst: jest.fn() },
       deal: { findFirst: jest.fn().mockResolvedValue({ stage: 'contacted' }) },
+      lead: {
+        findFirst: jest.fn().mockResolvedValue({ canonicalState: 'TX' }),
+      },
+    };
+    markets = {
+      assertAllowed: jest.fn().mockResolvedValue({}),
+      assertChannel: jest.fn().mockResolvedValue({}),
     };
     deals = { updateStage: jest.fn().mockResolvedValue({}) };
     eligibility = {
@@ -92,6 +102,7 @@ describe('MessageDispatchService', () => {
         { provide: DealsService, useValue: deals },
         { provide: DisclosureGateService, useValue: disclosure },
         { provide: DispositionEligibilityService, useValue: eligibility },
+        { provide: MarketsService, useValue: markets },
       ],
     }).compile();
     service = module.get(MessageDispatchService);
@@ -490,6 +501,70 @@ describe('MessageDispatchService', () => {
       prisma.message.findFirst.mockResolvedValue(approved());
       await service.sendApproved('tenant-1', 'msg-1');
       expect(disclosure.assertEquitableInterest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('market gate', () => {
+    it("contacts a seller only where the seller's market allows outreach", async () => {
+      prisma.message.findFirst.mockResolvedValue(approved());
+      markets.assertAllowed.mockRejectedValue(
+        new ComplianceBlockedException(
+          'MARKET_NOT_AUTHORIZED',
+          'Contacting this seller is not allowed in TX (Research only).',
+        ),
+      );
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).rejects.toBeInstanceOf(ComplianceBlockedException);
+      expect(markets.assertAllowed).toHaveBeenCalledWith(
+        'tenant-1',
+        'TX',
+        'seller_outreach',
+        'Contacting this seller',
+      );
+      expect(twilio.sendSms).not.toHaveBeenCalled();
+      expect(email.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('markets a contract only on a channel the approved policy permits', async () => {
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          leadId: null,
+          metadata: { recipientType: 'buyer', type: 'disposition_outreach' },
+        }),
+      );
+      prisma.deal.findFirst.mockResolvedValue({
+        stage: 'marketing',
+        property: { state: 'GA' },
+      });
+      markets.assertChannel.mockRejectedValue(
+        new ComplianceBlockedException(
+          'MARKET_NOT_AUTHORIZED',
+          'The approved policy does not permit investor sms here.',
+        ),
+      );
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).rejects.toBeInstanceOf(ComplianceBlockedException);
+      expect(markets.assertChannel).toHaveBeenCalledWith(
+        'tenant-1',
+        'GA',
+        'investor_sms',
+        'Marketing this contract to buyers',
+      );
+      expect(twilio.sendSms).not.toHaveBeenCalled();
+    });
+
+    it('lets a plain reply to a buyer through without a market check', async () => {
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          leadId: null,
+          metadata: { recipientType: 'buyer', type: 'buyer_reply' },
+        }),
+      );
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(markets.assertAllowed).not.toHaveBeenCalled();
+      expect(markets.assertChannel).not.toHaveBeenCalled();
     });
   });
 });

@@ -5,7 +5,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { channelAllowed } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
+import { MarketsService } from '../markets/markets.service';
 import { DispositionEligibilityService } from './eligibility.service';
 
 const DEFAULT_TTL_DAYS = 21;
@@ -40,6 +42,7 @@ export class ShareLinksService {
   constructor(
     private prisma: PrismaService,
     private eligibility: DispositionEligibilityService,
+    private markets: MarketsService,
   ) {}
 
   async create(
@@ -142,6 +145,16 @@ export class ShareLinksService {
       now,
     );
     if (eligibility.status !== 'eligible') throw gone();
+    // Deal pages are a marketing channel of their own.
+    const market = await this.markets.evaluate(
+      link.accountId,
+      eligibility.state,
+    );
+    if (
+      !market ||
+      !channelAllowed(market.evaluation, 'buyer_deal_page').allowed
+    )
+      throw gone();
     // Buyers always see the current approved package, not the one the link
     // was made with: the price may have changed since.
     const pkg = await this.prisma.dealPackage.findFirst({
