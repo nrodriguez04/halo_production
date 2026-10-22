@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Gauge, ListChecks } from 'lucide-react';
+import { ArrowRight, Gauge, ListChecks, Target } from 'lucide-react';
 import { useApiQuery } from '@/lib/api-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,15 @@ interface AttentionItem {
   dealId: string;
   property: string;
   stage: string;
+}
+
+interface Opportunity {
+  id: string;
+  label: string;
+  stage: string;
+  score: number;
+  components: { acquisition: number; margin: number; demand: number; velocity: number; risk: number };
+  reasons: string[];
 }
 
 interface Portfolio {
@@ -78,6 +87,7 @@ const pct = (n: number | null) => (n == null ? '—' : `${Math.round(n * 100)}%`
 export default function CommandCenterPage() {
   const attention = useApiQuery<AttentionItem[]>('/command-center/attention', { refetchInterval: 60_000 });
   const portfolio = useApiQuery<Portfolio>('/command-center/portfolio');
+  const opportunities = useApiQuery<Opportunity[]>('/command-center/opportunities', { params: { limit: 15 } });
 
   return (
     <div className="space-y-6 p-6">
@@ -121,6 +131,55 @@ export default function CommandCenterPage() {
                 </li>
               ))}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Target size={16} className="text-primary" aria-hidden />
+            <CardTitle>Opportunities to work</CardTitle>
+          </div>
+          <CardDescription>
+            Deals before contract, best first: seller motivation, the computed margin, buyers who actually fit, how recent
+            the activity is, and risk.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {opportunities.isPending ? (
+            <LoadingState />
+          ) : opportunities.isError ? (
+            <ErrorState title="Could not rank" description={errorText(opportunities.error)} onRetry={() => opportunities.refetch()} />
+          ) : opportunities.data.length === 0 ? (
+            <EmptyState icon={Target} title="No early-stage deals" description="New, contacted and negotiating deals are ranked here." />
+          ) : (
+            <ol className="space-y-1.5">
+              {opportunities.data.map((o, i) => (
+                <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-body text-foreground">
+                      <span className="mr-2 text-caption text-muted-foreground">{i + 1}.</span>
+                      <Link href={`/deals/${o.id}`} className="font-medium hover:underline">
+                        {o.label}
+                      </Link>
+                      <Badge variant="outline" className="ml-2">
+                        {o.stage}
+                      </Badge>
+                    </p>
+                    <p className="text-caption text-muted-foreground">{o.reasons.join(' · ')}</p>
+                  </div>
+                  <span
+                    className="font-mono text-h3 font-bold text-foreground"
+                    title={Object.entries(o.components)
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join(' · ')}
+                  >
+                    {o.score}
+                  </span>
+                </li>
+              ))}
+            </ol>
           )}
         </CardContent>
       </Card>

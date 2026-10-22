@@ -7,8 +7,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  assignmentFeeFor,
   canTransitionOffer,
   recommendAssignmentPricing,
+  underwriteDeal,
   type DealStructure,
   type OfferEvaluation,
   type OfferStatus,
@@ -102,6 +104,52 @@ export class OffersService {
       })),
       pricing,
     };
+  }
+
+  /**
+   * The deterministic underwriting of the deal as it stands: the ARV and
+   * repairs on record (a person's or the Underwriter's), the tenant's fee,
+   * costs and thresholds, and the contract price once there is one.
+   */
+  async underwriting(accountId: string, dealId: string) {
+    const [deal, agreement, cp] = await Promise.all([
+      this.prisma.deal.findFirst({
+        where: { id: dealId, accountId },
+        include: {
+          economics: true,
+          underwritingResult: { select: { confidence: true } },
+          property: { select: { salePrice: true } },
+        },
+      }),
+      this.eligibility.currentAgreement(accountId, dealId),
+      this.controlPlane.getStatus(accountId),
+    ]);
+    if (!deal) throw new NotFoundException(`Deal ${dealId} not found`);
+    const e = deal.economics;
+    const knownCosts =
+      (e?.closingCosts ?? 0) +
+      (e?.marketingCost ?? 0) +
+      (e?.otherCost ?? 0) +
+      (e?.skipTraceCost ?? 0);
+    return underwriteDeal({
+      arv: deal.arv,
+      repairEstimate: deal.repairEstimate,
+      assignmentFee: assignmentFeeFor(
+        e?.assignmentFee,
+        cp.defaultAssignmentFee,
+      ),
+      transactionCosts: knownCosts > 0 ? knownCosts : cp.dispositionCosts,
+      minNetProfit: cp.minNetProfit,
+      confidence: deal.underwritingResult?.confidence ?? null,
+      minConfidence: cp.minUnderwritingConfidence,
+      contractPrice:
+        agreement &&
+        agreement.status !== 'terminated' &&
+        agreement.status !== 'expired'
+          ? (agreement.purchasePrice ?? e?.contractPrice ?? null)
+          : (e?.contractPrice ?? null),
+      sellerAsk: deal.property?.salePrice ?? null,
+    });
   }
 
   /** The pricing recommendation for the deal, with the inputs it used. */

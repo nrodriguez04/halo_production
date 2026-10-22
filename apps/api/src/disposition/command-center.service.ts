@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { AutomationRunStatus } from '@prisma/client';
-import type { DispositionEligibility } from '@halo/shared';
+import {
+  buyerAskingPrice,
+  rankBuyersForDeal,
+  rankOpportunities,
+  type DispositionEligibility,
+  type OpportunityInput,
+} from '@halo/shared';
+import { normalizeState } from '../compliance/disclosure-gate.service';
+import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { PrismaService } from '../prisma.service';
 import { DealsService } from '../deals/deals.service';
 import { BuyerIntelligenceService } from '../buyers/buyer-intelligence.service';
@@ -65,7 +73,150 @@ export class CommandCenterService {
     private packages: DealPackagesService,
     private assignments: AssignmentsService,
     private links: ShareLinksService,
+    private controlPlane: ControlPlaneService,
   ) {}
+
+  /**
+   * Early-stage deals ranked by what to work first (packages/shared
+   * disposition/opportunity-ranking.ts): acquisition likelihood, the
+   * deterministic margin, real buyer demand, velocity and risk. Buyers are
+   * loaded once and ranked per deal, so the list stays cheap.
+   */
+  async opportunities(accountId: string, limit = 25, now = new Date()) {
+    const [deals, cp, buyers] = await Promise.all([
+      this.prisma.deal.findMany({
+        where: {
+          accountId,
+          stage: { in: ['new', 'contacted', 'negotiating'] },
+        },
+        include: {
+          property: {
+            select: { address: true, city: true, state: true, zip: true },
+          },
+          lead: {
+            select: {
+              id: true,
+              score: true,
+              canonicalPhoneHash: true,
+              canonicalEmailHash: true,
+              canonicalState: true,
+            },
+          },
+          economics: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 200,
+      }),
+      this.controlPlane.getStatus(accountId),
+      this.buyers.rankingBuyers(accountId),
+    ]);
+    const dealIds = deals.map((d) => d.id);
+    const leadIds = deals.map((d) => d.leadId).filter((x): x is string => !!x);
+    const [inbound, lastMessages, titleIssues] = await Promise.all([
+      this.prisma.message.findMany({
+        where: {
+          accountId,
+          direction: 'inbound',
+          OR: [{ dealId: { in: dealIds } }, { leadId: { in: leadIds } }],
+        },
+        select: { dealId: true, leadId: true },
+      }),
+      this.prisma.message.groupBy({
+        by: ['dealId'],
+        where: { accountId, dealId: { in: dealIds } },
+        _max: { createdAt: true },
+      }),
+      this.prisma.closingIssue.groupBy({
+        by: ['dealId'],
+        where: {
+          accountId,
+          dealId: { in: dealIds },
+          kind: 'title',
+          status: 'open',
+        },
+        _count: { _all: true },
+      }),
+    ]);
+    const lastByDeal = new Map(
+      lastMessages.map((m) => [m.dealId, m._max.createdAt]),
+    );
+    const titleByDeal = new Map(
+      titleIssues.map((t) => [t.dealId, t._count._all]),
+    );
+    const items: OpportunityInput[] = [];
+    for (const d of deals) {
+      const u = await this.offers
+        .underwriting(accountId, d.id)
+        .catch(() => null);
+      const price = buyerAskingPrice(
+        {
+          assignmentPrice: d.economics?.assignmentPrice,
+          contractPrice: d.economics?.contractPrice,
+          assignmentFee: d.economics?.assignmentFee,
+          offerAmount: d.offerAmount,
+          mao: d.mao,
+          arv: d.arv,
+          repairEstimate: d.repairEstimate,
+        },
+        cp.defaultAssignmentFee,
+      );
+      const matches = rankBuyersForDeal(
+        {
+          city: d.property?.city ?? null,
+          state: normalizeState(
+            d.property?.state ?? d.lead?.canonicalState ?? null,
+          ),
+          zip: d.property?.zip ?? null,
+          propertyType: null,
+          buyerPrice: price?.price ?? null,
+          arv: d.arv,
+          repairEstimate: d.repairEstimate,
+        },
+        buyers,
+        now,
+      ).filter((m) => m.contactable);
+      const last = [lastByDeal.get(d.id), d.updatedAt]
+        .filter((x): x is Date => !!x)
+        .reduce((a, b) => (a > b ? a : b));
+      items.push({
+        id: d.id,
+        label: d.property ? `${d.property.address}, ${d.property.city}` : d.id,
+        stage: d.stage,
+        leadScore: d.lead?.score ?? null,
+        sellerEngaged: inbound.some(
+          (m) => m.dealId === d.id || (!!d.leadId && m.leadId === d.leadId),
+        ),
+        underwriting: u
+          ? {
+              recommendation: u.recommendation,
+              expectedNet: u.expectedNet,
+              flags: u.flags,
+            }
+          : null,
+        demand: {
+          contactable: matches.length,
+          strong: matches.filter(
+            (m) =>
+              m.score >= 60 &&
+              !m.mismatches.some((x) =>
+                x.startsWith('outside stated locations'),
+              ),
+          ).length,
+        },
+        daysSinceActivity: Math.floor(
+          (now.getTime() - last.getTime()) / 86_400_000,
+        ),
+        risk: {
+          titleIssues: titleByDeal.get(d.id) ?? 0,
+          noSellerContact:
+            !!d.lead &&
+            !d.lead.canonicalPhoneHash &&
+            !d.lead.canonicalEmailHash,
+        },
+      });
+    }
+    return rankOpportunities(items, cp.minNetProfit).slice(0, limit);
+  }
 
   async workspace(
     accountId: string,
@@ -85,6 +236,7 @@ export class CommandCenterService {
       links,
       runs,
       drafts,
+      underwriting,
     ] = await Promise.all([
       this.eligibility.evaluate(accountId, dealId),
       this.prisma.purchaseAgreement.findMany({
@@ -123,6 +275,7 @@ export class CommandCenterService {
         select: { id: true, channel: true, createdAt: true, metadata: true },
         take: 50,
       }),
+      this.offers.underwriting(accountId, dealId).catch(() => null),
     ]);
     const agreement = agreements[0] ?? null;
     const activeAssignment =
@@ -163,6 +316,7 @@ export class CommandCenterService {
       offers: offers.offers,
       pricing,
       matches: matches?.matches ?? [],
+      underwriting,
       buyersConsidered: matches?.considered ?? 0,
       packages,
       assignments,

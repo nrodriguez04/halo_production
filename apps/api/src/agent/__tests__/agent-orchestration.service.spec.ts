@@ -728,7 +728,15 @@ describe('AgentOrchestrationService', () => {
           automationRunId: 'run-1',
           model: 'gpt-4o',
           recommendation: 'offer',
-          offerRange: { low: 110000, high: 130000 },
+          // Deterministic: ARV 250k x 0.70 - 35k repairs - 10k fee = 130k,
+          // opening at 85% of it. The model's own figures are kept beside.
+          offerRange: { low: 110500, high: 130000 },
+          modelMao: 130000,
+          modelOfferRange: { low: 110000, high: 130000 },
+          underwriting: expect.objectContaining({
+            recommendation: 'offer',
+            investorMax: 140000,
+          }),
           stale: false,
         },
       });
@@ -748,6 +756,28 @@ describe('AgentOrchestrationService', () => {
         },
         aiCostUsd: 0.05,
       });
+    });
+
+    it('writes the deterministic MAO, not the one the model computed', async () => {
+      const wrong: AgentDecision = {
+        ...numbers,
+        actions: [
+          { ...(numbers.actions[0] as any), mao: 155000 },
+          numbers.actions[1],
+        ],
+      };
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision: wrong,
+      });
+      expect(prisma.deal.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { arv: 250000, repairEstimate: 35000, mao: 130000 },
+        }),
+      );
+      const upsert = prisma.underwritingResult.upsert.mock.calls[0][0];
+      expect(upsert.create.mao).toBe(130000);
+      expect(upsert.create.evaluationMetadata.modelMao).toBe(155000);
     });
 
     it("keeps a person's edits when the deal changed during the run and flags the result stale", async () => {

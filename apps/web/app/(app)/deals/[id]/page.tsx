@@ -9,12 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/page-header';
 import { LoadingState, EmptyState, ErrorState } from '@/components/states';
 import { cn } from '@/lib/utils';
-import { FileText, Brain, Clock, MapPin, Calculator, Inbox } from 'lucide-react';
+import { FileText, Clock, MapPin, Inbox } from 'lucide-react';
 import { ContractsPanel, type ContractRow } from '@/components/deals/contracts-panel';
 import { BuyerPricePanel, type DealPricing } from '@/components/deals/buyer-price-panel';
 import { EconomicsCard, EligibilityCard, NextActionsCard } from '@/components/disposition/overview-cards';
@@ -23,6 +22,7 @@ import { BuyersPanel } from '@/components/disposition/buyers-panel';
 import { CampaignPanel } from '@/components/disposition/campaign-panel';
 import { OffersPanel } from '@/components/disposition/offers-panel';
 import { ClosingPanel } from '@/components/disposition/closing-panel';
+import { UnderwritingCard } from '@/components/disposition/underwriting-card';
 import { ELIGIBILITY_LABEL, ELIGIBILITY_VARIANT, day, errorText, type Workspace } from '@/lib/disposition';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
@@ -203,7 +203,7 @@ export default function DealDetailPage() {
                 {[
                   { label: 'ARV', value: deal.arv },
                   { label: 'Repairs', value: deal.repairEstimate },
-                  { label: 'MAO', value: deal.mao },
+                  { label: 'MAO (computed)', value: ws.underwriting?.mao ?? deal.mao },
                   { label: 'Offer to seller', value: deal.offerAmount, highlight: true },
                 ].map((f) => (
                   <div key={f.label} className="space-y-1">
@@ -223,53 +223,12 @@ export default function DealDetailPage() {
             </CardContent>
           </Card>
           <EligibilityCard eligibility={ws.eligibility} compact />
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Brain size={16} className="text-primary" aria-hidden />
-                  <CardTitle>Underwriting Results</CardTitle>
-                </div>
-                {!uwResult && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button size="sm" variant="outline" onClick={() => analyze.mutate(undefined)} loading={analyze.isPending}>
-                        <Calculator size={14} className="mr-2" />
-                        Run Underwriting
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Queue an AI underwriting pass for this deal</TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {uwResult ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      ['AI ARV', uwResult.arv ? `$${uwResult.arv.toLocaleString()}` : '—'],
-                      ['AI MAO', uwResult.mao ? `$${uwResult.mao.toLocaleString()}` : '—'],
-                      ['Confidence', uwResult.confidence ? `${(uwResult.confidence * 100).toFixed(0)}%` : '—'],
-                    ].map(([label, value]) => (
-                      <div key={label}>
-                        <p className="text-caption uppercase tracking-wider text-muted-foreground">{label}</p>
-                        <p className="font-mono text-body font-semibold text-foreground">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {uwResult.summary && (
-                    <p className="border-t border-border pt-3 text-body text-muted-foreground">{uwResult.summary}</p>
-                  )}
-                </div>
-              ) : (
-                <div className="py-3 text-body text-muted-foreground">
-                  No underwriting run yet. Click <span className="font-medium text-foreground">Run Underwriting</span> above to
-                  queue an AI pass.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <UnderwritingCard
+            underwriting={ws.underwriting}
+            ai={uwResult}
+            onRun={() => analyze.mutate(undefined)}
+            running={analyze.isPending}
+          />
         </TabsContent>
 
         <TabsContent value="contract" className="space-y-4">
