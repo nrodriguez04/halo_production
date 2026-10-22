@@ -4,7 +4,7 @@ import {
   type EligibilityAgreement,
   type EligibilityTaxSale,
   type EligibilityInput,
-  type EligibilityPolicy,
+  type EligibilityMarket,
 } from './eligibility';
 
 const NOW = new Date('2026-10-21T12:00:00Z');
@@ -26,15 +26,16 @@ function agreement(over: Partial<EligibilityAgreement> = {}): EligibilityAgreeme
   };
 }
 
-function policy(over: Partial<EligibilityPolicy> = {}): EligibilityPolicy {
+function market(over: Partial<EligibilityMarket> = {}): EligibilityMarket {
   return {
-    status: 'reviewed',
-    assignmentAllowed: 'allowed',
-    licenseRequired: 'no',
-    licenseOnFile: false,
-    buyerDisclosureKeys: [],
-    reviewExpiresAt: null,
+    status: 'APPROVED_FOR_DISPOSITION',
+    version: 1,
+    buyerMarketing: { allowed: true, reason: 'Marketing contracts to buyers is allowed.' },
+    structure: 'assignment',
+    structureAllowed: { allowed: true, reason: 'Assigning contracts is allowed.' },
     conditions: null,
+    missingAuthorizations: [],
+    nextStep: null,
     ...over,
   };
 }
@@ -44,7 +45,7 @@ function input(over: Partial<EligibilityInput> = {}): EligibilityInput {
     now: NOW,
     state: 'GA',
     agreement: agreement(),
-    policy: policy(),
+    market: market(),
     disclosures: [],
     blockingIssues: [],
     ...over,
@@ -55,7 +56,7 @@ const statusOf = (i: EligibilityInput, key: string) =>
   evaluateDispositionEligibility(i).checks.find((c) => c.key === key)?.status;
 
 describe('evaluateDispositionEligibility', () => {
-  it('is eligible when the executed, verified, assignable contract and a reviewed policy are on file', () => {
+  it('is eligible when the executed, verified, assignable contract is in a market approved for disposition', () => {
     const e = evaluateDispositionEligibility(input());
     expect(e.status).toBe('eligible');
     expect(e.checks.every((c) => c.status === 'pass')).toBe(true);
@@ -139,35 +140,68 @@ describe('evaluateDispositionEligibility', () => {
     ).toBe('pass');
   });
 
-  describe('jurisdiction', () => {
-    it('needs review when no policy exists for the state', () => {
-      const e = evaluateDispositionEligibility(input({ policy: null }));
+  describe('market', () => {
+    it('needs review when there is no market record for the state', () => {
+      const e = evaluateDispositionEligibility(input({ market: null }));
       expect(e.status).toBe('review_required');
       expect(e.checks.find((c) => c.key === 'jurisdiction_policy')?.detail).toContain('does not assume');
     });
 
-    it('needs review for a draft policy, an unknown answer or a lapsed review', () => {
-      expect(evaluateDispositionEligibility(input({ policy: policy({ status: 'draft' }) })).status).toBe('review_required');
-      expect(evaluateDispositionEligibility(input({ policy: policy({ assignmentAllowed: 'unknown' }) })).status).toBe(
-        'review_required',
+    it.each(['RESEARCH_ONLY', 'PENDING_LEGAL_REVIEW', 'PENDING_REQUIREMENTS', 'APPROVED_FOR_ACQUISITION'] as const)(
+      'needs review in a market that is %s',
+      (status) => {
+        const e = evaluateDispositionEligibility(
+          input({
+            market: market({
+              status,
+              buyerMarketing: { allowed: false, reason: 'Marketing contracts to buyers is not allowed.' },
+              nextStep: 'Counsel reviews and approves the policy.',
+            }),
+          }),
+        );
+        expect(e.status).toBe('review_required');
+        expect(e.checks.find((c) => c.key === 'jurisdiction_policy')?.fix).toBe('Counsel reviews and approves the policy.');
+      },
+    );
+
+    it.each(['RESTRICTED', 'BLOCKED'] as const)('blocks in a market a person set to %s', (status) => {
+      const e = evaluateDispositionEligibility(
+        input({ market: market({ status, buyerMarketing: { allowed: false, reason: 'not allowed' } }) }),
       );
-      expect(evaluateDispositionEligibility(input({ policy: policy({ reviewExpiresAt: days(-1) }) })).status).toBe(
-        'review_required',
-      );
+      expect(e.status).toBe('blocked');
     });
 
-    it('blocks where the reviewed policy prohibits assignment', () => {
-      expect(evaluateDispositionEligibility(input({ policy: policy({ assignmentAllowed: 'prohibited' }) })).status).toBe('blocked');
+    it('blocks a structure the approved policy does not make available', () => {
+      const e = evaluateDispositionEligibility(
+        input({
+          market: market({ structureAllowed: { allowed: false, reason: 'The approved policy does not make assignment available here.' } }),
+        }),
+      );
+      expect(e.status).toBe('blocked');
+      expect(eligibilitySummary(e)).toContain('does not make assignment available');
+    });
+
+    it('states the conditions an assignment is allowed on', () => {
+      const e = evaluateDispositionEligibility(input({ market: market({ conditions: 'SYNTHETIC: notice to the seller' }) }));
+      expect(e.checks.find((c) => c.key === 'jurisdiction_policy')?.detail).toContain('SYNTHETIC: notice to the seller');
     });
 
     it('needs review when the state is unknown', () => {
       expect(evaluateDispositionEligibility(input({ state: null })).status).toBe('review_required');
     });
 
-    it('blocks a required licence that is not on file', () => {
-      expect(statusOf(input({ policy: policy({ licenseRequired: 'yes' }) }), 'license')).toBe('fail');
-      expect(statusOf(input({ policy: policy({ licenseRequired: 'yes', licenseOnFile: true }) }), 'license')).toBe('pass');
-      expect(statusOf(input({ policy: policy({ licenseRequired: 'unknown' }) }), 'license')).toBe('review');
+    it('blocks while a required licence or registration is missing', () => {
+      expect(statusOf(input({ market: market({ missingAuthorizations: ['Real estate license'] }) }), 'license')).toBe('fail');
+      expect(statusOf(input(), 'license')).toBe('pass');
+    });
+
+    it('holds marketing while the seller may still cancel', () => {
+      const open = input({ cancellationWindows: [{ label: 'Seller may cancel', endsAt: days(2) }] });
+      expect(statusOf(open, 'cancellation_period')).toBe('fail');
+      expect(evaluateDispositionEligibility(open).status).toBe('blocked');
+      expect(statusOf(input({ cancellationWindows: [{ label: 'Seller may cancel', endsAt: days(-1) }] }), 'cancellation_period')).toBe(
+        'pass',
+      );
     });
   });
 
@@ -191,7 +225,7 @@ describe('evaluateDispositionEligibility', () => {
   });
 
   it('reports blocked over review when both apply', () => {
-    const e = evaluateDispositionEligibility(input({ policy: null, agreement: agreement({ assignability: 'prohibited' }) }));
+    const e = evaluateDispositionEligibility(input({ market: null, agreement: agreement({ assignability: 'prohibited' }) }));
     expect(e.status).toBe('blocked');
     expect(eligibilitySummary(e)).toMatch(/^Blocked: Contract may be assigned/);
   });

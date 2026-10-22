@@ -16,6 +16,8 @@ import {
   type RevenueRecognitionRule,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
+import { MarketsService } from '../markets/markets.service';
+import { assertStructureAllowed } from './structure-gate';
 import { TimelineService } from '../timeline/timeline.service';
 import { DealsService } from '../deals/deals.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
@@ -43,6 +45,7 @@ export class ClosingService {
     private timeline: TimelineService,
     private deals: DealsService,
     private controlPlane: ControlPlaneService,
+    private markets: MarketsService,
   ) {}
 
   /** The deal's file, opened with the template's milestones if it has none. */
@@ -192,6 +195,22 @@ export class ClosingService {
     const file = await this.loadFile(accountId, dealId);
     this.assertOpen(file);
     const { structure, ...fields } = patch;
+    if (structure && structure !== file.structure) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: dealId, accountId },
+        select: {
+          property: { select: { state: true } },
+          lead: { select: { canonicalState: true } },
+        },
+      });
+      assertStructureAllowed(
+        structure,
+        await this.markets.evaluate(
+          accountId,
+          deal?.property?.state ?? deal?.lead?.canonicalState ?? null,
+        ),
+      );
+    }
     await this.prisma.closingFile.update({
       where: { id: file.id },
       data: fields,

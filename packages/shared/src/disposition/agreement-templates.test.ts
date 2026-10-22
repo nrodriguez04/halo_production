@@ -1,4 +1,13 @@
-import { fillTemplate, formatDate, formatMoney, templatePlaceholders } from './agreement-templates';
+import {
+  TEMPLATE_FIELDS,
+  checkTemplateFields,
+  fillTemplate,
+  formatDate,
+  formatMoney,
+  sampleTemplateValues,
+  templatePlaceholders,
+} from './agreement-templates';
+import { TEMPLATE_KINDS } from '../markets/policy';
 
 const TEMPLATE = `SYNTHETIC PURCHASE AGREEMENT
 Seller: {{seller_name}}   Buyer: {{ buyer_entity }}
@@ -21,6 +30,27 @@ const values = {
 };
 
 describe('agreement templates', () => {
+  it('checks a template for unknown fields and fields its kind requires', () => {
+    expect(checkTemplateFields('purchase_agreement', templatePlaceholders(TEMPLATE))).toEqual({ unknown: [], missingRequired: [] });
+    expect(checkTemplateFields('assignment_agreement', ['assignee_name', 'seller_ssn'])).toEqual({
+      unknown: ['seller_ssn'],
+      missingRequired: ['assignor_entity', 'property_address', 'original_contract_date', 'assignment_price', 'assignment_fee'],
+    });
+  });
+
+  it('has a synthetic sample for every field of every kind, for self-tests', () => {
+    for (const kind of TEMPLATE_KINDS) {
+      const v = sampleTemplateValues(kind, 'TX');
+      expect(Object.keys(v).sort()).toEqual(Object.keys(TEMPLATE_FIELDS[kind]).sort());
+      expect(Object.values(v).every((x) => x.trim().length > 0)).toBe(true);
+    }
+  });
+
+  it('never offers the seller contract price on a buyer-facing disclosure', () => {
+    expect(TEMPLATE_FIELDS.buyer_disclosure).not.toHaveProperty('purchase_price');
+    expect(TEMPLATE_FIELDS.buyer_disclosure).not.toHaveProperty('original_purchase_price');
+  });
+
   it('lists placeholders once, in order, tolerating spaces', () => {
     expect(templatePlaceholders(TEMPLATE)).toEqual([
       'seller_name',
@@ -55,7 +85,7 @@ describe('agreement templates', () => {
   });
 
   it('keeps purchase and assignment fields apart', () => {
-    expect(fillTemplate('assignment', 'Fee {{assignment_fee}}', {}).missing).toEqual(['assignment_fee']);
+    expect(fillTemplate('assignment_agreement', 'Fee {{assignment_fee}}', {}).missing).toEqual(['assignment_fee']);
     expect(fillTemplate('purchase_agreement', 'Fee {{assignment_fee}}', {}).unknown).toEqual(['assignment_fee']);
   });
 

@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { BuyerMatch } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
+import { MarketsService } from '../markets/markets.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { ControlPlaneService } from '../control-plane/control-plane.service';
 import { brandName } from '../communications/outbound-content';
@@ -54,6 +55,7 @@ export class CampaignsService {
     private links: ShareLinksService,
     private offers: OffersService,
     private messaging: BuyerMessagingService,
+    private markets: MarketsService,
   ) {}
 
   async listForDeal(accountId: string, dealId: string) {
@@ -310,10 +312,24 @@ export class CampaignsService {
       throw new ConflictException(`Campaign is ${c.status}.`);
     // The gate first: a deal that may not be marketed is refused for that
     // reason, whatever else is missing.
-    await this.eligibility.assertEligible(
+    const gate = await this.eligibility.assertEligible(
       accountId,
       c.dealId,
       'launching a buyer campaign',
+    );
+    // The campaign emails each buyer a link to their deal page: both
+    // channels must be ones the market's approved policy permits.
+    await this.markets.assertChannel(
+      accountId,
+      gate.state,
+      'investor_email',
+      'Launching a buyer campaign',
+    );
+    await this.markets.assertChannel(
+      accountId,
+      gate.state,
+      'buyer_deal_page',
+      'Launching a buyer campaign',
     );
     if (!c.packageId)
       throw new BadRequestException('The campaign has no package.');

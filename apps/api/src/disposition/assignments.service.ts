@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -555,21 +554,5 @@ export class AssignmentsService {
     });
     if (!a) throw new NotFoundException(`Assignment ${assignmentId} not found`);
     return a;
-  }
-}
-
-export function assertStructureAllowed(
-  structure: DealStructure,
-  policy: { status: string; doubleCloseAllowed: string } | null,
-) {
-  if (structure !== 'double_close') return;
-  if (
-    !policy ||
-    policy.status !== 'reviewed' ||
-    !['allowed', 'conditional'].includes(policy.doubleCloseAllowed)
-  ) {
-    throw new BadRequestException(
-      "A double close needs a reviewed state policy that allows it: it has its own funding, title and disclosure requirements. Record the state's answer on the Compliance page first.",
-    );
   }
 }

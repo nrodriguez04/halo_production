@@ -27,6 +27,7 @@ import {
   Sparkles,
   ListChecks,
   Scale,
+  FileSignature,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -45,7 +46,8 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
     { path: '/command-center/opportunities', params: { limit: 15 } },
   ],
   '/dashboard': [{ path: '/analytics/kpis' }],
-  '/states': [{ path: '/compliance/jurisdictions' }],
+  '/markets': [{ path: '/markets' }],
+  '/templates': [{ path: '/templates' }],
   '/deals': [{ path: '/deals' }],
   '/communications': [
     { path: '/communications/messages' },
@@ -96,7 +98,8 @@ const navItems: NavItem[] = [
   { href: '/buyers', label: 'Buyers', icon: UserCheck },
   { href: '/properties', label: 'Properties', icon: Map },
   { href: '/documents', label: 'Documents', icon: FileText },
-  { href: '/states', label: 'State Rules', icon: Scale },
+  { href: '/markets', label: 'Market Activation', icon: Scale },
+  { href: '/templates', label: 'Templates', icon: FileSignature },
 ];
 
 const adminItems: NavItem[] = [

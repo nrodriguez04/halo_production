@@ -12,9 +12,7 @@ import {
   ISSUE_SEVERITIES,
   OFFER_KINDS,
   OFFER_SOURCES,
-  PERMISSION_VALUES,
   TITLE_STATUSES,
-  TRI_STATE,
 } from '@halo/shared';
 
 /**
@@ -104,39 +102,6 @@ export const TerminateAgreementSchema = z
     reason: text(1000),
   })
   .strict();
-
-// ---------------------------------------------------- Jurisdiction policy
-
-export const JurisdictionPolicySchema = z
-  .object({
-    assignmentAllowed: z.enum(PERMISSION_VALUES).optional(),
-    doubleCloseAllowed: z.enum(PERMISSION_VALUES).optional(),
-    licenseRequired: z.enum(TRI_STATE).optional(),
-    licenseDocumentId: id.nullable().optional(),
-    publicMarketingAllowed: z.enum(PERMISSION_VALUES).optional(),
-    buyerDisclosureKeys: z
-      .array(z.string().trim().min(1).max(64))
-      .max(20)
-      .optional(),
-    sellerDisclosureKeys: z
-      .array(z.string().trim().min(1).max(64))
-      .max(20)
-      .optional(),
-    conditions: z.string().trim().max(2000).nullable().optional(),
-    references: z.string().trim().max(4000).nullable().optional(),
-    notes: z.string().trim().max(4000).nullable().optional(),
-  })
-  .strict();
-
-export const ReviewPolicySchema = z
-  .object({
-    /** Who confirmed it (counsel, a firm, the operator) and on what basis. */
-    references: text(4000),
-    reviewExpiresAt: date.optional(),
-  })
-  .strict();
-
-export const StateParamSchema = state;
 
 // --------------------------------------------------------------- Buyers
 
