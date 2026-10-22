@@ -5,3 +5,4 @@ export * from './fee-pricing';
 export * from './closing';
 export * from './underwriting';
 export * from './opportunity-ranking';
+export * from './agreement-templates';

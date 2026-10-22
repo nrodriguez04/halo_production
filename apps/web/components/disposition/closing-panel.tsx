@@ -20,6 +20,7 @@ import {
 import { EmptyState } from '@/components/states';
 import { cn } from '@/lib/utils';
 import { DocumentSelect } from './document-select';
+import { GenerateAgreementButton } from './generate-agreement-button';
 import { useDealAction } from './use-deal-action';
 import { Field } from './agreement-panel';
 import { dateInput, day, money, toIsoDate, type Assignment, type ClosingFile } from '@/lib/disposition';
@@ -275,9 +276,12 @@ function AssignmentCard({ dealId, assignment, buyerName }: { dealId: string; ass
         {assignment.status !== 'executed' && (
           <>
             <p className="text-body text-muted-foreground">
-              Send the assignment agreement from the Contracts card on the Contract tab (purpose: assignment), or record
-              the signed copy here once both parties have signed.
+              Generate the assignment from your reviewed template, send it from the Contracts card on the Contract tab
+              (purpose: assignment), or record the signed copy here once both parties have signed.
             </p>
+            {assignment.status === 'draft' && (
+              <GenerateAgreementButton dealId={dealId} kind="assignment" label="Generate assignment from template" />
+            )}
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-64 flex-1">
                 <DocumentSelect dealId={dealId} value={doc} onChange={setDoc} placeholder="Executed assignment…" />
