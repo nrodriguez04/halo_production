@@ -30,15 +30,16 @@ export function PageHeader({ title, description, actions, eyebrow, className }: 
     >
       <div className="space-y-1">
         {eyebrow && (
-          <p className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
             {eyebrow}
-          </p>
+          </div>
         )}
         <h1 className="text-h1 font-semibold tracking-tight text-foreground">
           {title}
         </h1>
         {description && (
-          <p className="text-body text-muted-foreground max-w-2xl">{description}</p>
+          // A div, not a p: descriptions carry badges and other blocks.
+          <div className="text-body text-muted-foreground max-w-2xl">{description}</div>
         )}
       </div>
       {actions && <div className="flex flex-shrink-0 flex-wrap items-center gap-2">{actions}</div>}

@@ -6,9 +6,8 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
-  experimental: {
-    serverComponentsExternalPackages: ['@descope/node-sdk'],
-  },
+  // Next 15 moved this out of `experimental`.
+  serverExternalPackages: ['@descope/node-sdk'],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.alias = {
