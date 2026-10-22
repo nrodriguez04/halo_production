@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DocuSignController } from './docusign.controller';
 import { DocuSignService } from './docusign.service';
-import { PrismaService } from '../../prisma.service';
 import { ControlPlaneModule } from '../../control-plane/control-plane.module';
 import { TimelineModule } from '../../timeline/timeline.module';
 import { DealsModule } from '../../deals/deals.module';
@@ -21,7 +20,7 @@ import { DispositionGateModule } from '../../disposition/disposition-gate.module
     DispositionGateModule,
   ],
   controllers: [DocuSignController],
-  providers: [DocuSignService, PrismaService],
+  providers: [DocuSignService],
   exports: [DocuSignService],
 })
 export class DocuSignIntegrationModule {}

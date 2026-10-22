@@ -28,6 +28,8 @@ import {
   ListChecks,
   Scale,
   FileSignature,
+  Compass,
+  UserSearch,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -48,6 +50,7 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
   '/dashboard': [{ path: '/analytics/kpis' }],
   '/markets': [{ path: '/markets' }],
   '/templates': [{ path: '/templates' }],
+  '/markets/intelligence': [{ path: '/market-intelligence/recommendations', params: { limit: 12 } }],
   '/deals': [{ path: '/deals' }],
   '/communications': [
     { path: '/communications/messages' },
@@ -96,9 +99,11 @@ const navItems: NavItem[] = [
   { href: '/communications', label: 'Communications', icon: MessageSquare },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/buyers', label: 'Buyers', icon: UserCheck },
+  { href: '/buyers/discovery', label: 'Buyer Discovery', icon: UserSearch },
   { href: '/properties', label: 'Properties', icon: Map },
   { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/markets', label: 'Market Activation', icon: Scale },
+  { href: '/markets/intelligence', label: 'Market Intelligence', icon: Compass },
   { href: '/templates', label: 'Templates', icon: FileSignature },
 ];
 
@@ -201,7 +206,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isActive = (href: string) => {
     if (href === '/dashboard' || href === '/admin') return pathname === href;
-    return pathname.startsWith(href);
+    const under = (h: string) => pathname === h || pathname.startsWith(`${h}/`);
+    if (!under(href)) return false;
+    // The most specific item wins: /markets/intelligence is not also /markets.
+    return ![...navItems, ...adminItems].some((i) => i.href !== href && i.href.startsWith(`${href}/`) && under(i.href));
   };
 
   return (

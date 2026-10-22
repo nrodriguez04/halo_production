@@ -20,6 +20,9 @@ export * from './disposition';
 // Markets: the 51 jurisdictions, their policies, activation and coverage
 export * from './markets';
 
+// Data: provider-neutral records, investor discovery, market intelligence
+export * from './data';
+
 // Policy and state machine
 export * from './policy';
 export * from './state-machine/deal-stage';

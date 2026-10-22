@@ -6,6 +6,7 @@ import { OpenAIService } from '../../integrations/openai/openai.service';
 import { AnthropicService } from '../../integrations/anthropic/anthropic.service';
 import { GeocodingService } from '../../integrations/geocoding/geocoding.service';
 import { AttomService } from '../../integrations/attom/attom.service';
+import { PropertyFactsService } from '../../data/property-facts.service';
 import { PrismaService } from '../../prisma.service';
 import { MessageDispatchService } from '../../communications/message-dispatch.service';
 import { LeadSkipTraceService } from '../../skip-trace/lead-skip-trace.service';
@@ -16,6 +17,7 @@ describe('InternalController', () => {
   let controller: InternalController;
   let geocoding: { geocodeDetailed: jest.Mock };
   let attom: { lookupPropertyDetailed: jest.Mock };
+  const propertyFacts = { applyToLead: jest.fn().mockResolvedValue('prop-1') };
   let dispatch: { sendApproved: jest.Mock };
   let leadSkipTrace: { traceLead: jest.Mock };
   let prisma: { sourceRecord: { updateMany: jest.Mock } };
@@ -66,6 +68,7 @@ describe('InternalController', () => {
         { provide: LeadSkipTraceService, useValue: leadSkipTrace },
         { provide: GeocodingService, useValue: geocoding },
         { provide: AttomService, useValue: attom },
+        { provide: PropertyFactsService, useValue: propertyFacts },
         { provide: PrismaService, useValue: prisma },
         {
           provide: AgentOrchestrationService,
@@ -125,8 +128,50 @@ describe('InternalController', () => {
 
       const out = await controller.propertyLookup('tenant-1', dto as any);
 
-      expect(out).toEqual({ sourceRecordId: null, costUsd: 0, cached: false });
+      expect(out).toEqual({
+        sourceRecordId: null,
+        costUsd: 0,
+        cached: false,
+        propertyId: null,
+      });
       expect(prisma.sourceRecord.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("writes the provider's facts onto the lead's property", async () => {
+      attom.lookupPropertyDetailed.mockResolvedValue({
+        result: {
+          data: {
+            property: [
+              {
+                identifier: { attomId: 1, fips: '48453' },
+                address: {
+                  line1: '1 Main St',
+                  locality: 'Austin',
+                  countrySubd: 'TX',
+                  postal1: '78701',
+                },
+                building: { rooms: { beds: 3 } },
+              },
+            ],
+          },
+          sourceRecordId: 'src-2',
+        },
+        costUsd: 0.1,
+        cached: false,
+      });
+      const out = await controller.propertyLookup('tenant-1', dto as any);
+      expect(out.propertyId).toBe('prop-1');
+      expect(propertyFacts.applyToLead).toHaveBeenCalledWith(
+        'tenant-1',
+        'lead-1',
+        expect.objectContaining({
+          source: 'attom',
+          state: 'TX',
+          countyFips: '48453',
+          beds: 3,
+        }),
+        'src-2',
+      );
     });
 
     it('reports a cache hit without re-linking', async () => {
@@ -145,6 +190,7 @@ describe('InternalController', () => {
         sourceRecordId: 'src-cached',
         costUsd: 0,
         cached: true,
+        propertyId: null,
       });
       expect(prisma.sourceRecord.updateMany).not.toHaveBeenCalled();
     });

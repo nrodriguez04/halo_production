@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { InboundEmailController } from './inbound-email.controller';
 import { InboundEmailService } from './inbound-email.service';
-import { PrismaService } from '../../prisma.service';
 import { AutomationModule } from '../../automation/automation.module';
 import { AgentModule } from '../../agent/agent.module';
 import { DocumentsModule } from '../../documents/documents.module';
@@ -17,6 +16,6 @@ import { IntegrationSecretsModule } from '../../integration-secrets/integration-
     IntegrationSecretsModule,
   ],
   controllers: [InboundEmailController],
-  providers: [InboundEmailService, PrismaService],
+  providers: [InboundEmailService],
 })
 export class InboundEmailModule {}

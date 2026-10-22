@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DocuSignController } from './docusign.controller';
 import { DocuSignService } from './docusign.service';
-import { PrismaService } from '../../prisma.service';
 import { TimelineModule } from '../../timeline/timeline.module';
 import { DealsModule } from '../../deals/deals.module';
 import { DocuSignIntegrationModule } from '../../integrations/docusign/docusign.module';
@@ -15,6 +14,6 @@ import { IntegrationSecretsModule } from '../../integration-secrets/integration-
     IntegrationSecretsModule,
   ],
   controllers: [DocuSignController],
-  providers: [DocuSignService, PrismaService],
+  providers: [DocuSignService],
 })
 export class DocuSignModule {}
