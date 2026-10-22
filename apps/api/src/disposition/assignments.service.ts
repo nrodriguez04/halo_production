@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { TimelineActorType } from '@prisma/client';
+import { Prisma, TimelineActorType } from '@prisma/client';
 import type { DealStructure } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { TimelineService } from '../timeline/timeline.service';
@@ -74,36 +74,58 @@ export class AssignmentsService {
       approvedBy: string;
     },
   ) {
-    const active = await this.prisma.assignmentAgreement.findFirst({
-      where: {
-        accountId,
-        dealId: input.dealId,
-        status: { in: ['draft', 'sent', 'executed'] },
-      },
-      select: { id: true, status: true },
-    });
-    if (active) {
-      throw new ConflictException(
-        `This deal already has a ${active.status} assignment (${active.id}). Cancel it before accepting another offer.`,
-      );
-    }
     const fee = input.price - input.contractPrice;
-    const assignment = await this.prisma.assignmentAgreement.create({
-      data: {
-        accountId,
-        dealId: input.dealId,
-        buyerId: input.buyerId,
-        offerId: input.offerId,
-        purchaseAgreementId: input.purchaseAgreementId,
-        structure: input.structure,
-        assignmentPrice: input.price,
-        assignmentFee: fee,
-        buyerDepositAmount: input.buyerDepositAmount ?? null,
-        buyerDepositDueAt: input.buyerDepositDueAt ?? null,
-        approvedBy: input.approvedBy,
-        approvedAt: new Date(),
-      },
-    });
+    // One live assignment per deal, even when two people accept two offers
+    // at the same moment: the check and the insert are one serializable
+    // transaction, and the loser is told to reload.
+    let assignment: Awaited<
+      ReturnType<typeof this.prisma.assignmentAgreement.create>
+    >;
+    try {
+      assignment = await this.prisma.$transaction(
+        async (tx) => {
+          const active = await tx.assignmentAgreement.findFirst({
+            where: {
+              accountId,
+              dealId: input.dealId,
+              status: { in: ['draft', 'sent', 'executed'] },
+            },
+            select: { id: true, status: true },
+          });
+          if (active) {
+            throw new ConflictException(
+              `This deal already has a ${active.status} assignment (${active.id}). Cancel it before accepting another offer.`,
+            );
+          }
+          return tx.assignmentAgreement.create({
+            data: {
+              accountId,
+              dealId: input.dealId,
+              buyerId: input.buyerId,
+              offerId: input.offerId,
+              purchaseAgreementId: input.purchaseAgreementId,
+              structure: input.structure,
+              assignmentPrice: input.price,
+              assignmentFee: fee,
+              buyerDepositAmount: input.buyerDepositAmount ?? null,
+              buyerDepositDueAt: input.buyerDepositDueAt ?? null,
+              approvedBy: input.approvedBy,
+              approvedAt: new Date(),
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (err) {
+      if (err instanceof ConflictException) throw err;
+      const code = (err as { code?: string }).code;
+      if (code === 'P2034' || code === 'P2002') {
+        throw new ConflictException(
+          'Another offer on this deal was accepted at the same moment. Reload the deal.',
+        );
+      }
+      throw err;
+    }
     const file = await this.closing.ensureFile(
       accountId,
       input.dealId,

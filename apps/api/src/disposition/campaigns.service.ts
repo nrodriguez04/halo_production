@@ -17,7 +17,7 @@ import {
   DealPackagesService,
   type PackageContent,
 } from './deal-packages.service';
-import { ShareLinksService } from './share-links.service';
+import { ShareLinksService, publicAppUrl } from './share-links.service';
 import { OffersService } from './offers.service';
 import { BuyerMessagingService, greetingName } from './buyer-messaging.service';
 import { dealEvent } from './timeline-events';
@@ -118,9 +118,9 @@ export class CampaignsService {
         `This deal already has a ${live.status} campaign (${live.id}).`,
       );
     }
-    // A fresh preparation replaces an earlier draft.
+    // A fresh preparation replaces an earlier draft (never one being launched).
     await this.prisma.dispositionCampaign.deleteMany({
-      where: { accountId, dealId, status: 'draft' },
+      where: { accountId, dealId, status: 'draft', approvedAt: null },
     });
 
     const { recommendation } = await this.offers.pricing(accountId, dealId);
@@ -325,11 +325,44 @@ export class CampaignsService {
         `The asking price ${money(c.askingPrice)} is now below the floor of ${money(recommendation.floorPrice)}.`,
       );
     }
+    if (!publicAppUrl()) {
+      throw new BadRequestException(
+        'Set PUBLIC_APP_URL to the web app origin: each buyer gets a link to their deal page.',
+      );
+    }
+    // One launch per campaign, even on a double click or two people at
+    // once: the first claim wins, the second is told it is under way.
+    const claim = await this.prisma.dispositionCampaign.updateMany({
+      where: { id: c.id, status: 'draft', approvedAt: null },
+      data: { approvedAt: new Date(), approvedBy: userId },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException('This campaign is already being launched.');
+    }
+    const release = () =>
+      this.prisma.dispositionCampaign.updateMany({
+        where: { id: c.id, status: 'draft' },
+        data: { approvedAt: null, approvedBy: null },
+      });
+    try {
+      return await this.launchClaimed(accountId, c, userId, release);
+    } catch (err) {
+      await release();
+      throw err;
+    }
+  }
+
+  private async launchClaimed(
+    accountId: string,
+    c: Awaited<ReturnType<CampaignsService['get']>>,
+    userId: string,
+    release: () => Promise<unknown>,
+  ) {
     const agreement = await this.eligibility.currentAgreement(
       accountId,
       c.dealId,
     );
-    const pkg = await this.packages.approve(accountId, c.packageId, userId);
+    const pkg = await this.packages.approve(accountId, c.packageId!, userId);
     const expiresAt = campaignExpiry(agreement?.closingDeadline ?? null);
 
     const results: Array<{
@@ -389,6 +422,7 @@ export class CampaignsService {
     }
     const reached = results.filter((r) => r.status !== 'skipped');
     if (reached.length === 0) {
+      await release();
       await dealEvent(
         this.timeline,
         accountId,
