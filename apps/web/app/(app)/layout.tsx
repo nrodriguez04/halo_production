@@ -39,7 +39,11 @@ import { prefetchApi, useQueryClient } from '@/lib/api-query';
 // otherwise the prefetch is wasted.
 type Prefetch = { path: string; params?: Record<string, string | number> };
 const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
-  '/command-center': [{ path: '/command-center/attention' }, { path: '/command-center/portfolio' }],
+  '/command-center': [
+    { path: '/command-center/attention' },
+    { path: '/command-center/portfolio' },
+    { path: '/command-center/opportunities', params: { limit: 15 } },
+  ],
   '/dashboard': [{ path: '/analytics/kpis' }],
   '/states': [{ path: '/compliance/jurisdictions' }],
   '/deals': [{ path: '/deals' }],

@@ -916,6 +916,51 @@ describeDb(
       ).rejects.toThrow('seller-side figure');
     });
 
+    it('underwrites deterministically and ranks early-stage opportunities on real facts', async () => {
+      const accountId = tenant();
+      const strong = await seedDeal(accountId);
+      const weak = await seedDeal(accountId);
+      await prisma.lead.update({
+        where: { id: strong.leadId! },
+        data: { score: 85 },
+      });
+      await prisma.lead.update({
+        where: { id: weak.leadId! },
+        data: { score: 30 },
+      });
+      await prisma.underwritingResult.create({
+        data: { dealId: strong.id, confidence: 0.8 },
+      });
+      // The weak deal's numbers do not work: repairs eat the spread.
+      await prisma.deal.update({
+        where: { id: weak.id },
+        data: { repairEstimate: 180_000 },
+      });
+      await buyer(accountId, 'Demand Buyer A', {
+        pof: 300_000,
+        purchasesNearby: 2,
+      });
+      await buyer(accountId, 'Demand Buyer B', { purchasesNearby: 1 });
+
+      const u = await offers.underwriting(accountId, strong.id);
+      // 260k x 0.70 - 40k repairs = 142k for an investor; less the 10k fee = 132k.
+      expect(u).toMatchObject({
+        investorMax: 142_000,
+        mao: 132_000,
+        recommendation: 'offer',
+      });
+      expect(u.offerRange).toEqual({ low: 112_000, high: 132_000 });
+      expect(
+        (await offers.underwriting(accountId, weak.id)).recommendation,
+      ).toBe('pass');
+
+      const ranked = await center.opportunities(accountId);
+      expect(ranked.map((r) => r.id)).toEqual([strong.id, weak.id]);
+      expect(ranked[0].components.margin).toBeGreaterThan(0);
+      expect(ranked[0].components.demand).toBeGreaterThan(0);
+      expect(ranked[1].reasons).toContain('Underwriting says pass');
+    });
+
     it('puts what needs a person at the top of the attention list', async () => {
       const accountId = tenant();
       const deal = await seedDeal(accountId);

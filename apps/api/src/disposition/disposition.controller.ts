@@ -290,6 +290,11 @@ export class DealDispositionController {
     return this.offers.pricing(a, dealId);
   }
 
+  @Get('underwriting')
+  underwriting(@CurrentAccountId() a: string, @Param('dealId') dealId: string) {
+    return this.offers.underwriting(a, dealId);
+  }
+
   @Get('offers')
   listOffers(@CurrentAccountId() a: string, @Param('dealId') dealId: string) {
     return this.offers.list(a, dealId);
@@ -801,5 +806,11 @@ export class CommandCenterController {
   @Get('portfolio')
   portfolio(@CurrentAccountId() a: string) {
     return this.center.portfolio(a);
+  }
+
+  @Get('opportunities')
+  opportunities(@CurrentAccountId() a: string, @Query('limit') limit?: string) {
+    const n = Math.min(Math.max(Number(limit) || 25, 1), 100);
+    return this.center.opportunities(a, n);
   }
 }

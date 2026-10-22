@@ -302,6 +302,29 @@ Until then `deal_economics.revenueStatus` is `projected`. A cancelled closing ma
   - **speed:** days from contract to close;
   - **failures:** cancelled assignments, buyer defaults, cancelled closings, terminated contracts, expired campaigns;
   - **agent performance:** runs, approvals, rejections, failures, cost.
+- `GET /command-center/opportunities` ranks deals before contract (`rankOpportunities`, `packages/shared/src/disposition/opportunity-ranking.ts`). Every point comes from a recorded fact named in the reasons:
+  - **acquisition** (up to 30): the Lead Analyst's score, and whether the seller is replying;
+  - **margin** (up to 30): the expected net from the deterministic underwriting against the minimum profit; a pass scores nothing;
+  - **demand** (up to 20): contactable buyers who fit, strongly or at all; no fit, no points;
+  - **velocity** (up to 10): how recent the last activity was;
+  - **risk** (down to -20): numbers that need review, open title issues, no way to reach the seller.
+
+### Underwriting
+
+The Deal Underwriter supplies the judgement: ARV, repairs and a confidence. `underwriteDeal` (`packages/shared/src/disposition/underwriting.ts`) does the arithmetic:
+
+| Figure | How it is computed |
+|---|---|
+| Investor max | ARV x 0.70 - repairs |
+| MAO | investor max - the fee |
+| Offer range | 85% of the MAO up to the MAO |
+| Expected profit | at the contract price once there is one, else at the MAO |
+
+- **Downside scenarios:** ARV 10% lower, repairs 25% higher, and both, each with our net at the planned price.
+- **Recommendation:** `offer`, `pass` (no positive MAO, or a contract above the MAO that misses the minimum), or `needs_review` (low or missing confidence, repairs not estimated).
+- **Downside results are warnings,** not review triggers: at the MAO the combined downside nearly always loses, which is what the margin is for.
+- **The model never sets the MAO.** When the Underwriter reports, the MAO written to the deal is this one. The model's own MAO and offer range are kept in `underwriting_results.evaluationMetadata` (`modelMao`, `modelOfferRange`) for comparison.
+- `GET /deals/:id/underwriting` returns it for the deal as it stands, and the workspace includes it.
 
 ## 8. Agents
 

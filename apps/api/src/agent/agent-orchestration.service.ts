@@ -16,6 +16,8 @@ import {
   AGENT_NAMES,
   agentWorkflow,
   aiProviderForModel,
+  assignmentFeeFor,
+  underwriteDeal,
   type AgentAction,
   type AgentAutonomy,
   type AgentDecision,
@@ -675,6 +677,11 @@ export class AgentOrchestrationService {
    * Underwriter numbers (design doc s3.2): written to the deal only when
    * nobody edited it since the context was loaded, and recorded in
    * underwriting_results either way so the run stays auditable.
+   *
+   * The model's judgement (ARV, repairs, confidence) is kept; the money is
+   * not. The MAO and the offer range written to the deal come from the
+   * deterministic underwriting (packages/shared disposition/underwriting.ts),
+   * with the model's own figures kept beside them for comparison.
    */
   private async applyDealEconomics(
     accountId: string,
@@ -685,9 +692,45 @@ export class AgentOrchestrationService {
   ): Promise<AppliedAction> {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, accountId },
-      select: { id: true, propertyId: true },
+      select: {
+        id: true,
+        propertyId: true,
+        economics: {
+          select: {
+            assignmentFee: true,
+            contractPrice: true,
+            closingCosts: true,
+            marketingCost: true,
+            otherCost: true,
+            skipTraceCost: true,
+          },
+        },
+        property: { select: { salePrice: true } },
+      },
     });
     if (!deal) throw new Error('deal not found');
+    const cp = await this.controlPlane.getStatus(accountId);
+    const e = deal.economics;
+    const knownCosts =
+      (e?.closingCosts ?? 0) +
+      (e?.marketingCost ?? 0) +
+      (e?.otherCost ?? 0) +
+      (e?.skipTraceCost ?? 0);
+    const u = underwriteDeal({
+      arv: action.arv,
+      repairEstimate: action.repairEstimate,
+      assignmentFee: assignmentFeeFor(
+        e?.assignmentFee,
+        cp.defaultAssignmentFee,
+      ),
+      transactionCosts:
+        knownCosts > 0 ? knownCosts : (cp.dispositionCosts ?? 0),
+      minNetProfit: cp.minNetProfit ?? 5000,
+      confidence: action.confidence,
+      minConfidence: cp.minUnderwritingConfidence ?? 0.5,
+      contractPrice: e?.contractPrice ?? null,
+      sellerAsk: deal.property?.salePrice ?? null,
+    });
     const write = await this.prisma.deal.updateMany({
       where: {
         id: dealId,
@@ -697,14 +740,14 @@ export class AgentOrchestrationService {
       data: {
         arv: action.arv,
         repairEstimate: action.repairEstimate,
-        mao: action.mao,
+        mao: u.mao,
       },
     });
     const stale = write.count === 0;
     const numbers = {
       arv: action.arv,
       repairEstimate: action.repairEstimate,
-      mao: action.mao,
+      mao: u.mao,
       confidence: action.confidence,
       rationale: action.rationale,
       compsSummary: action.compsSummary
@@ -716,7 +759,16 @@ export class AgentOrchestrationService {
         model: decision.model,
         promptVersion: decision.promptVersion,
         recommendation: decision.recommendation,
-        offerRange: { low: action.offerLow, high: action.offerHigh },
+        offerRange: u.offerRange,
+        // What the model computed itself, kept for comparison only.
+        modelMao: action.mao,
+        modelOfferRange: { low: action.offerLow, high: action.offerHigh },
+        underwriting: {
+          recommendation: u.recommendation,
+          flags: u.flags,
+          investorMax: u.investorMax,
+          expectedNet: u.expectedNet,
+        },
         stale,
       },
     };

@@ -225,6 +225,28 @@ export interface ClosingFile {
   };
 }
 
+export interface Underwriting {
+  investorMax: number | null;
+  mao: number | null;
+  offerRange: { low: number; high: number } | null;
+  plannedPurchase: number | null;
+  expectedBuyerPrice: number | null;
+  expectedFee: number | null;
+  expectedNet: number | null;
+  scenarios: Array<{
+    key: string;
+    label: string;
+    arv: number;
+    repairs: number;
+    investorMax: number;
+    net: number | null;
+    clearsMinimum: boolean | null;
+  }>;
+  flags: string[];
+  recommendation: 'offer' | 'pass' | 'needs_review';
+  rationale: string[];
+}
+
 export interface NextAction {
   kind: string;
   title: string;
@@ -263,6 +285,7 @@ export interface Workspace {
   pricing: PricingRecommendation | null;
   matches: BuyerMatch[];
   buyersConsidered: number;
+  underwriting: Underwriting | null;
   assignments: Array<Assignment & { offer: { id: string; amount: number; status: string } | null }>;
   approvals: {
     agentRuns: Array<{ id: string; agent: string | null; createdAt: string; summary: unknown }>;
