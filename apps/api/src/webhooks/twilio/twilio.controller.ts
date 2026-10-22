@@ -14,6 +14,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { TwilioService } from './twilio.service';
+import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 import { twiml } from './keyword-replies';
 
 @SkipThrottle()
@@ -21,7 +22,10 @@ import { twiml } from './keyword-replies';
 export class TwilioController {
   private readonly logger = new Logger(TwilioController.name);
 
-  constructor(private readonly twilioService: TwilioService) {}
+  constructor(
+    private readonly twilioService: TwilioService,
+    private readonly secrets: IntegrationSecretsService,
+  ) {}
 
   /**
    * Answers with TwiML: the STOP confirmation or HELP text when the message
@@ -36,7 +40,7 @@ export class TwilioController {
     @Headers('x-twilio-signature') signature: string | undefined,
     @Req() req: Request,
   ): Promise<string> {
-    this.verifyTwilioSignature(req, signature);
+    await this.verifyTwilioSignature(req, signature);
 
     if (!body || typeof body !== 'object' || !body.From || !body.To) {
       throw new BadRequestException('Missing required Twilio fields: From, To');
@@ -52,7 +56,7 @@ export class TwilioController {
     @Headers('x-twilio-signature') signature: string | undefined,
     @Req() req: Request,
   ) {
-    this.verifyTwilioSignature(req, signature);
+    await this.verifyTwilioSignature(req, signature);
 
     if (!body || typeof body !== 'object') {
       throw new BadRequestException('Invalid webhook payload');
@@ -64,8 +68,12 @@ export class TwilioController {
    * Twilio signs requests using HMAC-SHA1 over the full URL + sorted POST params.
    * See: https://www.twilio.com/docs/usage/security#validating-requests
    */
-  private verifyTwilioSignature(req: Request, signature: string | undefined) {
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
+  private async verifyTwilioSignature(
+    req: Request,
+    signature: string | undefined,
+  ) {
+    // The same token sending uses: saved on the Integrations page, else env.
+    const authToken = await this.secrets.resolve('twilio', 'TWILIO_AUTH_TOKEN');
     if (!authToken) {
       throw new ForbiddenException(
         'Webhook verification not configured — TWILIO_AUTH_TOKEN is required',

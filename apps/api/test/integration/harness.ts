@@ -210,9 +210,17 @@ export function fixtures(moduleRef: TestingModule) {
   const templates = moduleRef.get(TemplatesService);
   const tenants: string[] = [];
 
-  function tenant() {
+  /**
+   * A SYNTHETIC tenant that has switched email and marketing email on, as a
+   * real tenant would have to before a campaign can launch. Nothing is
+   * sent: the queue is stubbed.
+   */
+  async function tenant() {
     const id = `synthetic-${randomUUID()}`;
     tenants.push(id);
+    await prisma.controlPlane.create({
+      data: { accountId: id, emailEnabled: true, marketingEmailEnabled: true },
+    });
     return id;
   }
 

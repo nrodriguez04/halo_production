@@ -49,6 +49,7 @@ import { DispositionModule } from './disposition/disposition.module';
 import { MarketsModule } from './markets/markets.module';
 import { TemplatesModule } from './templates/templates.module';
 import { DataModule } from './data/data.module';
+import { CommunicationsAdminModule } from './communications/communications-admin.module';
 import { AuditModule } from './audit/audit.module';
 
 @Module({
@@ -115,6 +116,7 @@ import { AuditModule } from './audit/audit.module';
     MarketsModule,
     TemplatesModule,
     DataModule,
+    CommunicationsAdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

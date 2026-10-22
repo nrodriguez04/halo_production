@@ -71,7 +71,7 @@ describeDb('the Texas lifecycle, end to end (synthetic, real database)', () => {
     const closing = moduleRef.get(ClosingService);
     const center = moduleRef.get(CommandCenterService);
     process.env.HALO_CONTRACTING_ENTITY = 'SYNTHETIC Acquisitions LLC';
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
 
     // ---------------------------------------------------- the Texas market
     // Research becomes a draft; until counsel approves it, nothing is allowed.

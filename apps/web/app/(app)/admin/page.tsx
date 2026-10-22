@@ -27,6 +27,8 @@ interface ControlPlane {
   enabled: boolean;
   smsEnabled: boolean;
   emailEnabled: boolean;
+  marketingEmailEnabled?: boolean;
+  marketingSmsEnabled?: boolean;
   docusignEnabled: boolean;
   externalDataEnabled: boolean;
   aiEnabled: boolean;
@@ -85,6 +87,7 @@ export default function AdminPage() {
 
   const [costCapInput, setCostCapInput] = useState('');
   const [killDialog, setKillDialog] = useState<'enable' | 'disable' | null>(null);
+  const [marketingDialog, setMarketingDialog] = useState<'email' | 'sms' | null>(null);
 
   useEffect(() => {
     if (controlPlane) setCostCapInput(String(controlPlane.aiDailyCostCap ?? 2));
@@ -316,7 +319,7 @@ export default function AdminPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <ToggleRow
                 label="SMS"
                 enabled={!!controlPlane?.smsEnabled}
@@ -327,6 +330,18 @@ export default function AdminPage() {
                 label="Email"
                 enabled={!!controlPlane?.emailEnabled}
                 onToggle={(next) => update({ emailEnabled: next })}
+                disabled={updateMutation.isPending}
+              />
+              <ToggleRow
+                label="Marketing email"
+                enabled={!!controlPlane?.marketingEmailEnabled}
+                onToggle={(next) => (next ? setMarketingDialog('email') : update({ marketingEmailEnabled: false }))}
+                disabled={updateMutation.isPending}
+              />
+              <ToggleRow
+                label="Marketing texts"
+                enabled={!!controlPlane?.marketingSmsEnabled}
+                onToggle={(next) => (next ? setMarketingDialog('sms') : update({ marketingSmsEnabled: false }))}
                 disabled={updateMutation.isPending}
               />
               <ToggleRow
@@ -347,6 +362,34 @@ export default function AdminPage() {
       </div>
 
       <AlertsCard />
+
+      <Dialog open={marketingDialog !== null} onOpenChange={(open) => !open && setMarketingDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Authorize marketing {marketingDialog === 'sms' ? 'texts' : 'email'}?</DialogTitle>
+            <DialogDescription>
+              {marketingDialog === 'sms'
+                ? 'Approved marketing texts (campaigns, blasts, first approaches) will be sent to recipients with recorded consent, in markets that permit texting. The SMS switch must also be on. Federal law requires prior express written consent for marketing texts.'
+                : 'Approved marketing email (buyer campaigns, blasts, follow-ups, first approaches to sellers) will be sent to recipients with consent, in markets that permit it. The Email switch must also be on.'}{' '}
+              Every message still needs a person&apos;s approval, and the market, consent, do-not-contact and quiet-hours checks still apply.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarketingDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={updateMutation.isPending}
+              onClick={() => {
+                update(marketingDialog === 'sms' ? { marketingSmsEnabled: true } : { marketingEmailEnabled: true });
+                setMarketingDialog(null);
+              }}
+            >
+              I authorize it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={killDialog !== null} onOpenChange={(open) => !open && setKillDialog(null)}>
         <DialogContent>

@@ -26,7 +26,7 @@ Gaps the audit found and where they stand:
 | Only `.txt` templates, tag-based review, no PDF | done: versioned .docx/.txt templates, counsel approval per state, PDFs |
 | Enrichment never creates `Property` rows, so lead-born deals cannot be underwritten | done: ATTOM facts written to the lead's property (docs/data-pipeline.md s2) |
 | No comps or recorded-sales tables; no public-records buyer discovery; no Regrid | done: recorded sales, discovery, Regrid client (live provider runs pending keys) |
-| No seller consent capture; no email bounce/complaint webhooks; no suppression list; no transactional/marketing split; no email readiness endpoint | not started |
+| No seller consent capture; no email bounce/complaint webhooks; no suppression list; no transactional/marketing split; no email readiness endpoint | done (docs/communications.md) |
 | Agent approve/reject routes have no permission check | not started |
 | Document upload checks the extension only, not the MIME type | not started |
 | CrewAI scaffold unused | not started (evaluation) |
@@ -54,8 +54,8 @@ Gaps the audit found and where they stand:
 | 5 | Executed-document verification with automated checks (DocuSign signers recorded at completion); explicit legal sufficiency and disclosure confirmations | done | done | DocuSign account |
 | 6 | Provider-neutral property and recorded-sales ingestion | done (county CSV tested; ATTOM and Regrid built, not run live) | county CSV: yes | ATTOM / Regrid keys; county data licences |
 | 6 | Investor discovery, entity matching, cash-purchase signals, inferred buy box | done | done | — |
-| 6 | Inbound SMS response matching to buyers | not started | | |
-| 7 | Email infrastructure: readiness, templates, inbound, unsubscribe, suppression, deliverability, audit | not started | sending stays off by instruction | user authorization to send |
+| 6 | Inbound SMS response matching to buyers | done (a number held on exactly one buyer; Buyer Responder drafts the reply) | when Twilio is configured | Twilio number and A2P registration |
+| 7 | Email infrastructure: readiness, message classes and switches, internal test sends, inbound, unsubscribe, suppression list, delivery events, deliverability, seller consent, audit | done (internal test send verified against a local SMTP catcher; signed event webhooks verified over HTTP with local keys) | internal test sends only; external sending stays off by instruction | user authorization to send; SendGrid or Resend account, domain authentication and the event webhook key |
 | 8 | Agents: Market Intelligence, Market Expansion, Compliance, Transaction Coordinator and the other roles | not started | | LLM key; web search for Market Expansion |
 | 8 | CrewAI evaluation | not started | | |
 | 9 | Security, regression, deployment validation | not started | | |
@@ -66,3 +66,4 @@ Gaps the audit found and where they stand:
 |---|---|---|
 | 2026-10-22 | Markets: 51 jurisdictions, research, versions, ladder, authorizations, gates, self-test; templates: .docx/.txt, approval, generation, PDFs; verification checks | see git log |
 | 2026-10-22 | Data pipeline: property facts in enrichment, recorded sales (county CSV, ATTOM, Regrid), investor discovery, market intelligence and recommendations; DocuSign signer validation; one Prisma client | see git log |
+| 2026-10-22 | Communications: message classes, marketing switches, market channel gates at send time, internal test sends, SendGrid/Resend delivery events, suppression list, deliverability, seller consent, buyer SMS matching | see git log |

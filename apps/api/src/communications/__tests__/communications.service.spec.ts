@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { hashPhone } from '@halo/shared';
 import { CommunicationsService } from '../communications.service';
+import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../prisma.service';
 import { TimelineService } from '../../timeline/timeline.service';
 import { ComplianceService } from '../../compliance/compliance.service';
@@ -41,6 +42,7 @@ describe('CommunicationsService recipients', () => {
         CommunicationsService,
         { provide: PrismaService, useValue: prisma },
         { provide: TimelineService, useValue: { appendEvent: jest.fn() } },
+        { provide: AuditService, useValue: { log: jest.fn() } },
         { provide: ComplianceService, useValue: compliance },
         {
           provide: ControlPlaneService,

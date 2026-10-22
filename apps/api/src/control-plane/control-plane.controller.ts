@@ -12,6 +12,8 @@ const UpdateControlPlaneSchema = z
     enabled: z.boolean().optional(),
     smsEnabled: z.boolean().optional(),
     emailEnabled: z.boolean().optional(),
+    marketingEmailEnabled: z.boolean().optional(),
+    marketingSmsEnabled: z.boolean().optional(),
     docusignEnabled: z.boolean().optional(),
     externalDataEnabled: z.boolean().optional(),
     aiEnabled: z.boolean().optional(),
