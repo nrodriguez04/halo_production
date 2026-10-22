@@ -50,7 +50,7 @@ Gaps the audit found and where they stand:
 | 4 | Lifecycle: negotiate → contract → verify → market → offers → assign → close → fee | done | in approved markets only | counsel, DocuSign, title company |
 | 4 | Texas end-to-end lifecycle test | done (synthetic, real Postgres) | not until counsel approves TX | counsel approval of the TX policy and templates |
 | 5 | DOCX templates, merge fields, required-field validation, versioning, state selection | done | done | counsel's templates |
-| 5 | PDF generation | done for .txt; .docx via Gotenberg | needs `PDF_CONVERTER_URL` | Gotenberg service in deployment |
+| 5 | PDF generation | done: .txt through pdf-lib; .docx through Gotenberg, verified against a local `gotenberg/gotenberg:8` (the compose image) and run in CI's integration job | wherever Gotenberg runs (in `docker-compose.prod.yml`) | — |
 | 5 | Deadline and cancellation calculations | done | done | — |
 | 5 | Executed-document verification with automated checks (DocuSign signers recorded at completion); explicit legal sufficiency and disclosure confirmations | done | done | DocuSign account |
 | 6 | Provider-neutral property and recorded-sales ingestion | done (county CSV tested; ATTOM and Regrid built, not run live) | county CSV: yes | ATTOM / Regrid keys; county data licences |
@@ -61,7 +61,8 @@ Gaps the audit found and where they stand:
 | 8 | Market Expansion agent (proposes sourced answers, counsel questions, requirements, steps for one state; a person accepts into the draft; never submits, approves or activates) | done (golden set 16 cases; accepted proposals verified in the scratch database) | needs AI on and a model key | LLM key; web research needs a search-capable model route (not built); live eval agreement not yet measured |
 | 8 | The twelve roles mapped to agents or deterministic services (Compliance, Transaction Coordinator, Contract, Property and Buyer Intelligence are services by design) | done (docs/agent-design.md s12) | as each agent or service | — |
 | 8 | CrewAI evaluation | done (docs/crewai-evaluation.md: no agent moves now) | — | — |
-| 9 | Security, regression, deployment validation | not started | | |
+| 9 | Security, regression, deployment validation | done: approval permissions and upload typing fixed; every suite green; the compose config resolves; four existing deploy defects fixed (images did not build; `.dockerignore` let `.env.local` into images; the web image lacked its build-time Descope and API values); api, worker and web images build and start; CI builds them and runs integration with Gotenberg (docs/OPERATIONAL_READINESS.md s5) | not deployed | dependency upgrades: 52 production advisories, several needing major versions (separate task) |
+| 9 | Final engineering and operational readiness report | done (docs/OPERATIONAL_READINESS.md) | — | — |
 
 ## Milestones
 

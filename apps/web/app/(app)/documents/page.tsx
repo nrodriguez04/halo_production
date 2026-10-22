@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { Suspense, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { apiDownload, apiUpload } from '@/lib/api-fetch';
@@ -91,7 +91,19 @@ function size(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * The page reads ?dealId= and ?buyerId=, so it renders on the client inside
+ * a Suspense boundary; without one, a static prerender of the route fails.
+ */
 export default function DocumentsPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <DocumentsLibrary />
+    </Suspense>
+  );
+}
+
+function DocumentsLibrary() {
   const params = useSearchParams();
   const dealId = params.get('dealId') ?? '';
   const buyerId = params.get('buyerId') ?? '';

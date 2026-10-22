@@ -223,6 +223,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      # Next.js writes NEXT_PUBLIC_* into the browser bundle at build time;
+      # the runtime environment below cannot change them. Rebuild the image
+      # when any of these change.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.haloacquisitions.com/api}
+        NEXT_PUBLIC_DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID}
+        NEXT_PUBLIC_DESCOPE_FLOW_ID: ${NEXT_PUBLIC_DESCOPE_FLOW_ID:-sign-in}
+        NEXT_PUBLIC_DESCOPE_BASE_URL: ${DESCOPE_BASE_URL:-}
     container_name: halo-web
     restart: unless-stopped
     depends_on:

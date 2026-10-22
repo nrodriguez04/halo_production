@@ -8,6 +8,10 @@ COPY package.json package-lock.json* ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/shared/package.json ./packages/shared/
 RUN npm ci --workspace=@halo/api --workspace=@halo/shared --include-workspace-root
+# npm hoists workspace dependencies to the root; a workspace gets its own
+# node_modules only when one of its versions conflicts. Create them so the
+# copies below work either way.
+RUN mkdir -p apps/api/node_modules packages/shared/node_modules
 
 # ---- build stage ----
 FROM base AS builder
@@ -31,6 +35,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=halo:nodejs /app/apps/api/dist ./apps/api/dist
 COPY --from=builder --chown=halo:nodejs /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder --chown=halo:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=halo:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=halo:nodejs /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder --chown=halo:nodejs /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
