@@ -17,6 +17,7 @@ import { Response } from 'express';
 import { StorageService } from './storage.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
+import { assertUpload } from '../documents/file-type';
 
 @Controller('storage')
 @UseGuards(AuthGuard)
@@ -46,6 +47,9 @@ export class StorageController {
       throw new BadRequestException('File too large (max 20MB)');
     }
 
+    // The type comes from the extension and the bytes, never the claim;
+    // the same rule as the documents library.
+    const { contentType } = assertUpload(file.originalname, file.buffer);
     const safeName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
     const result = await this.storageService.upload(
@@ -53,7 +57,7 @@ export class StorageController {
       category,
       safeName,
       file.buffer,
-      file.mimetype,
+      contentType,
     );
 
     return {
@@ -61,7 +65,7 @@ export class StorageController {
       url: result.url,
       originalName: file.originalname,
       size: file.size,
-      contentType: file.mimetype,
+      contentType,
     };
   }
 

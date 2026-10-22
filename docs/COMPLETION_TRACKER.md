@@ -27,8 +27,9 @@ Gaps the audit found and where they stand:
 | Enrichment never creates `Property` rows, so lead-born deals cannot be underwritten | done: ATTOM facts written to the lead's property (docs/data-pipeline.md s2) |
 | No comps or recorded-sales tables; no public-records buyer discovery; no Regrid | done: recorded sales, discovery, Regrid client (live provider runs pending keys) |
 | No seller consent capture; no email bounce/complaint webhooks; no suppression list; no transactional/marketing split; no email readiness endpoint | done (docs/communications.md) |
-| Agent approve/reject routes have no permission check | not started |
-| Document upload checks the extension only, not the MIME type | not started |
+| Agent approve/reject routes have no permission check | done: `deals:approve` on agent runs, message approval (it releases the send) and automation-run approval |
+| Found while fixing that: `POST /automation/runs*` let any signed-in user write a run with a decision an approver could then accept as an agent's | done: operators only (`control_plane:write`); the worker uses `/internal` |
+| Document upload checks the extension only, not the MIME type | done: the type comes from the extension and the file's first bytes must match it; the client's claimed type is never stored (documents, inbound email attachments, `/storage/upload`) |
 | CrewAI scaffold unused | not started (evaluation) |
 | Found while testing: every module made its own Prisma client and pool (41 pools); integration runs hit Postgres's connection limit | done: one global Prisma client |
 | Found while testing: `GET /buyers/:id` shadowed new `/buyers/*` routes | done: candidates live at `/buyer-candidates` |

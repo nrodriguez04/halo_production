@@ -13,6 +13,9 @@ import { AutomationRunStatus } from '@prisma/client';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { AgentService } from './agent.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { Permissions } from '../auth/permissions.decorator';
+import { APPROVE } from '../disposition/disposition.controller';
 import {
   CurrentAccountId,
   CurrentUser,
@@ -41,7 +44,7 @@ const RejectRunSchema = z
 const RUN_STATUSES = new Set(Object.values(AutomationRunStatus));
 
 @Controller('agent')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PermissionsGuard)
 export class AgentController {
   constructor(
     private readonly agentService: AgentService,
@@ -223,8 +226,13 @@ export class AgentController {
     });
   }
 
-  /** A person accepts the recommendation; the gated actions happen now. */
+  /**
+   * A person accepts the recommendation; the gated actions happen now. The
+   * same permission as the actions themselves (a buyer blast, a lead
+   * disqualified), so approving a run is no way around it.
+   */
   @Post('runs/:id/approve')
+  @Permissions(APPROVE)
   approveAgentRun(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
@@ -235,6 +243,7 @@ export class AgentController {
 
   /** A person declines; the lead is left as it was. */
   @Post('runs/:id/reject')
+  @Permissions(APPROVE)
   rejectAgentRun(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,

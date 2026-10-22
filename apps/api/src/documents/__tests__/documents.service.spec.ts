@@ -130,7 +130,36 @@ describe('DocumentsService', () => {
         file({ originalname: 'run.exe' }),
       ),
     ).rejects.toThrow('Unsupported file type');
+    // A page named .pdf and claiming to be one is still refused.
+    await expect(
+      service.create(
+        'tenant-1',
+        'user-1',
+        { category: 'other' },
+        file({ buffer: Buffer.from('<html><script>x()</script>') }),
+      ),
+    ).rejects.toThrow('not a .pdf file');
     expect(storage.upload).not.toHaveBeenCalled();
+  });
+
+  it('stores the type the bytes prove, not the one claimed', async () => {
+    prisma.document.create.mockImplementation(async ({ data }) => ({
+      ...row(),
+      ...data,
+    }));
+    await service.create(
+      'tenant-1',
+      'user-1',
+      { category: 'other' },
+      file({ mimetype: 'text/html' }),
+    );
+    expect(storage.upload).toHaveBeenCalledWith(
+      'tenant-1',
+      'documents',
+      expect.any(String),
+      expect.any(Buffer),
+      'application/pdf',
+    );
   });
 
   it('scopes reads, downloads and deletes to the tenant', async () => {
