@@ -54,12 +54,19 @@ Postgres/Redis/RustFS and waits for health, runs the `migrate` container
 (`prisma migrate deploy`), starts api/web/worker/caddy, waits for the api
 health endpoint, then runs `scripts/deploy/smoke.sh`.
 
+The web image bakes `NEXT_PUBLIC_API_URL`, `DESCOPE_PROJECT_ID`,
+`NEXT_PUBLIC_DESCOPE_FLOW_ID` and `DESCOPE_BASE_URL` into the browser bundle
+when it is built (compose passes them as build args). After changing any of
+them, rebuild it: `docker compose -f docker-compose.prod.yml build web`.
+
 First login: open `https://app.<domain>`, sign in with the Descope user you
 made Platform Admin, go to **Admin → Integrations** and enter provider keys
 (they are encrypted at rest with `SECRETS_ENCRYPTION_KEY`; env values are
 only the fallback). Click **Test** on each card. Then **Admin → Control
-Plane**: the kill switch and per-channel switches start enabled; agents
-start in `draft_only` autonomy (**Admin → Agents**).
+Plane**: the kill switch starts enabled, but email, texts and both
+marketing switches start **off** and stay off until someone authorized
+turns them on (docs/communications.md); agents start in `draft_only`
+autonomy (**Admin → Agents**).
 
 Webhooks to configure on the provider side (all HTTPS on `api.<domain>`):
 

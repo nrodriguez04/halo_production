@@ -1,11 +1,14 @@
-node_modules
-.next
-dist
-.turbo
-.env*.local
-*.log
-.DS_Store
-coverage
+# Patterns match from the context root; **/ reaches into apps/ and packages/.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+# Local env files never go into an image (apps/web/.env.local can switch on
+# the dev auth bypass). Production config comes from the environment.
+**/.env
+**/.env*.local
+**/*.log
+**/.DS_Store
+**/coverage
 .git
 .gitignore
-
