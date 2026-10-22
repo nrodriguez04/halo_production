@@ -28,6 +28,7 @@ import {
   type TemplateKind,
 } from '@halo/shared';
 import { PrismaService } from '../../src/prisma.service';
+import { PrismaModule } from '../../src/prisma.module';
 import { DispositionModule } from '../../src/disposition/disposition.module';
 import { ComplianceModule } from '../../src/compliance/compliance.module';
 import { ControlPlaneModule } from '../../src/control-plane/control-plane.module';
@@ -43,6 +44,8 @@ import { MarketsModule } from '../../src/markets/markets.module';
 import { MarketsService } from '../../src/markets/markets.service';
 import { TemplatesModule } from '../../src/templates/templates.module';
 import { TemplatesService } from '../../src/templates/templates.service';
+import { DataModule } from '../../src/data/data.module';
+import { IntegrationCostControlService } from '../../src/cost-control/cost-control.service';
 
 export const describeDb = DB ? describe : describe.skip;
 
@@ -57,6 +60,26 @@ export const describeDb = DB ? describe : describe.skip;
   exports: [OpsAlertService],
 })
 class TestAlertsModule {}
+
+/**
+ * Paid provider calls are never made from these suites. A stub stands in
+ * for cost control, so nothing connects to Redis or a provider.
+ */
+@Global()
+@Module({
+  providers: [
+    {
+      provide: IntegrationCostControlService,
+      useValue: {
+        checkAndCall: jest.fn(async () => {
+          throw new Error('No provider calls in integration tests');
+        }),
+      },
+    },
+  ],
+  exports: [IntegrationCostControlService],
+})
+class TestCostControlModule {}
 
 /** Object storage in memory: the suites never touch a real bucket. */
 export const objects = new Map<string, Buffer>();
@@ -99,7 +122,9 @@ export const queue = {
 export async function buildModule(): Promise<TestingModule> {
   return Test.createTestingModule({
     imports: [
+      PrismaModule,
       TestAlertsModule,
+      TestCostControlModule,
       ComplianceModule,
       ControlPlaneModule,
       PIIModule,
@@ -108,6 +133,7 @@ export async function buildModule(): Promise<TestingModule> {
       DispositionModule,
       MarketsModule,
       TemplatesModule,
+      DataModule,
     ],
   })
     .overrideProvider(QueueService)
@@ -206,6 +232,9 @@ export function fixtures(moduleRef: TestingModule) {
       await prisma.marketAuthorization.deleteMany({ where: { accountId } });
       await prisma.documentTemplate.deleteMany({ where: { accountId } });
       await prisma.documentGeneration.deleteMany({ where: { accountId } });
+      await prisma.recordedSale.deleteMany({ where: { accountId } });
+      await prisma.dataImport.deleteMany({ where: { accountId } });
+      await prisma.buyerCandidate.deleteMany({ where: { accountId } });
       await prisma.timelineEvent.deleteMany({ where: { tenantId: accountId } });
       await prisma.auditLog.deleteMany({ where: { accountId } });
       await prisma.controlPlane.deleteMany({ where: { accountId } });

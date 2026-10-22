@@ -23,6 +23,23 @@ const PROVIDERS = [
         unitCostUsd: 0.1,
         unit: 'per_call',
       },
+      // Recorded sales for one property, and one page of an area's sales
+      // (docs/data-pipeline.md s3). Priced like the profile until the
+      // contract's rate card says otherwise.
+      { action: 'sales_history', unitCostUsd: 0.1, unit: 'per_call' },
+      { action: 'sales_snapshot', unitCostUsd: 0.1, unit: 'per_call' },
+    ],
+  },
+  {
+    key: 'regrid',
+    displayName: 'Regrid (parcels)',
+    category: 'property_data',
+    enabled: true,
+    rateLimitPerMin: 60,
+    pricing: [
+      // Regrid bills by plan; this is a placeholder per-call figure so
+      // budgets still count calls. Set it from the contract.
+      { action: 'parcel_lookup', unitCostUsd: 0.02, unit: 'per_call' },
     ],
   },
   {

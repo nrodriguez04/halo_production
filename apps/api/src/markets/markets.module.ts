@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
 import { DocumentsModule } from '../documents/documents.module';
 import { IntegrationSecretsModule } from '../integration-secrets/integration-secrets.module';
 import { MarketsService } from './markets.service';
@@ -15,12 +14,7 @@ import { DataAccessService } from './data-access.service';
 @Module({
   imports: [DocumentsModule, IntegrationSecretsModule],
   controllers: [MarketsController],
-  providers: [
-    MarketsService,
-    TemplateCatalogService,
-    DataAccessService,
-    PrismaService,
-  ],
+  providers: [MarketsService, TemplateCatalogService, DataAccessService],
   exports: [MarketsService, TemplateCatalogService],
 })
 export class MarketsModule {}

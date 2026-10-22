@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { AuthModule } from '../auth/auth.module';
-import { PrismaService } from '../prisma.service';
 import { StorageModule } from '../storage/storage.module';
 import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
@@ -13,7 +12,7 @@ import { DocumentsService } from './documents.service';
     MulterModule.register({ limits: { fileSize: 25 * 1024 * 1024 } }),
   ],
   controllers: [DocumentsController],
-  providers: [DocumentsService, PrismaService],
+  providers: [DocumentsService],
   exports: [DocumentsService],
 })
 export class DocumentsModule {}

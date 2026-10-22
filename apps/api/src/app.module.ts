@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PrismaModule } from './prisma.module';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -47,11 +48,12 @@ import { LeadLifecycleModule } from './lead-lifecycle/lead-lifecycle.module';
 import { DispositionModule } from './disposition/disposition.module';
 import { MarketsModule } from './markets/markets.module';
 import { TemplatesModule } from './templates/templates.module';
-import { PrismaService } from './prisma.service';
+import { DataModule } from './data/data.module';
 import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
+    PrismaModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport:
@@ -112,8 +114,8 @@ import { AuditModule } from './audit/audit.module';
     DispositionModule,
     MarketsModule,
     TemplatesModule,
+    DataModule,
   ],
-  providers: [PrismaService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
-  exports: [PrismaService],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

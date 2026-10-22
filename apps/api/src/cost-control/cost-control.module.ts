@@ -1,6 +1,5 @@
 import { Global, Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { PrismaService } from '../prisma.service';
 import { AggregatorService } from './aggregator.service';
 import { AlertsService } from './alerts.service';
 import { BudgetService } from './budget.service';
@@ -19,7 +18,6 @@ import { RateLimitService } from './rate-limit/rate-limit.service';
   imports: [AuthModule],
   controllers: [CostControlController],
   providers: [
-    PrismaService,
     PricingService,
     BudgetService,
     ResponseCacheService,

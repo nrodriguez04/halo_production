@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
 import { DispositionEligibilityService } from './eligibility.service';
 import { MarketsModule } from '../markets/markets.module';
 
@@ -11,7 +10,7 @@ import { MarketsModule } from '../markets/markets.module';
  */
 @Module({
   imports: [MarketsModule],
-  providers: [DispositionEligibilityService, PrismaService],
+  providers: [DispositionEligibilityService],
   exports: [DispositionEligibilityService, MarketsModule],
 })
 export class DispositionGateModule {}

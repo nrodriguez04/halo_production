@@ -11,6 +11,8 @@ import { InternalAuthGuard } from './internal-auth.guard';
 import { OpenAIService } from '../integrations/openai/openai.service';
 import { GeocodingService } from '../integrations/geocoding/geocoding.service';
 import { AttomService } from '../integrations/attom/attom.service';
+import { PropertyFactsService } from '../data/property-facts.service';
+import { propertyFromAttom } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
 import {
@@ -56,6 +58,7 @@ export class InternalController {
     private readonly leadSkipTrace: LeadSkipTraceService,
     private readonly geocoding: GeocodingService,
     private readonly attom: AttomService,
+    private readonly propertyFacts: PropertyFactsService,
     private readonly prisma: PrismaService,
     private readonly agents: AgentOrchestrationService,
   ) {}
@@ -186,7 +189,20 @@ export class InternalController {
       dto.zip,
       this.context(accountId, dto),
     );
-    return this.enrichmentResponse(out, dto.leadId);
+    const response = await this.enrichmentResponse(out, dto.leadId);
+    // The lead's Property row carries the facts, so a deal made from it
+    // can be underwritten (docs/data-pipeline.md s2).
+    const facts = out.result?.data ? propertyFromAttom(out.result.data) : null;
+    const propertyId =
+      facts && dto.leadId
+        ? await this.propertyFacts.applyToLead(
+            accountId,
+            dto.leadId,
+            facts,
+            response.sourceRecordId,
+          )
+        : null;
+    return { ...response, propertyId };
   }
 
   private async enrichmentResponse(

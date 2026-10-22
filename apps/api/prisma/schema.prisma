@@ -244,7 +244,7 @@ model SourceRecord {
 
 // Properties (canonical)
 model Property {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   leadId         String?
   accountId      String
   apn            String?
@@ -257,9 +257,30 @@ model Property {
   estimatedValue Float?
   /// Seller asking / agreed sale price (vs estimatedValue for spread)
   salePrice      Float?
-  confidence     Float    @default(1.0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  confidence     Float     @default(1.0)
+  /// Facts from property-data providers (docs/data-pipeline.md s2).
+  county         String?
+  countyFips     String?
+  propertyType   String?
+  beds           Float?
+  baths          Float?
+  sqft           Float?
+  lotSqft        Float?
+  yearBuilt      Int?
+  assessedValue  Float?
+  lastSaleDate   DateTime?
+  lastSalePrice  Float?
+  /// company | trust | individual | lender | government
+  ownerKind      String?
+  absentee       Boolean?
+  /// Which provider the facts came from, its id for the parcel, and how far to trust them.
+  dataSource     String?
+  dataSourceRef  String?
+  /// recorded | reported | estimated
+  dataQuality    String?
+  dataUpdatedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   lead                Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
   sourceRecords       SourceRecord[]
@@ -271,6 +292,7 @@ model Property {
   @@index([leadId])
   @@index([accountId, createdAt])
   @@index([latitude, longitude])
+  @@index([accountId, countyFips])
   @@index([address(ops: raw("gin_trgm_ops"))], type: Gin, map: "properties_address_trgm_idx")
   @@map("properties")
 }
@@ -1678,4 +1700,107 @@ model TaxSaleInterest {
 
   @@index([accountId])
   @@map("tax_sale_interests")
+}
+
+// =============================================================================
+// Property data and buyer discovery (docs/data-pipeline.md)
+// =============================================================================
+
+/// A recorded sale, from any provider, in one shape. Public-record facts:
+/// who bought, from whom, when, for how much, with or without a mortgage.
+model RecordedSale {
+  id              String   @id @default(cuid())
+  accountId       String
+  /// attom | regrid | county_csv | ...
+  source          String
+  sourceRef       String
+  state           String
+  county          String?
+  countyFips      String?
+  city            String?
+  zip             String?
+  address         String?
+  apn             String?
+  saleDate        DateTime
+  price           Float?
+  buyerName       String?
+  buyerKind       String?
+  buyerKey        String?
+  buyerMailingZip String?
+  sellerName      String?
+  sellerKind      String?
+  sellerKey       String?
+  cashPurchase    Boolean?
+  armsLength      Boolean?
+  deedType        String?
+  propertyType    String?
+  /// recorded | reported | estimated
+  quality         String   @default("recorded")
+  importId        String?
+  createdAt       DateTime @default(now())
+
+  @@unique([accountId, source, sourceRef])
+  @@index([accountId, state, saleDate])
+  @@index([accountId, buyerKey])
+  @@index([accountId, countyFips])
+  @@index([accountId, zip])
+  @@map("recorded_sales")
+}
+
+/// A batch of records brought in from a file or a provider pull.
+model DataImport {
+  id         String   @id @default(cuid())
+  accountId  String
+  /// recorded_sales | parcels
+  kind       String
+  source     String
+  documentId String?
+  state      String?
+  county     String?
+  /// Column mapping or request parameters used.
+  params     Json?
+  rows       Int      @default(0)
+  imported   Int      @default(0)
+  skipped    Int      @default(0)
+  errors     Json?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@map("data_imports")
+}
+
+/// A likely cash buyer found in recorded sales: evidence of what they
+/// bought, and the buy box Halo infers from it. Not a buyer until a person
+/// promotes them, and not contactable until contact and consent are on file.
+model BuyerCandidate {
+  id                String   @id @default(cuid())
+  accountId         String
+  key               String
+  name              String
+  /// company | trust | individual
+  kind              String
+  mailingZip        String?
+  purchaseCount     Int
+  cashPurchases     Int
+  financedPurchases Int
+  resales           Int
+  medianHoldDays    Float?
+  firstPurchase     DateTime
+  lastPurchase      DateTime
+  states            String[]
+  buyBox            Json
+  purchases         Json
+  score             Int
+  reasons           String[]
+  /// candidate | promoted | dismissed
+  status            String   @default("candidate")
+  buyerId           String?
+  dismissedReason   String?
+  refreshedAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  @@unique([accountId, key])
+  @@index([accountId, status, score])
+  @@map("buyer_candidates")
 }

@@ -31,6 +31,7 @@ const prisma = {
   contract: { create: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
   document: { findMany: jest.fn() },
   assignmentAgreement: { findFirst: jest.fn() },
+  documentGeneration: { updateMany: jest.fn() },
 };
 const controlPlane = { isDocuSignEnabled: jest.fn(), getStatus: jest.fn() };
 const timeline = { appendEvent: jest.fn() };
@@ -418,6 +419,80 @@ describe('DocuSignService', () => {
       recipients: [{ role: 'seller' }],
     });
     expect(disclosure.assertEquitableInterest).not.toHaveBeenCalled();
+  });
+
+  it('records who signed from DocuSign, names only, and notes a failure instead of throwing', async () => {
+    const svc = service();
+    jest.spyOn(svc as any, 'session').mockResolvedValue({
+      baseUri: 'https://demo.docusign.net',
+      accountId: 'ACCT',
+      accessToken: 'tok',
+      expiresAt: Date.now() + 60_000,
+    });
+    prisma.contract.findFirst.mockResolvedValue({
+      id: 'c9',
+      docusignEnvelopeId: 'env-9',
+      metadata: {
+        recipients: [
+          { role: 'seller', name: 'SYNTHETIC Seller', recipientId: '1' },
+          { role: 'buyer', name: 'SYNTHETIC Buyer', recipientId: '2' },
+        ],
+      },
+    });
+    const realFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        signers: [
+          {
+            recipientId: '1',
+            name: 'SYNTHETIC Seller',
+            email: 'seller@synthetic.test',
+            status: 'completed',
+            signedDateTime: '2026-10-20T15:00:00Z',
+          },
+          {
+            recipientId: '2',
+            name: 'SYNTHETIC Buyer',
+            email: 'buyer@synthetic.test',
+            status: 'delivered',
+          },
+        ],
+      }),
+    }) as unknown as typeof fetch;
+    try {
+      const out = await svc.recordSignatures('c9', 'acct');
+      expect(out).toEqual([
+        {
+          recipientId: '1',
+          role: 'seller',
+          name: 'SYNTHETIC Seller',
+          status: 'completed',
+          signedAt: '2026-10-20T15:00:00Z',
+        },
+        {
+          recipientId: '2',
+          role: 'buyer',
+          name: 'SYNTHETIC Buyer',
+          status: 'delivered',
+          signedAt: null,
+        },
+      ]);
+      const stored = prisma.contract.update.mock.calls.at(-1)[0].data.metadata;
+      expect(JSON.stringify(stored)).not.toContain('@synthetic.test');
+      expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toBe(
+        'https://demo.docusign.net/restapi/v2.1/accounts/ACCT/envelopes/env-9/recipients',
+      );
+
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 503 });
+      await expect(svc.recordSignatures('c9', 'acct')).resolves.toBeNull();
+      expect(
+        prisma.contract.update.mock.calls.at(-1)[0].data.metadata
+          .signatureCheckError,
+      ).toBe('DocuSign answered 503');
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 
   it('on completion files the signed copy and records the executed agreement, without marketing it', async () => {

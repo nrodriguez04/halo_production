@@ -280,7 +280,7 @@ describeDb('the Texas lifecycle, end to end (synthetic, real database)', () => {
       prepared.campaign.id,
       USER,
     );
-    expect(launch.launched).toBe(true);
+    expect(launch).toMatchObject({ launched: true });
     expect(queue.enqueueCommunication).toHaveBeenCalled();
     const msg = await prisma.message.findFirst({
       where: { accountId, dealId: deal.id },
