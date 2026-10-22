@@ -14,6 +14,7 @@ import { ErrorState, LoadingState } from '@/components/states';
 import { MarketOverview } from '@/components/markets/market-overview';
 import { PolicyEditor } from '@/components/markets/policy-editor';
 import { AuthorizationsCard } from '@/components/markets/authorizations-card';
+import { ExpansionProposals } from '@/components/markets/market-agents';
 import { day, errorText } from '@/lib/disposition';
 import {
   CLASSIFICATION_LABEL,
@@ -59,12 +60,19 @@ export default function MarketPage() {
           <TabsTrigger value="authorizations">Licences {d.authorizations.length ? `(${d.authorizations.length})` : ''}</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="versions">Versions {d.versions.length ? `(${d.versions.length})` : ''}</TabsTrigger>
+          <TabsTrigger value="agent">Expansion agent</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
           <MarketOverview m={d} />
         </TabsContent>
         <TabsContent value="policy">
           <PolicyEditor m={d} />
+        </TabsContent>
+        <TabsContent value="agent">
+          <ExpansionProposals
+            state={d.state}
+            questionLabel={(k) => d.questions.find((q) => q.key === k)?.label ?? k.replace(/_/g, ' ')}
+          />
         </TabsContent>
         <TabsContent value="authorizations">
           <AuthorizationsCard m={d} />

@@ -33,6 +33,14 @@ export interface PromptTemplates {
     system: string;
     user: string;
   };
+  market_intelligence: {
+    system: string;
+    user: string;
+  };
+  market_expansion: {
+    system: string;
+    user: string;
+  };
 }
 
 export const prompts: PromptTemplates = promptsData as PromptTemplates;

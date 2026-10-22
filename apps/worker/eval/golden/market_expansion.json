@@ -1,0 +1,1595 @@
+{
+  "agent": "market_expansion",
+  "liveThreshold": 0.7,
+  "notes": "Market Expansion proposals for one state. Bases are real contexts from the api (scratch tenant, the bundled research for TX, FL and WY); replies are written by hand and stay within that research. The decision is what the proposal holds after Halo's rules: unsourced or made-up answers are unknown, answered questions are left alone, and no permissive class is proposed while an approval question is open.",
+  "bases": {
+    "tx": {
+      "market": {
+        "state": "TX",
+        "name": "Texas",
+        "requestedStatus": "RESEARCH_ONLY",
+        "effectiveStatus": "RESEARCH_ONLY",
+        "draftStatus": "draft",
+        "classification": "B",
+        "approvedVersion": null,
+        "nextStep": "Submit the policy for legal review.",
+        "missing": [
+          "No policy has been submitted for legal review."
+        ]
+      },
+      "draft": {
+        "summary": "Research dated 2026-10-22 (confidence: high). Not reviewed by counsel. Texas lets an unlicensed person sell an option or assign an interest in a contract to buy real property if the person does not otherwise engage in brokerage and discloses the nature of the equitable interest in writing (Occ. Code 1101.0045). Since 2024-01-01 (SB 1577) the written disclosure must go to potential buyers and written notice of the intent to assign must go to the property owner (Prop. Code 5.0205); skipping it makes the activity unlicensed brokerage. No wholesaler registration, frequency threshold, statutory seller cancellation right, or 2025-2026 bill changing these rules was found. Proposed classification B: Unlicensed principal assignments are expressly permitted by statute, but only on conditions: written disclosure of the equitable interest to every potential buyer and written notice to the owner before contracting to assign, and no use of the contract to engage in brokerage. These are disclosure conditions rather than a license or registration requirement, which fits B. The open issue is how far public marketing of the property (as opposed to the contract) may go before it becomes brokerage.",
+        "answers": {
+          "principal_assignment_without_license": {
+            "answer": "conditional",
+            "note": "Occ. Code 1101.0045(a), as amended by SB 1577 (eff. 2024-01-01), lets a person acquire an option or contract interest and then sell or assign it without a license if the person (1) does not use it to engage in real estate brokerage and (2) discloses in writing the nature of the equitable interest to any seller or potential buyer. It applies to real property generally, not only residential. TREC states a wholesaler who does not give the notice is engaged in unlicensed brokerage. The provision da…",
+            "sourceIds": [
+              "s1",
+              "s2",
+              "s3",
+              "s4"
+            ]
+          },
+          "wholesaler_registration_required": {
+            "answer": "no",
+            "note": "No wholesaler registration exists in the statutes reviewed; the regime is disclosure-based. TREC's 2022 survey article says wholesalers need not be licensed if they disclose their interest to potential buyers and do not otherwise broker.",
+            "sourceIds": [
+              "s1",
+              "s5"
+            ]
+          },
+          "license_required_for_activity": {
+            "answer": "conditional",
+            "note": "Not required for repeated assignments if the written disclosures are made and the person does not engage in brokerage (for example acting for the seller or buyer, negotiating for others, or listing the property). The statute has no frequency threshold. Assigning or offering to assign without the disclosure is itself brokerage (1101.0045(b)), so a missed disclosure converts the activity into unlicensed practice.",
+            "sourceIds": [
+              "s1",
+              "s4"
+            ]
+          },
+          "disclosures_required": {
+            "answer": "yes",
+            "note": "Two written disclosures are required by Prop. Code 5.0205 (moved from 5.086 and amended by SB 1577) and Occ. Code 1101.0045(a)(2). The statute sets the timing as before entering into a contract to sell the option or assign the interest; a licensed broker's 2026 article (secondary) reads the seller notice as due before the purchase agreement is signed, which is the conservative practice.",
+            "sourceIds": [
+              "s1",
+              "s2",
+              "s4",
+              "s6"
+            ]
+          },
+          "public_marketing_permitted": {
+            "answer": "conditional",
+            "note": "The statute contemplates offering to sell an option or assign a contract to potential buyers, and TREC describes wholesaling as marketing an option or equitable interest, so marketing the contract interest with the written disclosure is permitted. Advertising the property as if owned or listed (MLS listing, undisclosed yard signs) is described by a licensed Texas broker (secondary) as unlicensed brokerage. No TREC rule defining permissible wholesale advertising content was found.",
+            "sourceIds": [
+              "s1",
+              "s4",
+              "s6"
+            ]
+          },
+          "direct_investor_outreach_permitted": {
+            "answer": "conditional",
+            "note": "Permitted as marketing of the principal's own contract interest, provided each potential buyer gets the written disclosure that only a contract interest is offered and the assignor lacks legal title before the assignment contract is signed.",
+            "sourceIds": [
+              "s1",
+              "s2"
+            ]
+          },
+          "assignment_restrictions": {
+            "answer": "conditional",
+            "note": "No statutory prohibition or seller-consent requirement was found. Prop. Code 5.0205 conditions assignment on the written buyer disclosure and owner notice. Whether the purchase contract itself is assignable is a contract question; a Texas firm (secondary) advises stating assignability expressly in a residential earnest money contract.",
+            "sourceIds": [
+              "s2",
+              "s8"
+            ]
+          },
+          "double_closing_permitted": {
+            "answer": "conditional",
+            "note": "No statute addresses double closings. A licensed Texas brokerage's 2026 article (secondary) says they are lawful but that many national title underwriters decline simultaneous closings. If the property is offered to the end buyer before the first closing, the principal is still offering an equitable interest, so treating the 1101.0045/5.0205 disclosures as applicable is the safe reading (inference for counsel).",
+            "sourceIds": [
+              "s1",
+              "s6"
+            ]
+          },
+          "seller_cancellation_right": {
+            "answer": "no",
+            "note": "Neither Occ. Code 1101.0045 nor Prop. Code 5.0205 gives the seller a cancellation right, and none was found in this research. Counsel should confirm that no other consumer statute applies to these contracts.",
+            "sourceIds": [
+              "s1",
+              "s2"
+            ]
+          },
+          "local_restrictions": {
+            "answer": "unknown",
+            "note": "No city or county wholesaling rules were found. A Houston broker's 2026 article (secondary) reports no Houston or Harris County-specific rules, but other cities were not checked.",
+            "sourceIds": [
+              "s6"
+            ]
+          },
+          "out_of_state_entity_requirements": {
+            "answer": "yes",
+            "note": "A foreign LLC transacting business in Texas must register with the Secretary of State under Business Organizations Code ch. 9 (Form 304, $750 fee) and keep a Texas registered agent and office (it cannot be its own agent; a mailbox service is not enough). Late filing fees apply once business has been transacted more than 90 days without registration. Franchise tax obligations with the Comptroller were not verified here.",
+            "sourceIds": [
+              "s7"
+            ]
+          }
+        },
+        "requirements": [
+          {
+            "key": "real_estate_license",
+            "kind": "real_estate_license",
+            "label": "Real estate license (if the conditions apply)",
+            "appliesTo": [
+              "buyer_marketing",
+              "assignment"
+            ]
+          },
+          {
+            "key": "entity_registration",
+            "kind": "entity_registration",
+            "label": "Foreign entity registration with the Secretary of State",
+            "appliesTo": [
+              "seller_contracting"
+            ]
+          }
+        ],
+        "disclosures": [
+          {
+            "key": "equitable_interest_disclosure",
+            "title": "Written disclosure to any potential buyer that the person is selling only an option or assigning only an interest in a contract and does not hold legal title to the property.",
+            "audience": "buyer",
+            "timing": "before_buyer_signs"
+          },
+          {
+            "key": "tx_seller_disclosure_2",
+            "title": "Written notice to the owner of the property that the person intends to sell an option or assign its interest in the contract.",
+            "audience": "seller",
+            "timing": "before_seller_signs"
+          }
+        ],
+        "deadlines": [],
+        "openQuestions": [
+          "Timing of the owner notice: Prop. Code 5.0205 says before contracting to assign; must it instead (or also) be delivered before the seller signs the purchase contract to satisfy 1101.0045(a)(2)?",
+          "What conduct counts as using the contract 'to engage in real estate brokerage' under 1101.0045(a)(1)? In particular, may Hālo publicly advertise the property address and photos if every listing carries the equitable-interest disclosure?",
+          "If Hālo's platform lists contracts held by third-party wholesalers rather than its own entity, is the platform itself performing brokerage for those wholesalers?",
+          "Franchise tax and any other Comptroller registrations for a foreign LLC earning assignment fees in Texas.",
+          "Monitor bills filed for the 90th Legislature (2027 regular session) that would amend 1101.0045 or 5.0205."
+        ],
+        "activationSteps": [
+          "Add a written owner notice of intent to assign (Prop. Code 5.0205(2)) to the Texas purchase contract or a signed addendum delivered before the seller signs.",
+          "Put the 5.0205(1) buyer disclosure (only a contract interest is offered; the assignor does not hold legal title) on every Texas deal listing and in the assignment agreement, and record each buyer's receipt before any assignment is signed.",
+          "Use a Texas purchase contract that expressly permits assignment.",
+          "Market the contract interest only: no MLS listings, no property-for-sale signage, and no representing or negotiating for the seller or end buyer.",
+          "Register the LLC with the Texas Secretary of State (Form 304), appoint a Texas registered agent, and confirm franchise tax registration with the Comptroller."
+        ],
+        "sources": [
+          {
+            "id": "s1",
+            "citation": "Tex. Occ. Code 1101.0045, as amended by SB 1577 (88th Leg., R.S., 2023) Sec. 4",
+            "type": "bill",
+            "url": "https://capitol.texas.gov/tlodocs/88R/billtext/html/SB01577F.htm",
+            "effectiveDate": "2024-01-01"
+          },
+          {
+            "id": "s2",
+            "citation": "Tex. Prop. Code 5.0205",
+            "type": "statute",
+            "url": "https://texas.public.law/statutes/tex._prop._code_section_5.0205",
+            "effectiveDate": "2024-01-01"
+          },
+          {
+            "id": "s3",
+            "citation": "SB 2212 (85th Leg., R.S., 2017), bill analysis",
+            "type": "bill",
+            "url": "https://capitol.texas.gov/tlodocs/85R/analysis/html/SB02212F.htm",
+            "effectiveDate": "2017-09-01"
+          },
+          {
+            "id": "s4",
+            "citation": "TREC, 88th Texas Legislative Session Update",
+            "type": "regulator_guidance",
+            "url": "https://www.trec.texas.gov/article/88th-texas-legislative-session-update-how-it-impacts-license-holders",
+            "effectiveDate": null
+          },
+          {
+            "id": "s5",
+            "citation": "TREC, Results from TREC's Wholesaling in Texas Survey (2022-03-15)",
+            "type": "regulator_guidance",
+            "url": "https://www.trec.texas.gov/article/results-trec%E2%80%99s-wholesaling-texas-survey",
+            "effectiveDate": null
+          },
+          {
+            "id": "s6",
+            "citation": "Harbert Real Estate Group blog (2026-01-01)",
+            "type": "secondary",
+            "url": "https://www.harbertgroup.com/blog/1069/Texas+Real+Estate+Wholesaling+2026%3A+Legal+Boundaries+And+How+Houston+Wholesalers+Operate",
+            "effectiveDate": null
+          },
+          {
+            "id": "s7",
+            "citation": "Texas SOS, Form 304 instructions",
+            "type": "regulator_guidance",
+            "url": "https://www.sos.state.tx.us/corp/instructions/304.shtml",
+            "effectiveDate": null
+          },
+          {
+            "id": "s8",
+            "citation": "Lone Star Land Law, Wholesaling in Texas Real Estate",
+            "type": "secondary",
+            "url": "https://lonestarlandlaw.com/wholesaling-in-texas-real-estate",
+            "effectiveDate": null
+          }
+        ]
+      },
+      "unanswered": [
+        {
+          "key": "local_restrictions",
+          "label": "Do city or county rules add restrictions?",
+          "requiredForApproval": false
+        }
+      ],
+      "research": {
+        "researchedAt": "2026-10-22",
+        "confidence": "high",
+        "summary": "Texas lets an unlicensed person sell an option or assign an interest in a contract to buy real property if the person does not otherwise engage in brokerage and discloses the nature of the equitable interest in writing (Occ. Code 1101.0045). Since 2024-01-01 (SB 1577) the written disclosure must go to potential buyers and written notice of the intent to assign must go to the property owner (Prop. Code 5.0205); skipping it makes the activity unlicensed brokerage. No wholesaler registration, frequency threshold, statutory seller cancellation right, or 2025-2026 bill changing these rules was found.",
+        "proposedClassification": "B",
+        "classificationRationale": "Unlicensed principal assignments are expressly permitted by statute, but only on conditions: written disclosure of the equitable interest to every potential buyer and written notice to the owner before contracting to assign, and no use of the contract to engage in brokerage. These are disclosure conditions rather than a license or registration requirement, which fits B. The open issue is how far public marketing of the property (as opposed to the contract) may go before it becomes brokerage.",
+        "regulator": {
+          "name": "Texas Real Estate Commission",
+          "url": "https://www.trec.texas.gov"
+        },
+        "findings": {
+          "principal_assignment_without_license": {
+            "answer": "conditional",
+            "note": "Occ. Code 1101.0045(a), as amended by SB 1577 (eff. 2024-01-01), lets a person acquire an option or contract interest and then sell or assign it without a license if the person (1) does not use it to engage in real estate brokerage and (2) discloses in writing the nature of the equitable interest to any seller or potential buyer. It applies to real property generally, not only residential. TREC states a wholesaler who does not give the notice is engaged in unlicensed brokerage. The provision dates from SB 2212 (2017); SB 1577 added the seller-side disclosure.",
+            "sourceIds": [
+              "s1",
+              "s2",
+              "s3",
+              "s4"
+            ]
+          },
+          "wholesaler_registration_required": {
+            "answer": "no",
+            "note": "No wholesaler registration exists in the statutes reviewed; the regime is disclosure-based. TREC's 2022 survey article says wholesalers need not be licensed if they disclose their interest to potential buyers and do not otherwise broker.",
+            "sourceIds": [
+              "s1",
+              "s5"
+            ]
+          },
+          "license_required_for_activity": {
+            "answer": "conditional",
+            "note": "Not required for repeated assignments if the written disclosures are made and the person does not engage in brokerage (for example acting for the seller or buyer, negotiating for others, or listing the property). The statute has no frequency threshold. Assigning or offering to assign without the disclosure is itself brokerage (1101.0045(b)), so a missed disclosure converts the activity into unlicensed practice.",
+            "sourceIds": [
+              "s1",
+              "s4"
+            ]
+          },
+          "disclosures_required": {
+            "answer": "yes",
+            "note": "Two written disclosures are required by Prop. Code 5.0205 (moved from 5.086 and amended by SB 1577) and Occ. Code 1101.0045(a)(2). The statute sets the timing as before entering into a contract to sell the option or assign the interest; a licensed broker's 2026 article (secondary) reads the seller notice as due before the purchase agreement is signed, which is the conservative practice.",
+            "sourceIds": [
+              "s1",
+              "s2",
+              "s4",
+              "s6"
+            ]
+          },
+          "public_marketing_permitted": {
+            "answer": "conditional",
+            "note": "The statute contemplates offering to sell an option or assign a contract to potential buyers, and TREC describes wholesaling as marketing an option or equitable interest, so marketing the contract interest with the written disclosure is permitted. Advertising the property as if owned or listed (MLS listing, undisclosed yard signs) is described by a licensed Texas broker (secondary) as unlicensed brokerage. No TREC rule defining permissible wholesale advertising content was found.",
+            "sourceIds": [
+              "s1",
+              "s4",
+              "s6"
+            ]
+          },
+          "direct_investor_outreach_permitted": {
+            "answer": "conditional",
+            "note": "Permitted as marketing of the principal's own contract interest, provided each potential buyer gets the written disclosure that only a contract interest is offered and the assignor lacks legal title before the assignment contract is signed.",
+            "sourceIds": [
+              "s1",
+              "s2"
+            ]
+          },
+          "assignment_restrictions": {
+            "answer": "conditional",
+            "note": "No statutory prohibition or seller-consent requirement was found. Prop. Code 5.0205 conditions assignment on the written buyer disclosure and owner notice. Whether the purchase contract itself is assignable is a contract question; a Texas firm (secondary) advises stating assignability expressly in a residential earnest money contract.",
+            "sourceIds": [
+              "s2",
+              "s8"
+            ]
+          },
+          "double_closing_permitted": {
+            "answer": "conditional",
+            "note": "No statute addresses double closings. A licensed Texas brokerage's 2026 article (secondary) says they are lawful but that many national title underwriters decline simultaneous closings. If the property is offered to the end buyer before the first closing, the principal is still offering an equitable interest, so treating the 1101.0045/5.0205 disclosures as applicable is the safe reading (inference for counsel).",
+            "sourceIds": [
+              "s1",
+              "s6"
+            ]
+          },
+          "seller_cancellation_right": {
+            "answer": "no",
+            "note": "Neither Occ. Code 1101.0045 nor Prop. Code 5.0205 gives the seller a cancellation right, and none was found in this research. Counsel should confirm that no other consumer statute applies to these contracts.",
+            "sourceIds": [
+              "s1",
+              "s2"
+            ]
+          },
+          "local_restrictions": {
+            "answer": "unknown",
+            "note": "No city or county wholesaling rules were found. A Houston broker's 2026 article (secondary) reports no Houston or Harris County-specific rules, but other cities were not checked.",
+            "sourceIds": [
+              "s6"
+            ]
+          },
+          "out_of_state_entity_requirements": {
+            "answer": "yes",
+            "note": "A foreign LLC transacting business in Texas must register with the Secretary of State under Business Organizations Code ch. 9 (Form 304, $750 fee) and keep a Texas registered agent and office (it cannot be its own agent; a mailbox service is not enough). Late filing fees apply once business has been transacted more than 90 days without registration. Franchise tax obligations with the Comptroller were not verified here.",
+            "sourceIds": [
+              "s7"
+            ]
+          }
+        },
+        "sources": [
+          {
+            "id": "s1",
+            "citation": "Tex. Occ. Code 1101.0045, as amended by SB 1577 (88th Leg., R.S., 2023) Sec. 4",
+            "title": "S.B. No. 1577, enrolled text",
+            "url": "https://capitol.texas.gov/tlodocs/88R/billtext/html/SB01577F.htm",
+            "type": "bill",
+            "effectiveDate": "2024-01-01",
+            "summary": "Amends 1101.0045 so a license-free assignor must not use the contract to broker and must disclose its equitable interest in writing to any seller or potential buyer; non-disclosure is brokerage."
+          },
+          {
+            "id": "s2",
+            "citation": "Tex. Prop. Code 5.0205",
+            "title": "Sec. 5.0205, Texas Property Code (unofficial compilation)",
+            "url": "https://texas.public.law/statutes/tex._prop._code_section_5.0205",
+            "type": "statute",
+            "effectiveDate": "2024-01-01",
+            "summary": "Before contracting to sell an option or assign a contract interest, a person must give potential buyers written notice that only a contract interest is offered and title is not held, and notify the owner in writing of the intent to assign."
+          },
+          {
+            "id": "s3",
+            "citation": "SB 2212 (85th Leg., R.S., 2017), bill analysis",
+            "title": "Senate Research Center analysis of S.B. 2212",
+            "url": "https://capitol.texas.gov/tlodocs/85R/analysis/html/SB02212F.htm",
+            "type": "bill",
+            "effectiveDate": "2017-09-01",
+            "summary": "Original 2017 act adding 1101.0045, allowing unlicensed sale of options or assignment of contract interests if the interest is disclosed to potential buyers."
+          },
+          {
+            "id": "s4",
+            "citation": "TREC, 88th Texas Legislative Session Update",
+            "title": "88th Texas Legislative Session Update, and the Impact on License Holders",
+            "url": "https://www.trec.texas.gov/article/88th-texas-legislative-session-update-how-it-impacts-license-holders",
+            "type": "regulator_guidance",
+            "effectiveDate": null,
+            "summary": "TREC explains that SB 1577 requires the wholesaling notice in writing to the potential buyer and the same written notice to the seller, and that a wholesaler who omits notice is engaged in unlicensed brokerage."
+          },
+          {
+            "id": "s5",
+            "citation": "TREC, Results from TREC's Wholesaling in Texas Survey (2022-03-15)",
+            "title": "Results from TREC's Wholesaling in Texas Survey",
+            "url": "https://www.trec.texas.gov/article/results-trec%E2%80%99s-wholesaling-texas-survey",
+            "type": "regulator_guidance",
+            "effectiveDate": null,
+            "summary": "TREC states wholesalers need not be licensed if they disclose the nature of their interest to potential buyers and do not otherwise engage in brokerage; no rule changes proposed."
+          },
+          {
+            "id": "s6",
+            "citation": "Harbert Real Estate Group blog (2026-01-01)",
+            "title": "Texas Real Estate Wholesaling 2026: Legal Boundaries and How Houston Wholesalers Operate",
+            "url": "https://www.harbertgroup.com/blog/1069/Texas+Real+Estate+Wholesaling+2026%3A+Legal+Boundaries+And+How+Houston+Wholesalers+Operate",
+            "type": "secondary",
+            "effectiveDate": null,
+            "summary": "A licensed Houston brokerage says wholesaling is lawful with written disclosures, MLS listing by unlicensed wholesalers is brokerage, double closings are lawful but title companies often refuse them, and no Houston-specific rules exist."
+          },
+          {
+            "id": "s7",
+            "citation": "Texas SOS, Form 304 instructions",
+            "title": "Form 304 - Instructions for Application for Registration of a Foreign Limited Liability Company",
+            "url": "https://www.sos.state.tx.us/corp/instructions/304.shtml",
+            "type": "regulator_guidance",
+            "effectiveDate": null,
+            "summary": "Foreign LLCs transacting business in Texas register under BOC ch. 9 with a $750 fee, must designate a Texas registered agent and office, and face late fees after 90 days unregistered."
+          },
+          {
+            "id": "s8",
+            "citation": "Lone Star Land Law, Wholesaling in Texas Real Estate",
+            "title": "Wholesaling in Texas Real Estate",
+            "url": "https://lonestarlandlaw.com/wholesaling-in-texas-real-estate",
+            "type": "secondary",
+            "effectiveDate": null,
+            "summary": "Texas firm article advising that a residential earnest money contract intended for assignment should expressly state it is assignable."
+          }
+        ],
+        "pendingLegislation": [],
+        "openQuestions": [
+          "Timing of the owner notice: Prop. Code 5.0205 says before contracting to assign; must it instead (or also) be delivered before the seller signs the purchase contract to satisfy 1101.0045(a)(2)?",
+          "What conduct counts as using the contract 'to engage in real estate brokerage' under 1101.0045(a)(1)? In particular, may Hālo publicly advertise the property address and photos if every listing carries the equitable-interest disclosure?",
+          "If Hālo's platform lists contracts held by third-party wholesalers rather than its own entity, is the platform itself performing brokerage for those wholesalers?",
+          "Franchise tax and any other Comptroller registrations for a foreign LLC earning assignment fees in Texas.",
+          "Monitor bills filed for the 90th Legislature (2027 regular session) that would amend 1101.0045 or 5.0205."
+        ],
+        "activationSteps": [
+          "Add a written owner notice of intent to assign (Prop. Code 5.0205(2)) to the Texas purchase contract or a signed addendum delivered before the seller signs.",
+          "Put the 5.0205(1) buyer disclosure (only a contract interest is offered; the assignor does not hold legal title) on every Texas deal listing and in the assignment agreement, and record each buyer's receipt before any assignment is signed.",
+          "Use a Texas purchase contract that expressly permits assignment.",
+          "Market the contract interest only: no MLS listings, no property-for-sale signage, and no representing or negotiating for the seller or end buyer.",
+          "Register the LLC with the Texas Secretary of State (Form 304), appoint a Texas registered agent, and confirm franchise tax registration with the Comptroller."
+        ]
+      },
+      "authorizations": [],
+      "opportunity": {
+        "counties": 1,
+        "top": [
+          {
+            "label": "Synthetic County, TX",
+            "opportunity": 40,
+            "sales12m": 142,
+            "investorPurchases12m": 36
+          }
+        ]
+      }
+    },
+    "fl": {
+      "market": {
+        "state": "FL",
+        "name": "Florida",
+        "requestedStatus": "RESEARCH_ONLY",
+        "effectiveStatus": "RESEARCH_ONLY",
+        "draftStatus": "draft",
+        "classification": "A",
+        "approvedVersion": null,
+        "nextStep": "Answer 1 open legal question(s), then submit the policy for review.",
+        "missing": [
+          "No policy has been submitted for legal review."
+        ]
+      },
+      "draft": {
+        "summary": "Research dated 2026-10-22 (confidence: low). Not reviewed by counsel. Florida has no wholesaling-specific statute, disclosure rule, or registration; the question turns on the brokerage licensing law, Fla. Stat. ch. 475, which covers persons who, for another and for compensation, sell, buy, negotiate, or advertise real property interests, and makes a single act sufficient. Unlicensed brokerage is a third-degree felony and compensation agreements for unlicensed brokerage are unenforceable. The common position that a principal may assign its own contract but must not market the property rests on secondary sources; no Florida Real Estate Commission guidance or 2024-2026 wholesaling bill was found. Proposed classification A: No Florida statute or rule imposes wholesaling-specific registration, disclosure, notice, or cancellation conditions, and the license law reaches only acts done 'for another', which on its face excludes a principal assigning its own contract. That fits A. Confidence is low because no regulator guidance or case confirming the principal-assignment reading was found, the single-act rule and felony penalty raise the stakes, and secondary sources treat advertising the property itself as brokerage, which would push toward D for any public property marketing.",
+        "answers": {
+          "principal_assignment_without_license": {
+            "answer": "conditional",
+            "note": "The ch. 475 broker definition is limited to acts done for another for compensation (475.01(1)(a)); a principal assigning its own contract interest is commonly treated as outside it (secondary). No statute, rule, FREC/DBPR statement or case confirming this for repeated assignments was found. The 475.011 owner exemption covers persons dealing in property they own, which a contract holder may not be.",
+            "sourceIds": [
+              "s1",
+              "s2",
+              "s5",
+              "s6"
+            ]
+          },
+          "wholesaler_registration_required": {
+            "answer": "no",
+            "note": "No wholesaler-specific statute or registration was found; secondary sources state Florida has no wholesaling statute and regulates the activity only through ch. 475.",
+            "sourceIds": [
+              "s6"
+            ]
+          },
+          "license_required_for_activity": {
+            "answer": "conditional",
+            "note": "A license is required where the person acts for another for compensation, including advertising or procuring buyers for another's property. 475.01(3) makes a single act sufficient, so there is no frequency threshold or repeat-activity safe harbor. Unlicensed practice is a third-degree felony (475.42) and compensation for unlicensed brokerage is unenforceable (475.41).",
+            "sourceIds": [
+              "s1",
+              "s3",
+              "s4"
+            ]
+          },
+          "disclosures_required": {
+            "answer": "no",
+            "note": "No wholesaling-specific disclosure or notice requirement was found in Florida statutes or in the sources reviewed.",
+            "sourceIds": [
+              "s6"
+            ]
+          },
+          "public_marketing_permitted": {
+            "answer": "conditional",
+            "note": "Secondary sources say an unlicensed principal may advertise its assignable contract interest, but publicly advertising the property itself (MLS, Zillow-type listings) is treated as brokerage. Not confirmed by FREC or DBPR guidance; counsel must decide what advertising content is safe.",
+            "sourceIds": [
+              "s1",
+              "s5"
+            ]
+          },
+          "direct_investor_outreach_permitted": {
+            "answer": "conditional",
+            "note": "Offering one's own contract interest to known investors is not on its face an act 'for another' under 475.01(1)(a), so it is likely outside the license requirement; supported only by statutory text and secondary sources.",
+            "sourceIds": [
+              "s1",
+              "s5"
+            ]
+          },
+          "assignment_restrictions": {
+            "answer": "unknown",
+            "note": "No Florida statute restricting, conditioning, or requiring consent for assignment of residential purchase contracts was found in this research.",
+            "sourceIds": []
+          },
+          "double_closing_permitted": {
+            "answer": "conditional",
+            "note": "475.011 exempts persons selling property they own, but the exemption is lost if an agent, employee, or contractor paid on a transactional basis conducts the sales. Reselling after taking title therefore appears exempt if Hālo's dispositions staff are not paid per transaction; marketing to the end buyer before the first closing raises the same questions as contract marketing.",
+            "sourceIds": [
+              "s2"
+            ]
+          },
+          "seller_cancellation_right": {
+            "answer": "unknown",
+            "note": "No wholesaling-specific or general statutory seller cancellation right was identified; not researched beyond ch. 475.",
+            "sourceIds": []
+          },
+          "local_restrictions": {
+            "answer": "unknown",
+            "note": "No city or county wholesaling rules were found; local rules were not specifically researched.",
+            "sourceIds": []
+          },
+          "out_of_state_entity_requirements": {
+            "answer": "yes",
+            "note": "Fla. Stat. 605.0902 requires a foreign LLC to apply for a certificate of authority to transact business (Form CR2E027) with a certificate of existence no more than 90 days old and a Florida registered agent with a Florida street address.",
+            "sourceIds": [
+              "s7",
+              "s8"
+            ]
+          }
+        },
+        "requirements": [
+          {
+            "key": "real_estate_license",
+            "kind": "real_estate_license",
+            "label": "Real estate license (if the conditions apply)",
+            "appliesTo": [
+              "buyer_marketing",
+              "assignment"
+            ]
+          },
+          {
+            "key": "entity_registration",
+            "kind": "entity_registration",
+            "label": "Foreign entity registration with the Secretary of State",
+            "appliesTo": [
+              "seller_contracting"
+            ]
+          }
+        ],
+        "disclosures": [],
+        "deadlines": [],
+        "openQuestions": [
+          "Is a principal that repeatedly assigns its own purchase contracts for a fee outside the 475.01(1)(a) 'for another' definition? Is there Florida case law or a FREC final order on wholesaling?",
+          "What may an unlicensed principal include when marketing a contract interest (address, photos, condition) without being treated as advertising the property for another?",
+          "Does paying Hālo dispositions staff per deal forfeit the 475.011 owner exemption for double closings?",
+          "Documentary stamp tax treatment of assignment fees and of the two deeds in a double closing.",
+          "Confirm there is no 2026 or 2027 Florida bill regulating wholesaling (this research found none, but the Florida Senate bill search could not be queried directly)."
+        ],
+        "activationSteps": [
+          "Obtain a Florida counsel opinion on whether Hālo's assignment model is outside the ch. 475 broker definition, given the single-act rule and felony exposure.",
+          "Until counsel clears property-level advertising, market Florida deals only as assignable contract interests to buyers, not as properties for sale, and never list them on an MLS or consumer listing sites.",
+          "Structure the assignment fee as consideration for Hālo's own contract interest, not as a commission for services to the seller or end buyer.",
+          "If property-level public marketing is wanted, route it through a Florida-licensed broker.",
+          "File Form CR2E027 with the Florida Department of State and appoint a Florida registered agent."
+        ],
+        "sources": [
+          {
+            "id": "s1",
+            "citation": "Fla. Stat. 475.01 (2025)",
+            "type": "statute",
+            "url": "https://www.flsenate.gov/Laws/Statutes/2025/475.01",
+            "effectiveDate": null
+          },
+          {
+            "id": "s2",
+            "citation": "Fla. Stat. 475.011 (2025)",
+            "type": "statute",
+            "url": "https://www.flsenate.gov/Laws/Statutes/2025/475.011",
+            "effectiveDate": null
+          },
+          {
+            "id": "s3",
+            "citation": "Fla. Stat. 475.41",
+            "type": "statute",
+            "url": "https://m.flsenate.gov/Statutes/475.41",
+            "effectiveDate": null
+          },
+          {
+            "id": "s4",
+            "citation": "Fla. Stat. 475.42 (2021 compilation)",
+            "type": "statute",
+            "url": "https://www.flsenate.gov/Laws/Statutes/2021/475.42",
+            "effectiveDate": null
+          },
+          {
+            "id": "s5",
+            "citation": "LegalClarity, Is Wholesaling Real Estate Legal in Florida?",
+            "type": "secondary",
+            "url": "https://legalclarity.org/is-wholesaling-real-estate-legal-in-florida/",
+            "effectiveDate": null
+          },
+          {
+            "id": "s6",
+            "citation": "Ark7, Florida Real Estate Wholesaling Guide",
+            "type": "secondary",
+            "url": "https://ark7.com/blog/learn/cities/florida-real-estate-wholesaling-guide/",
+            "effectiveDate": null
+          },
+          {
+            "id": "s7",
+            "citation": "Fla. Stat. 605.0902",
+            "type": "statute",
+            "url": "https://m.flsenate.gov/Statutes/605.0902",
+            "effectiveDate": null
+          },
+          {
+            "id": "s8",
+            "citation": "Florida Department of State, Form CR2E027",
+            "type": "regulator_guidance",
+            "url": "https://dos.fl.gov/media/702400/cr2e027.pdf",
+            "effectiveDate": null
+          }
+        ]
+      },
+      "unanswered": [
+        {
+          "key": "assignment_restrictions",
+          "label": "Are there statutory restrictions on assigning purchase contracts?",
+          "requiredForApproval": false
+        },
+        {
+          "key": "seller_cancellation_right",
+          "label": "Does the seller have a statutory right to cancel?",
+          "requiredForApproval": true
+        },
+        {
+          "key": "local_restrictions",
+          "label": "Do city or county rules add restrictions?",
+          "requiredForApproval": false
+        }
+      ],
+      "research": {
+        "researchedAt": "2026-10-22",
+        "confidence": "low",
+        "summary": "Florida has no wholesaling-specific statute, disclosure rule, or registration; the question turns on the brokerage licensing law, Fla. Stat. ch. 475, which covers persons who, for another and for compensation, sell, buy, negotiate, or advertise real property interests, and makes a single act sufficient. Unlicensed brokerage is a third-degree felony and compensation agreements for unlicensed brokerage are unenforceable. The common position that a principal may assign its own contract but must not market the property rests on secondary sources; no Florida Real Estate Commission guidance or 2024-2026 wholesaling bill was found.",
+        "proposedClassification": "A",
+        "classificationRationale": "No Florida statute or rule imposes wholesaling-specific registration, disclosure, notice, or cancellation conditions, and the license law reaches only acts done 'for another', which on its face excludes a principal assigning its own contract. That fits A. Confidence is low because no regulator guidance or case confirming the principal-assignment reading was found, the single-act rule and felony penalty raise the stakes, and secondary sources treat advertising the property itself as brokerage, which would push toward D for any public property marketing.",
+        "regulator": {
+          "name": "Florida Real Estate Commission (Department of Business and Professional Regulation, Division of Real Estate)",
+          "url": "https://www.myfloridalicense.com"
+        },
+        "findings": {
+          "principal_assignment_without_license": {
+            "answer": "conditional",
+            "note": "The ch. 475 broker definition is limited to acts done for another for compensation (475.01(1)(a)); a principal assigning its own contract interest is commonly treated as outside it (secondary). No statute, rule, FREC/DBPR statement or case confirming this for repeated assignments was found. The 475.011 owner exemption covers persons dealing in property they own, which a contract holder may not be.",
+            "sourceIds": [
+              "s1",
+              "s2",
+              "s5",
+              "s6"
+            ]
+          },
+          "wholesaler_registration_required": {
+            "answer": "no",
+            "note": "No wholesaler-specific statute or registration was found; secondary sources state Florida has no wholesaling statute and regulates the activity only through ch. 475.",
+            "sourceIds": [
+              "s6"
+            ]
+          },
+          "license_required_for_activity": {
+            "answer": "conditional",
+            "note": "A license is required where the person acts for another for compensation, including advertising or procuring buyers for another's property. 475.01(3) makes a single act sufficient, so there is no frequency threshold or repeat-activity safe harbor. Unlicensed practice is a third-degree felony (475.42) and compensation for unlicensed brokerage is unenforceable (475.41).",
+            "sourceIds": [
+              "s1",
+              "s3",
+              "s4"
+            ]
+          },
+          "disclosures_required": {
+            "answer": "no",
+            "note": "No wholesaling-specific disclosure or notice requirement was found in Florida statutes or in the sources reviewed.",
+            "sourceIds": [
+              "s6"
+            ]
+          },
+          "public_marketing_permitted": {
+            "answer": "conditional",
+            "note": "Secondary sources say an unlicensed principal may advertise its assignable contract interest, but publicly advertising the property itself (MLS, Zillow-type listings) is treated as brokerage. Not confirmed by FREC or DBPR guidance; counsel must decide what advertising content is safe.",
+            "sourceIds": [
+              "s1",
+              "s5"
+            ]
+          },
+          "direct_investor_outreach_permitted": {
+            "answer": "conditional",
+            "note": "Offering one's own contract interest to known investors is not on its face an act 'for another' under 475.01(1)(a), so it is likely outside the license requirement; supported only by statutory text and secondary sources.",
+            "sourceIds": [
+              "s1",
+              "s5"
+            ]
+          },
+          "assignment_restrictions": {
+            "answer": "unknown",
+            "note": "No Florida statute restricting, conditioning, or requiring consent for assignment of residential purchase contracts was found in this research.",
+            "sourceIds": []
+          },
+          "double_closing_permitted": {
+            "answer": "conditional",
+            "note": "475.011 exempts persons selling property they own, but the exemption is lost if an agent, employee, or contractor paid on a transactional basis conducts the sales. Reselling after taking title therefore appears exempt if Hālo's dispositions staff are not paid per transaction; marketing to the end buyer before the first closing raises the same questions as contract marketing.",
+            "sourceIds": [
+              "s2"
+            ]
+          },
+          "seller_cancellation_right": {
+            "answer": "unknown",
+            "note": "No wholesaling-specific or general statutory seller cancellation right was identified; not researched beyond ch. 475.",
+            "sourceIds": []
+          },
+          "local_restrictions": {
+            "answer": "unknown",
+            "note": "No city or county wholesaling rules were found; local rules were not specifically researched.",
+            "sourceIds": []
+          },
+          "out_of_state_entity_requirements": {
+            "answer": "yes",
+            "note": "Fla. Stat. 605.0902 requires a foreign LLC to apply for a certificate of authority to transact business (Form CR2E027) with a certificate of existence no more than 90 days old and a Florida registered agent with a Florida street address.",
+            "sourceIds": [
+              "s7",
+              "s8"
+            ]
+          }
+        },
+        "sources": [
+          {
+            "id": "s1",
+            "citation": "Fla. Stat. 475.01 (2025)",
+            "title": "475.01 Definitions",
+            "url": "https://www.flsenate.gov/Laws/Statutes/2025/475.01",
+            "type": "statute",
+            "effectiveDate": null,
+            "summary": "Defines a broker as one who, for another and for compensation, sells, buys, negotiates, advertises, or procures parties for real property interests; a single such act is sufficient."
+          },
+          {
+            "id": "s2",
+            "citation": "Fla. Stat. 475.011 (2025)",
+            "title": "475.011 Exemptions",
+            "url": "https://www.flsenate.gov/Laws/Statutes/2025/475.011",
+            "type": "statute",
+            "effectiveDate": null,
+            "summary": "Exempts owners selling or leasing their own property, except where a transaction-paid agent, employee, or contractor is used to conduct the sales."
+          },
+          {
+            "id": "s3",
+            "citation": "Fla. Stat. 475.41",
+            "title": "475.41 Contracts of unlicensed person for commissions invalid",
+            "url": "https://m.flsenate.gov/Statutes/475.41",
+            "type": "statute",
+            "effectiveDate": null,
+            "summary": "Agreements for compensation for brokerage acts are invalid unless the person was properly licensed when the act was performed."
+          },
+          {
+            "id": "s4",
+            "citation": "Fla. Stat. 475.42 (2021 compilation)",
+            "title": "475.42 Violations and penalties",
+            "url": "https://www.flsenate.gov/Laws/Statutes/2021/475.42",
+            "type": "statute",
+            "effectiveDate": null,
+            "summary": "Operating as a broker without an active license is prohibited and is a third-degree felony."
+          },
+          {
+            "id": "s5",
+            "citation": "LegalClarity, Is Wholesaling Real Estate Legal in Florida?",
+            "title": "Is Wholesaling Real Estate Legal in Florida?",
+            "url": "https://legalclarity.org/is-wholesaling-real-estate-legal-in-florida/",
+            "type": "secondary",
+            "effectiveDate": null,
+            "summary": "Says wholesaling is legal when the wholesaler markets its equitable interest in the contract, and that publicly advertising the property itself (MLS, Zillow) requires a license."
+          },
+          {
+            "id": "s6",
+            "citation": "Ark7, Florida Real Estate Wholesaling Guide",
+            "title": "Florida real estate wholesaling guide",
+            "url": "https://ark7.com/blog/learn/cities/florida-real-estate-wholesaling-guide/",
+            "type": "secondary",
+            "effectiveDate": null,
+            "summary": "Says Florida has no wholesaling-specific statute, so wholesalers should act as principals and assign only their contract interest under ch. 475."
+          },
+          {
+            "id": "s7",
+            "citation": "Fla. Stat. 605.0902",
+            "title": "605.0902 Application for certificate of authority",
+            "url": "https://m.flsenate.gov/Statutes/605.0902",
+            "type": "statute",
+            "effectiveDate": null,
+            "summary": "Sets the contents of a foreign LLC's application for authority to transact business in Florida."
+          },
+          {
+            "id": "s8",
+            "citation": "Florida Department of State, Form CR2E027",
+            "title": "Application by Foreign Limited Liability Company for Authorization to Transact Business in Florida",
+            "url": "https://dos.fl.gov/media/702400/cr2e027.pdf",
+            "type": "regulator_guidance",
+            "effectiveDate": null,
+            "summary": "Foreign LLC application form requiring a certificate of existence no more than 90 days old and a Florida registered agent."
+          }
+        ],
+        "pendingLegislation": [],
+        "openQuestions": [
+          "Is a principal that repeatedly assigns its own purchase contracts for a fee outside the 475.01(1)(a) 'for another' definition? Is there Florida case law or a FREC final order on wholesaling?",
+          "What may an unlicensed principal include when marketing a contract interest (address, photos, condition) without being treated as advertising the property for another?",
+          "Does paying Hālo dispositions staff per deal forfeit the 475.011 owner exemption for double closings?",
+          "Documentary stamp tax treatment of assignment fees and of the two deeds in a double closing.",
+          "Confirm there is no 2026 or 2027 Florida bill regulating wholesaling (this research found none, but the Florida Senate bill search could not be queried directly)."
+        ],
+        "activationSteps": [
+          "Obtain a Florida counsel opinion on whether Hālo's assignment model is outside the ch. 475 broker definition, given the single-act rule and felony exposure.",
+          "Until counsel clears property-level advertising, market Florida deals only as assignable contract interests to buyers, not as properties for sale, and never list them on an MLS or consumer listing sites.",
+          "Structure the assignment fee as consideration for Hālo's own contract interest, not as a commission for services to the seller or end buyer.",
+          "If property-level public marketing is wanted, route it through a Florida-licensed broker.",
+          "File Form CR2E027 with the Florida Department of State and appoint a Florida registered agent."
+        ]
+      },
+      "authorizations": [],
+      "opportunity": {
+        "counties": 0,
+        "top": []
+      }
+    },
+    "wy": {
+      "market": {
+        "state": "WY",
+        "name": "Wyoming",
+        "requestedStatus": "RESEARCH_ONLY",
+        "effectiveStatus": "RESEARCH_ONLY",
+        "draftStatus": "draft",
+        "classification": "A",
+        "approvedVersion": null,
+        "nextStep": "Answer 2 open legal question(s), then submit the policy for review.",
+        "missing": [
+          "No policy has been submitted for legal review."
+        ]
+      },
+      "draft": {
+        "summary": "Research dated 2026-10-22 (confidence: low). Not reviewed by counsel. No Wyoming wholesaling statute or Real Estate Commission guidance was found. W.S. 33-28-102 defines real estate activity as listed acts (including dealing in options and procuring prospects) performed by an individual for another and for compensation, and 33-28-104 treats a single such act for another as acting as a licensee. The 2026 amendments (SF0105) changed licensee disclosure rules but added nothing on wholesaling. Proposed classification A: Wyoming's licensing trigger is expressly limited to acts for another and for compensation, an owner exemption exists, and no wholesaler-specific requirement was found in Title 33 or the 2026 amendments. Confidence is low because no regulator interpretation of contract assignments or advertising by a principal was found.",
+        "answers": {
+          "principal_assignment_without_license": {
+            "answer": "conditional",
+            "note": "Real estate activity requires acting for another and for compensation (W.S. 33-28-102 'real estate activity'; 33-28-104), so a principal assigning its own contract appears outside licensing; no Commission guidance found.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "wholesaler_registration_required": {
+            "answer": "no",
+            "note": "Title 33, chapter 28 contains no wholesaler registration; the 2026 amendments (SF0105) did not add one.",
+            "sourceIds": [
+              "s1",
+              "s3"
+            ]
+          },
+          "license_required_for_activity": {
+            "answer": "conditional",
+            "note": "A license is required for any single act of real estate activity for another, including procuring prospects and dealing in options for another. No frequency threshold found.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "disclosures_required": {
+            "answer": "unknown",
+            "note": "No wholesaling disclosure requirement found.",
+            "sourceIds": []
+          },
+          "public_marketing_permitted": {
+            "answer": "unknown",
+            "note": "Advertising or holding out as engaged in the business of buying or selling real estate is listed real estate activity, though still framed by 'for another'; untested for principals.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "direct_investor_outreach_permitted": {
+            "answer": "unknown",
+            "note": "Not addressed by any source found.",
+            "sourceIds": []
+          },
+          "assignment_restrictions": {
+            "answer": "unknown",
+            "note": "No statutory consent, notice or prohibition on assignment was found.",
+            "sourceIds": []
+          },
+          "double_closing_permitted": {
+            "answer": "conditional",
+            "note": "Buying and reselling for its own account is not an act for another, and W.S. 33-28-103(a)(i) exempts owners for property they own; counsel to confirm.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "seller_cancellation_right": {
+            "answer": "unknown",
+            "note": "No statutory seller cancellation right for an ordinary wholesale purchase contract was found; foreclosure-rescue or equity-purchaser statutes (if any) were not verified.",
+            "sourceIds": []
+          },
+          "local_restrictions": {
+            "answer": "unknown",
+            "note": "No city or county wholesaling rules were found in this research pass; not affirmatively ruled out.",
+            "sourceIds": []
+          },
+          "out_of_state_entity_requirements": {
+            "answer": "yes",
+            "note": "A foreign LLC applies to the Secretary of State for a certificate of authority (form cites W.S. 17-16-1533), names a Wyoming registered agent with a physical address, and pays a $150 fee.",
+            "sourceIds": [
+              "s2"
+            ]
+          }
+        },
+        "requirements": [
+          {
+            "key": "real_estate_license",
+            "kind": "real_estate_license",
+            "label": "Real estate license (if the conditions apply)",
+            "appliesTo": [
+              "buyer_marketing",
+              "assignment"
+            ]
+          },
+          {
+            "key": "entity_registration",
+            "kind": "entity_registration",
+            "label": "Foreign entity registration with the Secretary of State",
+            "appliesTo": [
+              "seller_contracting"
+            ]
+          }
+        ],
+        "disclosures": [],
+        "deadlines": [],
+        "openQuestions": [
+          "Does the Wyoming Real Estate Commission view public advertising of a property held under contract by an unlicensed principal as real estate activity?",
+          "Any Wyoming foreclosure-purchaser or equity-skimming statute affecting purchases from distressed sellers?"
+        ],
+        "activationSteps": [
+          "Obtain a Wyoming certificate of authority for the foreign LLC and appoint a registered agent.",
+          "Operate strictly as principal; no acts for sellers or buyers.",
+          "Have Wyoming counsel confirm the public-marketing approach before launch."
+        ],
+        "sources": [
+          {
+            "id": "s1",
+            "citation": "W.S. 33-28-102(b) ('real estate activity'), 33-28-103, 33-28-104",
+            "type": "statute",
+            "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+            "effectiveDate": null
+          },
+          {
+            "id": "s2",
+            "citation": "Wyoming Secretary of State, Foreign LLC Application for Certificate of Authority (rev. June 2021)",
+            "type": "regulator_guidance",
+            "url": "https://sos.wyo.gov/forms/business/fllc/fllc-certificateauthority.pdf",
+            "effectiveDate": null
+          },
+          {
+            "id": "s3",
+            "citation": "Wyo. SF0105, Enrolled Act No. 37 (2026 Budget Session)",
+            "type": "bill",
+            "url": "https://wyoleg.gov/2026/Enroll/SF0105.pdf",
+            "effectiveDate": null
+          }
+        ]
+      },
+      "unanswered": [
+        {
+          "key": "disclosures_required",
+          "label": "Are wholesaling disclosures or notices required?",
+          "requiredForApproval": true
+        },
+        {
+          "key": "public_marketing_permitted",
+          "label": "May an unlicensed principal publicly advertise the property or contract?",
+          "requiredForApproval": false
+        },
+        {
+          "key": "direct_investor_outreach_permitted",
+          "label": "May the contract be marketed directly to known investors?",
+          "requiredForApproval": false
+        },
+        {
+          "key": "assignment_restrictions",
+          "label": "Are there statutory restrictions on assigning purchase contracts?",
+          "requiredForApproval": false
+        },
+        {
+          "key": "seller_cancellation_right",
+          "label": "Does the seller have a statutory right to cancel?",
+          "requiredForApproval": true
+        },
+        {
+          "key": "local_restrictions",
+          "label": "Do city or county rules add restrictions?",
+          "requiredForApproval": false
+        }
+      ],
+      "research": {
+        "researchedAt": "2026-10-22",
+        "confidence": "low",
+        "summary": "No Wyoming wholesaling statute or Real Estate Commission guidance was found. W.S. 33-28-102 defines real estate activity as listed acts (including dealing in options and procuring prospects) performed by an individual for another and for compensation, and 33-28-104 treats a single such act for another as acting as a licensee. The 2026 amendments (SF0105) changed licensee disclosure rules but added nothing on wholesaling.",
+        "proposedClassification": "A",
+        "classificationRationale": "Wyoming's licensing trigger is expressly limited to acts for another and for compensation, an owner exemption exists, and no wholesaler-specific requirement was found in Title 33 or the 2026 amendments. Confidence is low because no regulator interpretation of contract assignments or advertising by a principal was found.",
+        "regulator": {
+          "name": "Wyoming Real Estate Commission",
+          "url": null
+        },
+        "findings": {
+          "principal_assignment_without_license": {
+            "answer": "conditional",
+            "note": "Real estate activity requires acting for another and for compensation (W.S. 33-28-102 'real estate activity'; 33-28-104), so a principal assigning its own contract appears outside licensing; no Commission guidance found.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "wholesaler_registration_required": {
+            "answer": "no",
+            "note": "Title 33, chapter 28 contains no wholesaler registration; the 2026 amendments (SF0105) did not add one.",
+            "sourceIds": [
+              "s1",
+              "s3"
+            ]
+          },
+          "license_required_for_activity": {
+            "answer": "conditional",
+            "note": "A license is required for any single act of real estate activity for another, including procuring prospects and dealing in options for another. No frequency threshold found.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "disclosures_required": {
+            "answer": "unknown",
+            "note": "No wholesaling disclosure requirement found.",
+            "sourceIds": []
+          },
+          "public_marketing_permitted": {
+            "answer": "unknown",
+            "note": "Advertising or holding out as engaged in the business of buying or selling real estate is listed real estate activity, though still framed by 'for another'; untested for principals.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "direct_investor_outreach_permitted": {
+            "answer": "unknown",
+            "note": "Not addressed by any source found.",
+            "sourceIds": []
+          },
+          "assignment_restrictions": {
+            "answer": "unknown",
+            "note": "No statutory consent, notice or prohibition on assignment was found.",
+            "sourceIds": []
+          },
+          "double_closing_permitted": {
+            "answer": "conditional",
+            "note": "Buying and reselling for its own account is not an act for another, and W.S. 33-28-103(a)(i) exempts owners for property they own; counsel to confirm.",
+            "sourceIds": [
+              "s1"
+            ]
+          },
+          "seller_cancellation_right": {
+            "answer": "unknown",
+            "note": "No statutory seller cancellation right for an ordinary wholesale purchase contract was found; foreclosure-rescue or equity-purchaser statutes (if any) were not verified.",
+            "sourceIds": []
+          },
+          "local_restrictions": {
+            "answer": "unknown",
+            "note": "No city or county wholesaling rules were found in this research pass; not affirmatively ruled out.",
+            "sourceIds": []
+          },
+          "out_of_state_entity_requirements": {
+            "answer": "yes",
+            "note": "A foreign LLC applies to the Secretary of State for a certificate of authority (form cites W.S. 17-16-1533), names a Wyoming registered agent with a physical address, and pays a $150 fee.",
+            "sourceIds": [
+              "s2"
+            ]
+          }
+        },
+        "sources": [
+          {
+            "id": "s1",
+            "citation": "W.S. 33-28-102(b) ('real estate activity'), 33-28-103, 33-28-104",
+            "title": "Wyoming Statutes Title 33 (Professions and Occupations), chapter 28",
+            "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+            "type": "statute",
+            "effectiveDate": null,
+            "summary": "Defines real estate activity as listed acts by an individual for another and for compensation, exempts owners, and treats a single act for another as acting as a licensee."
+          },
+          {
+            "id": "s2",
+            "citation": "Wyoming Secretary of State, Foreign LLC Application for Certificate of Authority (rev. June 2021)",
+            "title": "FLLC Certificate of Authority form",
+            "url": "https://sos.wyo.gov/forms/business/fllc/fllc-certificateauthority.pdf",
+            "type": "regulator_guidance",
+            "effectiveDate": null,
+            "summary": "Form for a foreign LLC to apply for authority to transact business, citing W.S. 17-16-1533, requiring a Wyoming registered agent and a $150 fee."
+          },
+          {
+            "id": "s3",
+            "citation": "Wyo. SF0105, Enrolled Act No. 37 (2026 Budget Session)",
+            "title": "SF0105 - Real estate brokers and salespersons",
+            "url": "https://wyoleg.gov/2026/Enroll/SF0105.pdf",
+            "type": "bill",
+            "effectiveDate": null,
+            "summary": "Amends the definition of customer and licensee relationship disclosures; contains no wholesaling provisions."
+          }
+        ],
+        "pendingLegislation": [],
+        "openQuestions": [
+          "Does the Wyoming Real Estate Commission view public advertising of a property held under contract by an unlicensed principal as real estate activity?",
+          "Any Wyoming foreclosure-purchaser or equity-skimming statute affecting purchases from distressed sellers?"
+        ],
+        "activationSteps": [
+          "Obtain a Wyoming certificate of authority for the foreign LLC and appoint a registered agent.",
+          "Operate strictly as principal; no acts for sellers or buyers.",
+          "Have Wyoming counsel confirm the public-marketing approach before launch."
+        ]
+      },
+      "authorizations": [],
+      "opportunity": {
+        "counties": 0,
+        "top": []
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "rule-in-review",
+      "title": "Counsel is reviewing the draft: no proposal that would change it under them",
+      "base": "tx",
+      "context": {
+        "market": {
+          "draftStatus": "in_review"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "in_review",
+        "recommendation": "hold",
+        "noActions": [
+          "propose_market_draft"
+        ]
+      }
+    },
+    {
+      "id": "rule-operator-blocked",
+      "title": "A person blocked the market: the agent does not propose around it",
+      "base": "fl",
+      "context": {
+        "market": {
+          "requestedStatus": "BLOCKED"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "operator_decision",
+        "recommendation": "hold",
+        "noActions": [
+          "propose_market_draft"
+        ]
+      }
+    },
+    {
+      "id": "rule-active",
+      "title": "An active market has nothing to propose",
+      "base": "tx",
+      "context": {
+        "market": {
+          "effectiveStatus": "ACTIVE"
+        }
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "active",
+        "recommendation": "hold"
+      }
+    },
+    {
+      "id": "rule-no-research",
+      "title": "No research on file: nothing to work from",
+      "base": "wy",
+      "context": {
+        "research": null
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "no_research",
+        "recommendation": "hold"
+      }
+    },
+    {
+      "id": "rule-nothing-unknown",
+      "title": "The draft answers every question: the next step is counsel, not the agent",
+      "base": "tx",
+      "context": {
+        "unanswered": []
+      },
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "nothing_unknown",
+        "recommendation": "hold"
+      }
+    },
+    {
+      "id": "tx-local-rules-stay-unknown",
+      "title": "Texas: local rules checked for one county only stay unknown, with a counsel question",
+      "base": "tx",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [
+          {
+            "question": "local_restrictions",
+            "answer": "unknown",
+            "note": "The research found no city or county wholesaling rules. A 2026 secondary source reports none for Houston and Harris County; other cities were not checked.",
+            "source_ids": [
+              "s6"
+            ]
+          }
+        ],
+        "counsel_questions": [
+          "Do Dallas, San Antonio, Austin or Fort Worth have ordinances on contract assignments or on signage and solicitation that would apply to Halo's marketing?"
+        ],
+        "requirements": [],
+        "activation_steps": [
+          "Confirm local rules for the first metro Halo will work in before its first contract there."
+        ],
+        "risks": [
+          "Local rules were checked for Houston and Harris County only, and that check rests on a secondary source."
+        ],
+        "rationale": "Only local_restrictions is unknown. The one source is secondary and covers one county, so the answer stays unknown and counsel is asked about the other large metros."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "tier": "strong",
+        "recommendation": "propose",
+        "actions": [
+          "propose_market_draft"
+        ],
+        "proposal": {
+          "answers": {
+            "local_restrictions": "unknown"
+          },
+          "minCounselQuestions": 1
+        }
+      }
+    },
+    {
+      "id": "fl-unknowns-with-counsel-questions",
+      "title": "Florida: low-confidence research leaves cancellation and assignment unknown; counsel is asked",
+      "base": "fl",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [
+          {
+            "question": "seller_cancellation_right",
+            "answer": "unknown",
+            "note": "The research identified no wholesaling-specific or general statutory seller cancellation right, but did not look beyond Fla. Stat. ch. 475.",
+            "source_ids": []
+          },
+          {
+            "question": "assignment_restrictions",
+            "answer": "unknown",
+            "note": "No Florida statute restricting or conditioning assignment of residential purchase contracts was found in this research.",
+            "source_ids": []
+          }
+        ],
+        "counsel_questions": [
+          "Does any Florida statute give a residential seller a right to cancel a purchase contract with an investor buyer, for example a home-solicitation or equity-purchaser rule?",
+          "If the Florida purchase contract is silent on assignment, does Florida law require the seller's consent to assign it?"
+        ],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [
+          "Florida treats a single act of unlicensed brokerage as a third-degree felony (Fla. Stat. 475.41, 475.42), so how a contract interest is marketed carries criminal exposure until counsel answers the advertising question."
+        ],
+        "rationale": "Seller cancellation is a question an approval needs, and the research did not look for it outside ch. 475. Nothing found is not the same as nothing exists, so both stay unknown and go to counsel."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "answers": {
+            "seller_cancellation_right": "unknown",
+            "assignment_restrictions": "unknown"
+          },
+          "classification": null,
+          "minCounselQuestions": 2
+        }
+      }
+    },
+    {
+      "id": "fl-unsourced-no-stays-unknown",
+      "title": "An unsourced 'no cancellation right' is kept as unknown: silence is not permission",
+      "base": "fl",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [
+          {
+            "question": "seller_cancellation_right",
+            "answer": "no",
+            "note": "Florida has no statutory cancellation right for these contracts.",
+            "source_ids": []
+          }
+        ],
+        "counsel_questions": [
+          "Confirm that no Florida statute gives a seller a right to cancel a contract with a wholesaler."
+        ],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [],
+        "rationale": "No cancellation statute was found."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "answers": {
+            "seller_cancellation_right": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "id": "fl-made-up-source-dropped",
+      "title": "A source the context does not hold is dropped, and the answer it carried goes back to unknown",
+      "base": "fl",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [
+          {
+            "question": "assignment_restrictions",
+            "answer": "no",
+            "note": "Assignment is unrestricted.",
+            "source_ids": [
+              "s42"
+            ]
+          }
+        ],
+        "counsel_questions": [
+          "Is there any Florida restriction on assigning a residential purchase contract?"
+        ],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [],
+        "rationale": "Assignment appears unrestricted."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "answers": {
+            "assignment_restrictions": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "id": "fl-answered-question-left-alone",
+      "title": "A question the draft already answers is not overwritten",
+      "base": "fl",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [
+          {
+            "question": "principal_assignment_without_license",
+            "answer": "yes",
+            "note": "Secondary sources say a principal may assign its own contract.",
+            "source_ids": [
+              "s5",
+              "s6"
+            ]
+          }
+        ],
+        "counsel_questions": [
+          "Is a principal that repeatedly assigns its own contracts for a fee still acting for itself rather than 'for another' under Fla. Stat. 475.01?"
+        ],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [],
+        "rationale": "The draft already carries an answer; the open point is the repeat-assignment question for counsel."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "answers": {
+            "principal_assignment_without_license": "absent"
+          },
+          "minCounselQuestions": 1
+        }
+      }
+    },
+    {
+      "id": "fl-restrictive-class-proposed",
+      "title": "A more restrictive class may be proposed while questions are open",
+      "base": "fl",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": "C",
+        "classification_reason": "Until counsel decides whether marketing a contract interest is brokerage under Fla. Stat. 475.01, treat Florida as needing a licensed broker for any marketing.",
+        "answers": [],
+        "counsel_questions": [
+          "What may an unlicensed principal include when marketing a contract interest in Florida without being treated as advertising the property for another?"
+        ],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [],
+        "rationale": "The research's class A rests on secondary sources; the felony exposure argues for the cautious class until counsel answers."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "classification": "C"
+        }
+      }
+    },
+    {
+      "id": "wy-permissive-class-held-back",
+      "title": "Wyoming: class A is not proposed while disclosure and cancellation questions are unknown",
+      "base": "wy",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": "A",
+        "classification_reason": "No wholesaling statute; real estate activity is defined as acts for another.",
+        "answers": [
+          {
+            "question": "disclosures_required",
+            "answer": "unknown",
+            "note": "No wholesaling disclosure requirement was found in this research.",
+            "source_ids": []
+          },
+          {
+            "question": "public_marketing_permitted",
+            "answer": "unknown",
+            "note": "Advertising or holding out as in the business of buying or selling real estate is listed real estate activity (W.S. 33-28-102(b)), framed by 'for another'; untested for a principal.",
+            "source_ids": [
+              "s1"
+            ]
+          }
+        ],
+        "counsel_questions": [
+          "Does the Wyoming Real Estate Commission treat public advertising of a property held under contract by an unlicensed principal as real estate activity?"
+        ],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [],
+        "rationale": "The definition turns on acting for another, but nothing addresses principals directly."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "classification": null,
+          "answers": {
+            "disclosures_required": "unknown",
+            "public_marketing_permitted": "unknown"
+          },
+          "minCounselQuestions": 2
+        }
+      }
+    },
+    {
+      "id": "tx-tax-registration-requirement",
+      "title": "Texas: a registration the research raises becomes a requirement to track",
+      "base": "tx",
+      "context": {},
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [],
+        "counsel_questions": [],
+        "requirements": [
+          {
+            "kind": "tax_registration",
+            "label": "Texas franchise tax registration with the Comptroller",
+            "applies_to": [
+              "seller_contracting",
+              "assignment"
+            ],
+            "source_ids": []
+          }
+        ],
+        "activation_steps": [
+          "Confirm franchise tax registration with the Texas Comptroller for the foreign LLC."
+        ],
+        "risks": [],
+        "rationale": "The research lists franchise tax registration as an open item and an activation step; tracking it as a requirement keeps contracting gated on it."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "propose",
+        "proposal": {
+          "minRequirements": 1
+        }
+      }
+    },
+    {
+      "id": "wy-not-now",
+      "title": "Nothing beyond the draft and no recorded sales: not now",
+      "base": "wy",
+      "context": {},
+      "reply": {
+        "recommendation": "not_now",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [],
+        "counsel_questions": [],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [
+          "Low-confidence research and no recorded sales in Wyoming."
+        ],
+        "rationale": "The research adds nothing the draft does not already say, and there is no data showing opportunity."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "not_now",
+        "noActions": [
+          "propose_market_draft"
+        ]
+      }
+    },
+    {
+      "id": "clearance-claim-refused",
+      "title": "A reply that says a state is cleared to operate in is refused, not recorded",
+      "base": "tx",
+      "context": {},
+      "modes": [
+        "offline"
+      ],
+      "reply": {
+        "recommendation": "propose",
+        "classification": null,
+        "classification_reason": "",
+        "answers": [
+          {
+            "question": "local_restrictions",
+            "answer": "unknown",
+            "note": "None found.",
+            "source_ids": [
+              "s6"
+            ]
+          }
+        ],
+        "counsel_questions": [],
+        "requirements": [],
+        "activation_steps": [],
+        "risks": [
+          "Texas is legal to operate in once the owner notice is added to the contract."
+        ],
+        "rationale": "Close to ready."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    },
+    {
+      "id": "reply-not-json",
+      "title": "A prose answer is rejected, not parsed",
+      "base": "tx",
+      "context": {},
+      "modes": [
+        "offline"
+      ],
+      "reply": "Texas looks fine to me; just add the disclosure.",
+      "expect": {
+        "decidedBy": "model",
+        "error": "output"
+      }
+    }
+  ]
+}
