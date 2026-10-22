@@ -23,6 +23,9 @@ export * from './markets';
 // Data: provider-neutral records, investor discovery, market intelligence
 export * from './data';
 
+// Communications: message classes and the switches they need
+export * from './communications';
+
 // Policy and state machine
 export * from './policy';
 export * from './state-machine/deal-stage';

@@ -36,6 +36,7 @@ describe('TwilioService', () => {
           id: 'msg-inbound-1',
           ...args.data,
         })),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       lead: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -83,6 +84,48 @@ describe('TwilioService', () => {
     prisma.dNCList.upsert.mock.calls.map((c: any[]) => c[0].create.accountId);
   const storedUnder = () =>
     prisma.message.create.mock.calls[0][0].data.accountId;
+
+  it("joins a buyer's text to the buyer and the deal Halo last wrote about, for the Buyer Responder", async () => {
+    prisma.buyer.findMany.mockResolvedValue([
+      { id: 'buyer-1', accountId: 'tenant-b' },
+    ]);
+    prisma.message.findFirst.mockResolvedValue({ dealId: 'deal-9' });
+
+    const out = await inbound('Is it still available? I can do 140k');
+
+    expect(out).toEqual({ handled: 'message', reply: null });
+    const data = prisma.message.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      accountId: 'tenant-b',
+      dealId: 'deal-9',
+      direction: 'inbound',
+    });
+    expect(data.metadata).toMatchObject({
+      buyerId: 'buyer-1',
+      recipientType: 'buyer',
+    });
+    expect(agents.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: 'buyer_responder',
+        accountId: 'tenant-b',
+        entityId: 'deal-9',
+      }),
+    );
+  });
+
+  it('does not guess when two tenants hold the number on a buyer', async () => {
+    prisma.buyer.findMany.mockResolvedValue([
+      { id: 'b1', accountId: 'tenant-a' },
+      { id: 'b2', accountId: 'tenant-b' },
+    ]);
+    await inbound('hello');
+    expect(
+      prisma.message.create.mock.calls[0][0].data.metadata.buyerId,
+    ).toBeUndefined();
+    expect(agents.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ agent: 'buyer_responder' }),
+    );
+  });
 
   it('routes inbound replies to the unique matching tenant', async () => {
     prisma.message.findMany.mockResolvedValueOnce([{ accountId: 'tenant-a' }]);

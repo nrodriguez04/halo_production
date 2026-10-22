@@ -454,8 +454,14 @@ model ControlPlane {
   /// tenant flipping a switch changed behaviour for every tenant.
   accountId                 String
   enabled                   Boolean  @default(true)
-  smsEnabled                Boolean  @default(true)
-  emailEnabled              Boolean  @default(true)
+  /// Channel switches. New tenants start with both off: external messages
+  /// need an explicit decision (docs/communications.md s2).
+  smsEnabled                Boolean  @default(false)
+  emailEnabled              Boolean  @default(false)
+  /// Marketing (campaigns, blasts, first approaches) needs its own switch on
+  /// top of the channel's, so enabling deal paperwork never enables campaigns.
+  marketingEmailEnabled     Boolean  @default(false)
+  marketingSmsEnabled       Boolean  @default(false)
   docusignEnabled           Boolean  @default(true)
   externalDataEnabled       Boolean  @default(true)
   aiDailyCostCap            Float    @default(2.0)
@@ -1803,4 +1809,28 @@ model BuyerCandidate {
   @@unique([accountId, key])
   @@index([accountId, status, score])
   @@map("buyer_candidates")
+}
+
+/// What an email or SMS provider reported about a message after it left:
+/// delivered, bounced, complained, unsubscribed, opened. One row per
+/// provider event; the provider's event id makes webhook retries no-ops.
+model MessageEvent {
+  id              String   @id @default(cuid())
+  accountId       String
+  messageId       String?
+  /// sendgrid | resend | twilio
+  provider        String
+  /// delivered | bounce | dropped | deferred | complaint | unsubscribe | open | click | processed
+  event           String
+  /// hard | soft, for bounces
+  bounceType      String?
+  reason          String?
+  providerEventId String
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([accountId, occurredAt])
+  @@index([messageId])
+  @@map("message_events")
 }

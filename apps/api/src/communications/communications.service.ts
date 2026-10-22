@@ -10,10 +10,12 @@ import { ComplianceService } from '../compliance/compliance.service';
 import {
   PolicyViolationError,
   assertPolicy,
+  classifyMessage,
   MessageCreate,
 } from '@halo/shared';
 import { TimelineActorType, TimelineEntityType } from '@prisma/client';
 import { TimelineService } from '../timeline/timeline.service';
+import { AuditService } from '../audit/audit.service';
 import { LeadPiiService } from '../leads/lead-pii.service';
 import {
   counterpartyColumns,
@@ -32,6 +34,7 @@ export class CommunicationsService {
     private compliance: ComplianceService,
     private controlPlaneService: ControlPlaneService,
     private pii: LeadPiiService,
+    private audit: AuditService,
   ) {}
 
   async create(data: MessageCreate) {
@@ -251,6 +254,18 @@ export class CommunicationsService {
       actorId: userId,
       actorType: TimelineActorType.user,
     });
+    await this.audit.log({
+      accountId: updated.accountId,
+      userId,
+      action: 'message.approve',
+      resource: `message:${updated.id}`,
+      details: {
+        channel: updated.channel,
+        messageClass: classifyMessage(updated.metadata),
+        type:
+          (updated.metadata as Record<string, unknown> | null)?.type ?? null,
+      },
+    });
 
     return presentMessage(updated);
   }
@@ -278,6 +293,13 @@ export class CommunicationsService {
       payload: { reason: reason || null },
       actorId: userId,
       actorType: TimelineActorType.user,
+    });
+    await this.audit.log({
+      accountId: rejected.accountId,
+      userId,
+      action: 'message.reject',
+      resource: `message:${rejected.id}`,
+      details: { channel: rejected.channel, reason: reason ?? null },
     });
 
     return presentMessage(rejected);

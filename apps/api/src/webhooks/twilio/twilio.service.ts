@@ -79,17 +79,39 @@ export class TwilioService {
     }
 
     // The reply joins its lead and open deal, so the thread, attribution
-    // and the Outreach Drafter all see it.
+    // and the Outreach Drafter all see it. A text from a buyer instead
+    // joins the buyer and the deal Halo last wrote to them about, for the
+    // Buyer Responder, which only drafts.
     const link = await this.linkToLead(accountId, from);
+    const buyerLink = link ? null : await this.linkToBuyer(accountId, from);
     const inboundMsg = await this.recordInbound(
-      accountId,
+      buyerLink?.accountId ?? accountId,
       from,
       to,
       messageBody,
       body.MessageSid,
-      {},
-      link,
+      buyerLink ? { buyerId: buyerLink.buyerId, recipientType: 'buyer' } : {},
+      link ??
+        (buyerLink?.dealId ? { leadId: null, dealId: buyerLink.dealId } : null),
     );
+    if (buyerLink?.dealId) {
+      try {
+        await this.agents.enqueue({
+          agent: 'buyer_responder',
+          accountId: buyerLink.accountId,
+          entityType: 'deal',
+          entityId: buyerLink.dealId,
+          trigger: 'inbound',
+          triggerEventId: `inbound:${inboundMsg.id}`,
+          messageId: inboundMsg.id,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Could not queue the Buyer Responder for text ${inboundMsg.id}: ${err}`,
+        );
+      }
+      return { handled: 'message', reply: null };
+    }
 
     try {
       await this.automationService.attributeReply(inboundMsg.id, accountId);
@@ -182,6 +204,59 @@ export class TwilioService {
       return { leadId: lead.id, dealId: lead.deals[0]?.id ?? null };
     } catch (err) {
       this.logger.warn(`Could not link inbound reply to a lead: ${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * The buyer this number belongs to, and the deal Halo last wrote to them
+   * about. Searches the tenant the number resolved to, else every tenant
+   * that holds it on a buyer, and only links when exactly one does.
+   */
+  private async linkToBuyer(
+    accountId: string,
+    fromPhone: string,
+  ): Promise<{
+    accountId: string;
+    buyerId: string;
+    dealId: string | null;
+  } | null> {
+    const hashes = Array.from(
+      new Set(
+        this.buildPhoneCandidates(fromPhone).map((phone) =>
+          this.pii.phoneHash(phone),
+        ),
+      ),
+    );
+    if (hashes.length === 0) return null;
+    try {
+      const buyers = await this.prisma.buyer.findMany({
+        where: {
+          phoneHash: { in: hashes },
+          ...(accountId !== UNATTRIBUTED_ACCOUNT_ID ? { accountId } : {}),
+        },
+        select: { id: true, accountId: true },
+        take: 2,
+      });
+      if (buyers.length !== 1) return null;
+      const buyer = buyers[0];
+      const last = await this.prisma.message.findFirst({
+        where: {
+          accountId: buyer.accountId,
+          direction: 'outbound',
+          dealId: { not: null },
+          metadata: { path: ['buyerId'], equals: buyer.id },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { dealId: true },
+      });
+      return {
+        accountId: buyer.accountId,
+        buyerId: buyer.id,
+        dealId: last?.dealId ?? null,
+      };
+    } catch (err) {
+      this.logger.warn(`Could not link inbound text to a buyer: ${err}`);
       return null;
     }
   }

@@ -74,7 +74,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   }
 
   it('imports research for all 51 jurisdictions as unreviewed drafts that permit nothing', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const out = await markets.importResearch(accountId, USER, {});
     expect(out.imported).toHaveLength(51);
     const matrix = await markets.matrix(accountId);
@@ -115,7 +115,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   });
 
   it("approves only a complete policy with counsel's memo, and keeps every version immutable", async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const content = synthMarketContent((c) => {
       c.answers.license_required_for_activity = {
         answer: 'unknown',
@@ -221,7 +221,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   });
 
   it('climbs the ladder only as far as templates, authorizations, an operator and a self-test allow', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const content = synthMarketContent((c) => {
       c.requirements = [
         {
@@ -334,7 +334,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   });
 
   it('restricts a market at once: campaigns pause and new seller contracts are refused', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     await fx.approvedMarket(accountId, 'GA');
     const deal = await fx.seedDeal(accountId, 'GA');
     await executed(accountId, deal.id);
@@ -371,7 +371,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   });
 
   it('holds marketing until the seller cancellation window closes, counted in business days', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const content = synthMarketContent((c) => {
       c.answers.seller_cancellation_right = {
         answer: 'yes',
@@ -415,7 +415,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   });
 
   it('launches a campaign only on channels the approved policy permits', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const content = synthMarketContent((c) => {
       c.channels.investor_email = {
         permission: 'prohibited',
@@ -437,8 +437,28 @@ describeDb('markets (synthetic fixtures, real database)', () => {
     ).rejects.toThrow('does not permit investor email');
   });
 
+  it('launches no campaign while marketing email is off, even in an approved market', async () => {
+    const accountId = await fx.tenant();
+    await prisma.controlPlane.update({
+      where: { accountId },
+      data: { marketingEmailEnabled: false },
+    });
+    await fx.approvedMarket(accountId, 'GA');
+    const deal = await fx.seedDeal(accountId, 'GA');
+    await executed(accountId, deal.id);
+    await agreements.verify(accountId, deal.id, USER, {
+      confirmations: ALL_CONFIRMED,
+    });
+    const prepared = await campaigns.prepare(accountId, deal.id, USER, {
+      maxBuyers: 5,
+    });
+    await expect(
+      campaigns.approveAndLaunch(accountId, prepared.campaign.id, USER),
+    ).rejects.toThrow('Marketing email is switched off');
+  });
+
   it('falls back to legal review when the approval lapses, and keeps an E market to research', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     await fx.approvedMarket(accountId, 'GA');
     const v = await prisma.marketPolicyVersion.findFirst({
       where: { accountId, state: 'GA' },
@@ -475,7 +495,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
   });
 
   it('measures technical readiness from templates and a passing self-test, without legal approval', async () => {
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     await markets.importResearch(accountId, USER, { states: ['TX'] });
     let tx = await markets.selfTest(accountId, 'TX', USER);
     expect(tx.passed).toBe(false);

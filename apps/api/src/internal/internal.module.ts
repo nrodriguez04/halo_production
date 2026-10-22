@@ -23,5 +23,6 @@ import { DataModule } from '../data/data.module';
   ],
   controllers: [InternalController],
   providers: [MessageDispatchService],
+  exports: [MessageDispatchService],
 })
 export class InternalModule {}

@@ -331,6 +331,20 @@ export class CampaignsService {
       'buyer_deal_page',
       'Launching a buyer campaign',
     );
+    // Campaign emails are marketing: they need their own switch on top of
+    // email's (docs/communications.md s2).
+    const switches = await this.controlPlane.getStatus(accountId, {
+      provision: false,
+    });
+    if (
+      !switches.enabled ||
+      !switches.emailEnabled ||
+      !switches.marketingEmailEnabled
+    ) {
+      throw new BadRequestException(
+        'Marketing email is switched off on the Control Plane. A campaign launches only after someone explicitly turns on email and marketing email.',
+      );
+    }
     if (!c.packageId)
       throw new BadRequestException('The campaign has no package.');
     if (c.targets.length === 0)

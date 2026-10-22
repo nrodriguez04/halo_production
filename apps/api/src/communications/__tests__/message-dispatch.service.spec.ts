@@ -78,6 +78,8 @@ describe('MessageDispatchService', () => {
         enabled: true,
         smsEnabled: true,
         emailEnabled: true,
+        marketingEmailEnabled: true,
+        marketingSmsEnabled: true,
       }),
     };
     twilio = {
@@ -501,6 +503,87 @@ describe('MessageDispatchService', () => {
       prisma.message.findFirst.mockResolvedValue(approved());
       await service.sendApproved('tenant-1', 'msg-1');
       expect(disclosure.assertEquitableInterest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('message classes and switches', () => {
+    it('holds marketing when only the channel is on', async () => {
+      prisma.message.findFirst.mockResolvedValue(approved());
+      controlPlane.getStatus.mockResolvedValue({
+        enabled: true,
+        smsEnabled: true,
+        emailEnabled: true,
+        marketingEmailEnabled: false,
+        marketingSmsEnabled: false,
+      });
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).rejects.toMatchObject({
+        reason: 'CONTROL_PLANE_MARKETING_DISABLED',
+      });
+      expect(twilio.sendSms).not.toHaveBeenCalled();
+    });
+
+    it('lets a reply through with the channel on and marketing off', async () => {
+      prisma.message.findFirst.mockResolvedValue(
+        approved({ metadata: { inReplyToMessageId: 'in-1' } }),
+      );
+      controlPlane.getStatus.mockResolvedValue({
+        enabled: true,
+        smsEnabled: true,
+        emailEnabled: true,
+        marketingEmailEnabled: false,
+        marketingSmsEnabled: false,
+      });
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(twilio.sendSms).toHaveBeenCalled();
+    });
+
+    it('sends an internal test only to an allowlisted address, whatever the switches', async () => {
+      process.env.EMAIL_INTERNAL_RECIPIENTS = 'ops@halo.example';
+      controlPlane.getStatus.mockResolvedValue({
+        enabled: false,
+        smsEnabled: false,
+        emailEnabled: false,
+        marketingEmailEnabled: false,
+        marketingSmsEnabled: false,
+      });
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          channel: 'email',
+          leadId: null,
+          dealId: null,
+          metadata: {
+            type: 'internal_test',
+            messageClass: 'internal_test',
+            subject: 'Test',
+          },
+          ...counterpartyColumns('email', 'ops@halo.example'),
+        }),
+      );
+      await service.sendApproved('tenant-1', 'msg-1');
+      expect(email.sendEmail).toHaveBeenCalled();
+
+      email.sendEmail.mockClear();
+      prisma.message.findFirst.mockResolvedValue(
+        approved({
+          channel: 'email',
+          leadId: null,
+          dealId: null,
+          metadata: {
+            type: 'internal_test',
+            messageClass: 'internal_test',
+            subject: 'Test',
+          },
+          ...counterpartyColumns('email', 'someone@else.example'),
+        }),
+      );
+      await expect(
+        service.sendApproved('tenant-1', 'msg-1'),
+      ).rejects.toMatchObject({
+        reason: 'NOT_INTERNAL_RECIPIENT',
+      });
+      expect(email.sendEmail).not.toHaveBeenCalled();
     });
   });
 
