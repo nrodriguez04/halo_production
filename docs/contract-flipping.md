@@ -406,7 +406,8 @@ Roles that need no judgement are deterministic services, not models. Where an ag
 | `DISPOSITION_SWEEP`, `DISPOSITION_SWEEP_HOUR_UTC` | env | on, 13 |
 
 Permissions:
-- `deals:approve`: set the offer to the seller; verify a tax-sale interest; verify, extend or terminate a contract; launch or resume a campaign; approve a package; counter, reject or accept an offer; verify proof of funds; execute or cancel an assignment; confirm a closing; record the fee; cancel a closing.
+- `deals:approve`: set the offer to the seller; verify a tax-sale interest; verify, extend or terminate a contract; launch or resume a campaign; approve a package; counter, reject or accept an offer; verify proof of funds; execute or cancel an assignment; confirm a closing; record the fee; cancel a closing; approve or reject a message (it releases the send); approve or reject an agent run (it applies the run's gated actions); approve an automation run.
+- `control_plane:write`: also writing automation runs by hand (`POST /automation/runs*`); the worker records its own through `/internal`.
 - `compliance:write`, `compliance:approve`, `markets:activate`: market policies, approvals, templates and activation (docs/markets.md s10).
 
 Tenant admins have all of them.

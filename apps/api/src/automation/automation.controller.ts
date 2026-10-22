@@ -10,6 +10,9 @@ import {
 import { z } from 'zod';
 import { AutomationService } from './automation.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { Permissions } from '../auth/permissions.decorator';
+import { APPROVE } from '../disposition/disposition.controller';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { AuditService } from '../audit/audit.service';
 
@@ -48,8 +51,16 @@ const FailRunSchema = z
   })
   .strict();
 
+const OPERATOR = 'control_plane:write';
+
+/**
+ * Automation runs. Reading is open to the account; writing is not. The
+ * worker records its runs through /internal, so these write routes are for
+ * operators only: a run written here with a decision could otherwise be put
+ * in front of an approver as if an agent had made it.
+ */
 @Controller('automation')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PermissionsGuard)
 export class AutomationController {
   constructor(
     private readonly automationService: AutomationService,
@@ -87,6 +98,7 @@ export class AutomationController {
   }
 
   @Post('runs')
+  @Permissions(OPERATOR)
   async createRun(
     @CurrentAccountId() accountId: string,
     @Body() body: unknown,
@@ -100,6 +112,7 @@ export class AutomationController {
   }
 
   @Post('runs/:id/start')
+  @Permissions(OPERATOR)
   async startRun(
     @Param('id') runId: string,
     @CurrentAccountId() accountId: string,
@@ -108,6 +121,7 @@ export class AutomationController {
   }
 
   @Post('runs/:id/complete')
+  @Permissions(OPERATOR)
   async completeRun(
     @Param('id') runId: string,
     @CurrentAccountId() accountId: string,
@@ -118,6 +132,7 @@ export class AutomationController {
   }
 
   @Post('runs/:id/fail')
+  @Permissions(OPERATOR)
   async failRun(
     @Param('id') runId: string,
     @CurrentAccountId() accountId: string,
@@ -128,6 +143,7 @@ export class AutomationController {
   }
 
   @Post('runs/:id/cancel')
+  @Permissions(OPERATOR)
   async cancelRun(
     @Param('id') runId: string,
     @CurrentAccountId() accountId: string,
@@ -145,6 +161,7 @@ export class AutomationController {
   }
 
   @Post('runs/:id/approve')
+  @Permissions(APPROVE)
   async approveRun(
     @Param('id') runId: string,
     @CurrentAccountId() accountId: string,
