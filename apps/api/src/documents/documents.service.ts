@@ -14,6 +14,7 @@ import {
   type ChecklistItem,
   type DocumentCategory,
 } from './documents.checklist';
+import { assertUpload } from './file-type';
 
 export interface DocumentFilter {
   category?: DocumentCategory;
@@ -66,7 +67,6 @@ export interface ChecklistStatus extends ChecklistItem {
 /** Object-storage prefix under the tenant: `<accountId>/documents/<file>`. */
 export const DOCUMENT_STORAGE_CATEGORY = 'documents';
 const MAX_BYTES = 25 * 1024 * 1024;
-const ALLOWED_NAME = /\.(pdf|docx?|xlsx?|csv|txt|png|jpe?g|gif|webp)$/i;
 
 /**
  * The tenant's document library. Bytes go to object storage through
@@ -125,14 +125,10 @@ export class DocumentsService {
     if (file.size > MAX_BYTES) {
       throw new BadRequestException('File too large (max 25MB)');
     }
-    if (!ALLOWED_NAME.test(file.originalname)) {
-      throw new BadRequestException(
-        'Unsupported file type; upload PDF, Word, Excel, CSV, text or image files',
-      );
-    }
+    // The type comes from the extension and the bytes, never the claim.
+    const { contentType } = assertUpload(file.originalname, file.buffer);
 
     const safeName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const contentType = file.mimetype || 'application/octet-stream';
     const stored = await this.storage.upload(
       accountId,
       DOCUMENT_STORAGE_CATEGORY,

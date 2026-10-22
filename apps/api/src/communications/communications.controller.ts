@@ -11,11 +11,14 @@ import {
 import { CommunicationsService } from './communications.service';
 import { QueueService } from '../queues/queue.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { Permissions } from '../auth/permissions.decorator';
+import { APPROVE } from '../disposition/disposition.controller';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { MessageCreateSchema } from '@halo/shared';
 
 @Controller('communications')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PermissionsGuard)
 export class CommunicationsController {
   constructor(
     private readonly communicationsService: CommunicationsService,
@@ -52,7 +55,9 @@ export class CommunicationsController {
     return this.communicationsService.findOne(id, accountId);
   }
 
+  /** Approving releases the message to the outside world: `deals:approve`. */
   @Put('messages/:id/approve')
+  @Permissions(APPROVE)
   async approve(
     @Param('id') id: string,
     @CurrentAccountId() accountId: string,
@@ -67,6 +72,7 @@ export class CommunicationsController {
   }
 
   @Put('messages/:id/reject')
+  @Permissions(APPROVE)
   async reject(
     @Param('id') id: string,
     @Body() body: { reason?: string },
