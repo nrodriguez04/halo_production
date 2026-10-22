@@ -8,6 +8,10 @@ COPY package.json package-lock.json* ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 RUN npm ci --workspace=@halo/web --workspace=@halo/shared --include-workspace-root
+# npm hoists workspace dependencies to the root; a workspace gets its own
+# node_modules only when one of its versions conflicts. Create them so the
+# copies below work either way.
+RUN mkdir -p apps/web/node_modules packages/shared/node_modules
 
 # ---- build stage ----
 FROM base AS builder
@@ -18,6 +22,18 @@ COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_module
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+# Inlined into the browser bundle by `next build` (docker-compose.prod.yml
+# passes them as build args); setting them at runtime has no effect.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_DESCOPE_PROJECT_ID
+ARG NEXT_PUBLIC_DESCOPE_FLOW_ID=sign-in
+ARG NEXT_PUBLIC_DESCOPE_BASE_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_DESCOPE_PROJECT_ID=$NEXT_PUBLIC_DESCOPE_PROJECT_ID \
+    NEXT_PUBLIC_DESCOPE_FLOW_ID=$NEXT_PUBLIC_DESCOPE_FLOW_ID \
+    NEXT_PUBLIC_DESCOPE_BASE_URL=$NEXT_PUBLIC_DESCOPE_BASE_URL
+# The app has no static assets yet; the runtime stage copies the folder.
+RUN mkdir -p apps/web/public
 RUN npm run build --workspace=@halo/shared
 RUN npm run build --workspace=@halo/web
 

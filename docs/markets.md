@@ -227,5 +227,5 @@ The agent also holds without asking a model when:
 - **No market is approved.** Counsel must review each policy. The bundled research is a starting point, and its low-confidence states need the most work.
 - **No template is approved.** Counsel's documents must be uploaded and approved per state. The starter scaffolds are not legal text.
 - **Data access needs a provider key.** Research coverage is 0 until ATTOM, Realie, RentCast or Regrid is configured, or sourcing markets are added.
-- **Word-to-PDF needs Gotenberg** at `PDF_CONVERTER_URL`.
+- **Word-to-PDF needs Gotenberg** at `PDF_CONVERTER_URL`. It is in `docker-compose.prod.yml` and verified against the same image locally and in CI; without it, Word templates generate `.docx` only.
 - **State holidays and split-state time zones** are approximations (s5).

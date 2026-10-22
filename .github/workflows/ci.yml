@@ -72,6 +72,12 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # Word-to-PDF (docs/markets.md s6): the same image as
+      # docker-compose.prod.yml, so generated agreements are converted for real.
+      gotenberg:
+        image: gotenberg/gotenberg:8
+        ports:
+          - 3000:3000
 
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +88,14 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Wait for Gotenberg
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/health && exit 0
+            sleep 2
+          done
+          echo "Gotenberg did not come up" && exit 1
 
       - name: Run migrations
         env:
@@ -101,6 +115,7 @@ jobs:
       - name: Contract-flipping lifecycle (real database)
         env:
           INTEGRATION_DATABASE_URL: postgresql://halo:halo_dev_password@localhost:5432/halo_test
+          PDF_CONVERTER_URL: http://localhost:3000
         run: npm run test:integration -w @halo/api
 
   agents-eval:
@@ -166,6 +181,20 @@ jobs:
       - name: Live report
         if: always() && steps.changes.outputs.live == 'true'
         run: cat "$RUNNER_TEMP/agents-eval-live.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+  docker-images:
+    # The production images (docker-compose.prod.yml) built from the same
+    # Dockerfiles a deploy uses. Nothing built them in CI before, and they
+    # had stopped building without anyone seeing it.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, worker, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the ${{ matrix.app }} image
+        run: docker build -f apps/${{ matrix.app }}/Dockerfile -t halo-${{ matrix.app }}:ci .
 
   agents-tests:
     # The CrewAI runtime is Python and outside the npm workspaces. Only the

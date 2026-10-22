@@ -1,6 +1,6 @@
 # Agent design proposal
 
-Status: **proposal — needs the five decisions in §9 before implementation.**
+Status: **adopted.** The decisions in §9 were taken on 2026-10-12. Seven agents are built (§3, §10), and the twelve roles are mapped in §12.
 
 This document proposes how AI agents operate inside Halo: which agents exist,
 what triggers them, what they may do on their own, what they must hand to a

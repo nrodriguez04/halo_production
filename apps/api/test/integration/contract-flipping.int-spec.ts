@@ -936,8 +936,24 @@ describeDb(
         kind: 'purchase_agreement',
       });
       expect(out.templateVersionId).toBe(word.id);
-      expect(out.pdfDocumentId).toBeNull();
-      expect(out.pdfNote).toContain('PDF_CONVERTER_URL');
+      if (process.env.PDF_CONVERTER_URL) {
+        // A Gotenberg is running (docs/markets.md s6): a real PDF of the
+        // filled Word file, stored beside it.
+        expect(out.pdfDocumentId).toBeTruthy();
+        const pdfRow = await prisma.document.findUnique({
+          where: { id: out.pdfDocumentId! },
+        });
+        expect(pdfRow).toMatchObject({ contentType: 'application/pdf' });
+        const bytes = objects.get(pdfRow!.storageKey)!;
+        expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+        const { PDFDocument } = await import('pdf-lib');
+        expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(
+          0,
+        );
+      } else {
+        expect(out.pdfDocumentId).toBeNull();
+        expect(out.pdfNote).toContain('PDF_CONVERTER_URL');
+      }
       const generated = await prisma.document.findUnique({
         where: { id: out.documentId },
       });
