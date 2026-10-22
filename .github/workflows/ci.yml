@@ -91,6 +91,10 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
+      # The api resolves @halo/shared's types from its build output.
+      - name: Build shared package
+        run: npm run build -w @halo/shared
+
       # The contract-flipping lifecycle (docs/contract-flipping.md) through the
       # real services against the migrated database: synthetic fixtures on
       # throwaway tenants, nothing sent (the queue is stubbed).
