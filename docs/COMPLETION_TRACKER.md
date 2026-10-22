@@ -30,7 +30,7 @@ Gaps the audit found and where they stand:
 | Agent approve/reject routes have no permission check | done: `deals:approve` on agent runs, message approval (it releases the send) and automation-run approval |
 | Found while fixing that: `POST /automation/runs*` let any signed-in user write a run with a decision an approver could then accept as an agent's | done: operators only (`control_plane:write`); the worker uses `/internal` |
 | Document upload checks the extension only, not the MIME type | done: the type comes from the extension and the file's first bytes must match it; the client's claimed type is never stored (documents, inbound email attachments, `/storage/upload`) |
-| CrewAI scaffold unused | not started (evaluation) |
+| CrewAI scaffold unused | evaluated: not adopted now; criteria and the one likely future use in docs/crewai-evaluation.md |
 | Found while testing: every module made its own Prisma client and pool (41 pools); integration runs hit Postgres's connection limit | done: one global Prisma client |
 | Found while testing: `GET /buyers/:id` shadowed new `/buyers/*` routes | done: candidates live at `/buyer-candidates` |
 
@@ -57,8 +57,10 @@ Gaps the audit found and where they stand:
 | 6 | Investor discovery, entity matching, cash-purchase signals, inferred buy box | done | done | — |
 | 6 | Inbound SMS response matching to buyers | done (a number held on exactly one buyer; Buyer Responder drafts the reply) | when Twilio is configured | Twilio number and A2P registration |
 | 7 | Email infrastructure: readiness, message classes and switches, internal test sends, inbound, unsubscribe, suppression list, delivery events, deliverability, seller consent, audit | done (internal test send verified against a local SMTP catcher; signed event webhooks verified over HTTP with local keys) | internal test sends only; external sending stays off by instruction | user authorization to send; SendGrid or Resend account, domain authentication and the event webhook key |
-| 8 | Agents: Market Intelligence, Market Expansion, Compliance, Transaction Coordinator and the other roles | not started | | LLM key; web search for Market Expansion |
-| 8 | CrewAI evaluation | not started | | |
+| 8 | Market Intelligence agent (explains the deterministic ranking; records a brief, changes nothing) | done (golden set 7 cases with hand-written replies; end to end against the scratch api with recorded replies) | needs AI on and a model key | LLM key; live eval agreement not yet measured |
+| 8 | Market Expansion agent (proposes sourced answers, counsel questions, requirements, steps for one state; a person accepts into the draft; never submits, approves or activates) | done (golden set 16 cases; accepted proposals verified in the scratch database) | needs AI on and a model key | LLM key; web research needs a search-capable model route (not built); live eval agreement not yet measured |
+| 8 | The twelve roles mapped to agents or deterministic services (Compliance, Transaction Coordinator, Contract, Property and Buyer Intelligence are services by design) | done (docs/agent-design.md s12) | as each agent or service | — |
+| 8 | CrewAI evaluation | done (docs/crewai-evaluation.md: no agent moves now) | — | — |
 | 9 | Security, regression, deployment validation | not started | | |
 
 ## Milestones
@@ -68,3 +70,5 @@ Gaps the audit found and where they stand:
 | 2026-10-22 | Markets: 51 jurisdictions, research, versions, ladder, authorizations, gates, self-test; templates: .docx/.txt, approval, generation, PDFs; verification checks | see git log |
 | 2026-10-22 | Data pipeline: property facts in enrichment, recorded sales (county CSV, ATTOM, Regrid), investor discovery, market intelligence and recommendations; DocuSign signer validation; one Prisma client | see git log |
 | 2026-10-22 | Communications: message classes, marketing switches, market channel gates at send time, internal test sends, SendGrid/Resend delivery events, suppression list, deliverability, seller consent, buyer SMS matching | see git log |
+| 2026-10-22 | Security: approvals need deals:approve; automation-run writes are operator-only; uploads typed by their bytes | see git log |
+| 2026-10-22 | Agents: Market Intelligence and Market Expansion, golden sets, role mapping, CrewAI evaluation | see git log |

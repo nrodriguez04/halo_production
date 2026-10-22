@@ -15,8 +15,10 @@ import {
 import {
   AGENT_NAMES,
   agentWorkflow,
+  NATIONWIDE_SCOPE,
   aiProviderForModel,
   assignmentFeeFor,
+  jurisdiction,
   underwriteDeal,
   type AgentAction,
   type AgentAutonomy,
@@ -44,6 +46,7 @@ import { thresholdFor } from '../cost-control/policy/lead-score-thresholds';
 import { openValue } from '../pii/contact-crypto';
 import { OffersService } from '../disposition/offers.service';
 import { DispositionEligibilityService } from '../disposition/eligibility.service';
+import { MarketsService } from '../markets/markets.service';
 
 const TRIGGER_TYPE: Record<AgentTrigger, AutomationTriggerType> = {
   lifecycle: AutomationTriggerType.API,
@@ -109,6 +112,7 @@ export class AgentOrchestrationService {
     private skipTrace: LeadSkipTraceService,
     private offers: OffersService,
     private eligibility: DispositionEligibilityService,
+    private markets: MarketsService,
   ) {}
 
   /** Queue an agent for an entity. Returns false when the control plane is off. */
@@ -387,7 +391,13 @@ export class AgentOrchestrationService {
   /** Agent runs with a label for the entity, newest first. */
   async listRuns(
     accountId: string,
-    filter: { agent?: AgentName; status?: AutomationRunStatus; limit?: number },
+    filter: {
+      agent?: AgentName;
+      status?: AutomationRunStatus;
+      limit?: number;
+      entityType?: string;
+      entityId?: string;
+    },
   ) {
     const runs = await this.prisma.automationRun.findMany({
       where: {
@@ -395,6 +405,8 @@ export class AgentOrchestrationService {
         source: 'agent',
         agentName: filter.agent ?? { in: [...AGENT_NAMES] },
         ...(filter.status ? { status: filter.status } : {}),
+        ...(filter.entityType ? { entityType: filter.entityType } : {}),
+        ...(filter.entityId ? { entityId: filter.entityId } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(filter.limit ?? 50, 200),
@@ -448,6 +460,35 @@ export class AgentOrchestrationService {
               .join(', ')
           : `Deal ${d.id}`,
         status: d.stage,
+        score: null,
+      });
+    }
+    const marketStates = runs
+      .filter(
+        (r) =>
+          r.entityType === 'market' &&
+          r.entityId &&
+          r.entityId !== NATIONWIDE_SCOPE,
+      )
+      .map((r) => r.entityId as string);
+    const markets = marketStates.length
+      ? await this.prisma.market.findMany({
+          where: { accountId, state: { in: marketStates } },
+          select: { state: true, requestedStatus: true },
+        })
+      : [];
+    for (const r of runs) {
+      if (r.entityType !== 'market' || !r.entityId) continue;
+      const requested = markets.find((m) => m.state === r.entityId);
+      labels.set(r.entityId, {
+        label:
+          r.entityId === NATIONWIDE_SCOPE
+            ? 'Nationwide'
+            : (jurisdiction(r.entityId)?.name ?? r.entityId),
+        // What a person asked for; the market page has the effective status.
+        status: requested
+          ? requested.requestedStatus.toLowerCase().replace(/_/g, ' ')
+          : 'all markets',
         score: null,
       });
     }
@@ -660,6 +701,12 @@ export class AgentOrchestrationService {
             out.push(await this.recordBuyerOffer(accountId, run, action));
             break;
           }
+          case 'record_market_brief':
+            // The run is the record: the brief is read from it, and it
+            // changes nothing else (design doc s3.6).
+            out.push({ action, result: 'applied' });
+            break;
+          case 'propose_market_draft':
           case 'queue_buyer_blast':
           case 'transition_deal':
           case 'draft_message':
@@ -796,6 +843,26 @@ export class AgentOrchestrationService {
   ): Promise<AppliedAction> {
     const leadId = run.entityType === 'lead' ? run.entityId : null;
     const dealId = run.entityType === 'deal' ? run.entityId : null;
+    if (action.type === 'propose_market_draft') {
+      // The run's market, not the one named inside the decision. A refusal
+      // (counsel has the draft) is thrown, so the run stays open and can be
+      // approved once the draft is back.
+      if (run.entityType !== 'market' || !run.entityId) {
+        return { action, result: 'failed', detail: 'no market on this run' };
+      }
+      const r = await this.markets.applyAgentProposal(
+        accountId,
+        run.entityId,
+        userId,
+        action.proposal,
+        run.id,
+      );
+      return {
+        action,
+        result: 'applied',
+        detail: `${r.state} draft: ${r.answers.length} answer(s), ${r.questions} counsel question(s), ${r.steps} step(s), ${r.requirements} requirement(s), ${r.sources} source(s)${r.classification ? `, class ${r.classification}` : ''}${r.skipped.length ? `; left alone (answered meanwhile): ${r.skipped.join(', ')}` : ''}`,
+      };
+    }
     try {
       if (action.type === 'transition_lead') {
         if (!leadId) throw new Error('no lead on this run');

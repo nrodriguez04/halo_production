@@ -12,6 +12,10 @@ import { MessageDispatchService } from '../../communications/message-dispatch.se
 import { LeadSkipTraceService } from '../../skip-trace/lead-skip-trace.service';
 import { SkipTraceLeadDto } from '../dto/internal.dto';
 import { AgentOrchestrationService } from '../../agent/agent-orchestration.service';
+import { MarketAgentContextService } from '../../data/market-agent-context.service';
+import { MarketAgentContextDto } from '../dto/internal.dto';
+
+const marketContext = { forAgent: jest.fn() };
 
 describe('InternalController', () => {
   let controller: InternalController;
@@ -74,6 +78,7 @@ describe('InternalController', () => {
           provide: AgentOrchestrationService,
           useValue: { openRun: jest.fn(), recordDecision: jest.fn() },
         },
+        { provide: MarketAgentContextService, useValue: marketContext },
       ],
     }).compile();
     controller = module.get(InternalController);
@@ -302,6 +307,42 @@ describe('InternalController', () => {
       await controller.chatCompletion('tenant-1', body('gpt-4o'));
       expect(openai.chatCompletion).toHaveBeenCalledTimes(1);
       expect(anthropic.chatCompletion).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('agent/market-context', () => {
+    it("builds a market agent's context for the calling tenant", async () => {
+      marketContext.forAgent.mockResolvedValue({ market: { state: 'TX' } });
+      await expect(
+        controller.marketAgentContext('tenant-1', {
+          agent: 'market_expansion',
+          entityId: 'TX',
+        }),
+      ).resolves.toEqual({ market: { state: 'TX' } });
+      expect(marketContext.forAgent).toHaveBeenCalledWith(
+        'tenant-1',
+        'market_expansion',
+        'TX',
+      );
+    });
+
+    it('accepts only the two market agents', async () => {
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+      await expect(
+        pipe.transform(
+          { agent: 'lead_analyst', entityId: 'TX' },
+          { type: 'body', metatype: MarketAgentContextDto },
+        ),
+      ).rejects.toBeDefined();
+      await expect(
+        pipe.transform(
+          { agent: 'market_intelligence', entityId: 'US' },
+          { type: 'body', metatype: MarketAgentContextDto },
+        ),
+      ).resolves.toEqual(expect.objectContaining({ entityId: 'US' }));
     });
   });
 });

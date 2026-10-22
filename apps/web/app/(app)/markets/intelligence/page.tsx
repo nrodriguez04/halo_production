@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { errorText, money } from '@/lib/disposition';
 import { STATUS_LABEL, STATUS_VARIANT, type ActivationStatus } from '@/lib/markets';
+import { MarketBriefCard } from '@/components/markets/market-agents';
 
 interface Component {
   key: string;
@@ -80,6 +81,11 @@ export default function MarketIntelligencePage() {
         }
         title="Market intelligence"
         description="Counties and zips ranked from recorded sales and Halo's own leads and closings, and the states worth activating next. Every point names its basis; estimates are labelled as such."
+      />
+
+      <MarketBriefCard
+        scope={state.trim().length === 2 ? state.trim().toUpperCase() : 'US'}
+        scopeLabel={state.trim().length === 2 ? state.trim().toUpperCase() : 'nationwide'}
       />
 
       <Card>

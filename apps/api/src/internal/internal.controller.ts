@@ -12,6 +12,7 @@ import { OpenAIService } from '../integrations/openai/openai.service';
 import { GeocodingService } from '../integrations/geocoding/geocoding.service';
 import { AttomService } from '../integrations/attom/attom.service';
 import { PropertyFactsService } from '../data/property-facts.service';
+import { MarketAgentContextService } from '../data/market-agent-context.service';
 import { propertyFromAttom } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
@@ -22,6 +23,7 @@ import {
   SkipTraceLeadDto,
   AgentRunOpenDto,
   AgentDecisionDto,
+  MarketAgentContextDto,
 } from './dto/internal.dto';
 import { MessageDispatchService } from '../communications/message-dispatch.service';
 import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
@@ -61,6 +63,7 @@ export class InternalController {
     private readonly propertyFacts: PropertyFactsService,
     private readonly prisma: PrismaService,
     private readonly agents: AgentOrchestrationService,
+    private readonly marketContext: MarketAgentContextService,
   ) {}
 
   private context(accountId: string, dto: CostAttributionDto): CostContext {
@@ -230,6 +233,18 @@ export class InternalController {
     @Body() dto: AgentRunOpenDto,
   ) {
     return this.agents.openRun(accountId, dto as OpenRunInput);
+  }
+
+  /**
+   * A market agent's context: research, the draft and the ranking live in
+   * the api, so the worker asks for them here.
+   */
+  @Post('agent/market-context')
+  marketAgentContext(
+    @CurrentAccountId() accountId: string,
+    @Body() dto: MarketAgentContextDto,
+  ) {
+    return this.marketContext.forAgent(accountId, dto.agent, dto.entityId);
   }
 
   /** The worker's decision for a run; applied within the tenant's autonomy tier. */

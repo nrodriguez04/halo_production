@@ -11,6 +11,7 @@ import { DealsModule } from '../deals/deals.module';
 import { QueuesModule } from '../queues/queues.module';
 import { DispositionModule } from '../disposition/disposition.module';
 import { DispositionGateModule } from '../disposition/disposition-gate.module';
+import { MarketsModule } from '../markets/markets.module';
 
 // LeadLifecycleModule is @Global, so LeadLifecycleService resolves without an import.
 @Module({
@@ -23,6 +24,7 @@ import { DispositionGateModule } from '../disposition/disposition-gate.module';
     QueuesModule,
     DispositionModule,
     DispositionGateModule,
+    MarketsModule,
   ],
   controllers: [AgentController],
   providers: [AgentService, AgentOrchestrationService, AgentSweepService],

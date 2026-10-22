@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { MarketBrief, MarketDraftProposal } from './market-agents';
 
 /**
  * The agent frame shared by the api (triggers, run ledger, approval) and the
@@ -11,6 +12,8 @@ export const AGENT_NAMES = [
   'outreach_drafter',
   'disposition_matcher',
   'buyer_responder',
+  'market_intelligence',
+  'market_expansion',
 ] as const;
 export type AgentName = (typeof AGENT_NAMES)[number];
 
@@ -20,11 +23,26 @@ export const AGENT_LABEL: Record<AgentName, string> = {
   outreach_drafter: 'Outreach Drafter',
   disposition_matcher: 'Disposition Matcher',
   buyer_responder: 'Buyer Responder',
+  market_intelligence: 'Market Intelligence',
+  market_expansion: 'Market Expansion',
 };
 
 /** How a run started (design doc s4). */
 export type AgentTrigger = 'lifecycle' | 'inbound' | 'sweep' | 'manual';
-export type AgentEntityType = 'lead' | 'deal' | 'message';
+/** market: a state code, or US for the nationwide Market Intelligence brief. */
+export type AgentEntityType = 'lead' | 'deal' | 'message' | 'market';
+export const AGENT_ENTITY_TYPES = ['lead', 'deal', 'message', 'market'] as const;
+
+/** Which entities each agent works on; the first is the default. */
+export const AGENT_ENTITY: Record<AgentName, AgentEntityType[]> = {
+  lead_analyst: ['lead'],
+  deal_underwriter: ['deal'],
+  outreach_drafter: ['deal', 'lead'],
+  disposition_matcher: ['deal'],
+  buyer_responder: ['deal', 'message'],
+  market_intelligence: ['market'],
+  market_expansion: ['market'],
+};
 
 /** One job on the `agents` queue. */
 export interface AgentJobPayload {
@@ -84,6 +102,9 @@ export const AGENT_TIER: Record<AgentName, AgentModelTier> = {
   outreach_drafter: 'mid',
   disposition_matcher: 'mid',
   buyer_responder: 'mid',
+  market_intelligence: 'mid',
+  // Reading statutes and research for what counsel must still decide.
+  market_expansion: 'strong',
 };
 
 /** Workflow name on the run and scopeRef of the agent's budget bucket. */
@@ -201,6 +222,26 @@ export type AgentAction =
       compsSummary: string | null;
       /** deal.updatedAt (ISO) when the context was loaded. */
       dealUpdatedAt: string;
+    }
+  | {
+      /**
+       * Market Intelligence brief (design doc s3.6): the deterministic
+       * ranking explained. Autonomous: the run is the record, and nothing
+       * else changes.
+       */
+      type: 'record_market_brief';
+      brief: MarketBrief;
+    }
+  | {
+      /**
+       * Market Expansion proposal (design doc s3.7): additions to the
+       * market's editable draft, never to an approved policy, a status or a
+       * class a person set. Approving writes them into the draft marked as
+       * unverified; counsel still reviews and approves the policy.
+       */
+      type: 'propose_market_draft';
+      proposal: MarketDraftProposal;
+      gated: true;
     };
 
 export interface AgentDecision {

@@ -1,4 +1,4 @@
-import type { AgentDecision } from '@halo/shared';
+import type { AgentDecision, AgentEntityType } from '@halo/shared';
 // Worker -> api client for paid operations.
 //
 // The worker cannot run IntegrationCostControlService itself (it is wired
@@ -256,7 +256,7 @@ export function propertyLookup(
 
 export interface AgentRunOpenInput {
   agent: string;
-  entityType: 'lead' | 'deal' | 'message';
+  entityType: AgentEntityType;
   entityId: string;
   trigger: 'lifecycle' | 'inbound' | 'sweep' | 'manual';
   triggerEventId?: string;
@@ -269,6 +269,21 @@ export function openAgentRun(
   input: AgentRunOpenInput,
 ): Promise<{ id: string }> {
   return postInternal<{ id: string }>('agent/runs', accountId, { ...input });
+}
+
+/**
+ * A market agent's context, built by the api: the research, the draft and
+ * the ranking live there (docs/agent-design.md s3.6, s3.7).
+ */
+export function marketAgentContext<T>(
+  accountId: string,
+  agent: 'market_intelligence' | 'market_expansion',
+  entityId: string,
+): Promise<T> {
+  return postInternal<T>('agent/market-context', accountId, {
+    agent,
+    entityId,
+  });
 }
 
 /** What the agent saw and what the model answered, kept with the run (docs/agent-eval.md). */

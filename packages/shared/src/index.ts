@@ -5,6 +5,7 @@ export * from './schemas';
 // Prompt templates
 export * from './agents/prompts';
 export * from './agents/agents';
+export * from './agents/market-agents';
 
 // Utilities
 export * from './utils/reconciliation';
