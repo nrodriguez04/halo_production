@@ -44,6 +44,12 @@ describe('opportunity ranking', () => {
     expect(r.reasons).toEqual(expect.arrayContaining(['Numbers need review', '1 open title issue(s)', 'No way to reach the seller']));
   });
 
+  it('marks down a tax-sale deal until its interest is verified', () => {
+    const r = scoreOpportunity(opp({ risk: { titleIssues: 0, noSellerContact: false, taxSaleUnverified: true } }), 5_000);
+    expect(r.components.risk).toBe(-8);
+    expect(r.reasons).toContain('Tax sale: interest not verified');
+  });
+
   it('never invents demand: no contactable buyer scores no demand points', () => {
     expect(scoreOpportunity(opp({ demand: { contactable: 0, strong: 0 } }), 5_000).components.demand).toBe(0);
   });

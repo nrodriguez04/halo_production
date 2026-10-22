@@ -103,6 +103,7 @@ export class CommandCenterService {
             },
           },
           economics: true,
+          taxSaleInterest: { select: { verifiedAt: true } },
         },
         orderBy: { updatedAt: 'desc' },
         take: 200,
@@ -212,6 +213,8 @@ export class CommandCenterService {
             !!d.lead &&
             !d.lead.canonicalPhoneHash &&
             !d.lead.canonicalEmailHash,
+          taxSaleUnverified:
+            d.acquisitionType === 'tax_sale' && !d.taxSaleInterest?.verifiedAt,
         },
       });
     }
@@ -237,6 +240,7 @@ export class CommandCenterService {
       runs,
       drafts,
       underwriting,
+      taxSale,
     ] = await Promise.all([
       this.eligibility.evaluate(accountId, dealId),
       this.prisma.purchaseAgreement.findMany({
@@ -276,6 +280,7 @@ export class CommandCenterService {
         take: 50,
       }),
       this.offers.underwriting(accountId, dealId).catch(() => null),
+      this.prisma.taxSaleInterest.findFirst({ where: { accountId, dealId } }),
     ]);
     const agreement = agreements[0] ?? null;
     const activeAssignment =
@@ -317,6 +322,7 @@ export class CommandCenterService {
       pricing,
       matches: matches?.matches ?? [],
       underwriting,
+      taxSale,
       buyersConsidered: matches?.considered ?? 0,
       packages,
       assignments,

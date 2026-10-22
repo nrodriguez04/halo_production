@@ -2,12 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   evaluateDispositionEligibility,
   eligibilitySummary,
+  type AcquisitionType,
   type Assignability,
   type DispositionEligibility,
   type JurisdictionPolicyStatus,
   type PermissionValue,
   type PurchaseAgreementStatus,
   type RequiredDisclosure,
+  type TaxSaleInterestType,
+  type TaxSaleTitleStatus,
   type TriState,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
@@ -76,11 +79,14 @@ export class DispositionEligibilityService {
       select: {
         id: true,
         leadId: true,
+        acquisitionType: true,
+        taxSaleInterest: true,
         property: { select: { state: true } },
         lead: { select: { canonicalState: true } },
       },
     });
     if (!deal) throw new NotFoundException(`Deal ${dealId} not found`);
+    const t = deal.taxSaleInterest;
     const state = normalizeState(
       deal.property?.state ?? deal.lead?.canonicalState ?? null,
     );
@@ -125,6 +131,17 @@ export class DispositionEligibilityService {
 
     const result = evaluateDispositionEligibility({
       now,
+      acquisitionType: deal.acquisitionType as AcquisitionType,
+      taxSale: t
+        ? {
+            interestType: t.interestType as TaxSaleInterestType,
+            redemptionEndsAt: t.redemptionEndsAt,
+            redeemed: t.redeemed,
+            titleStatus: t.titleStatus as TaxSaleTitleStatus,
+            transferable: t.transferable as 'yes' | 'no' | 'unknown',
+            verifiedAt: t.verifiedAt,
+          }
+        : null,
       state,
       agreement: agreement
         ? {

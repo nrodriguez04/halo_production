@@ -31,6 +31,7 @@ import { ShareLinksService } from './share-links.service';
 import { AssignmentsService } from './assignments.service';
 import { CommandCenterService } from './command-center.service';
 import { AgreementDraftingService } from './agreement-drafting.service';
+import { TaxSalesService } from './tax-sales.service';
 import {
   AcceptOfferSchema,
   AssignmentExecutedSchema,
@@ -134,6 +135,48 @@ const ReviewTemplateSchema = z
   })
   .strict();
 
+const TaxSaleSchema = z
+  .object({
+    interestType: z
+      .enum(['tax_deed', 'tax_lien_certificate', 'auction_bid', 'unknown'])
+      .optional(),
+    county: z.string().trim().max(120).nullable().optional(),
+    auctionDate: z.coerce.date().nullable().optional(),
+    advertisedPrice: z
+      .number()
+      .finite()
+      .min(0)
+      .max(100_000_000)
+      .nullable()
+      .optional(),
+    winningBid: z
+      .number()
+      .finite()
+      .min(0)
+      .max(100_000_000)
+      .nullable()
+      .optional(),
+    redemptionEndsAt: z.coerce.date().nullable().optional(),
+    redeemed: z.boolean().optional(),
+    titleStatus: z
+      .enum(['unverified', 'clouded', 'quiet_title_needed', 'insurable'])
+      .optional(),
+    transferable: z.enum(['yes', 'no', 'unknown']).optional(),
+    evidenceDocumentId: z.string().trim().min(1).max(64).nullable().optional(),
+    notes: z.string().trim().max(4000).nullable().optional(),
+  })
+  .strict();
+const NoteSchema = z
+  .object({ note: z.string().trim().max(1000).optional() })
+  .strict();
+
+const SellerOfferSchema = z
+  .object({
+    amount: z.number().finite().min(1).max(100_000_000),
+    reason: z.string().trim().min(5).max(1000).optional(),
+  })
+  .strict();
+
 const ConfirmOfferSchema = z
   .object({ amount: z.number().finite().min(1).max(100_000_000).optional() })
   .strict();
@@ -158,7 +201,39 @@ export class DealDispositionController {
     private assignments: AssignmentsService,
     private buyers: BuyerIntelligenceService,
     private drafting: AgreementDraftingService,
+    private taxSales: TaxSalesService,
   ) {}
+
+  @Get('tax-sale')
+  taxSale(@CurrentAccountId() a: string, @Param('dealId') dealId: string) {
+    return this.taxSales.get(a, dealId);
+  }
+
+  @Put('tax-sale')
+  recordTaxSale(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('dealId') dealId: string,
+    @Body() body: unknown,
+  ) {
+    return this.taxSales.upsert(a, dealId, u, input(TaxSaleSchema, body));
+  }
+
+  @Post('tax-sale/verify')
+  @Permissions(APPROVE)
+  verifyTaxSale(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('dealId') dealId: string,
+    @Body() body: unknown,
+  ) {
+    return this.taxSales.verify(
+      a,
+      dealId,
+      u,
+      input(NoteSchema, body ?? {}).note,
+    );
+  }
 
   @Get('agreement-templates')
   agreementTemplates(
@@ -338,6 +413,22 @@ export class DealDispositionController {
   @Get('underwriting')
   underwriting(@CurrentAccountId() a: string, @Param('dealId') dealId: string) {
     return this.offers.underwriting(a, dealId);
+  }
+
+  @Post('seller-offer')
+  @Permissions(APPROVE)
+  sellerOffer(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('dealId') dealId: string,
+    @Body() body: unknown,
+  ) {
+    return this.offers.setSellerOffer(
+      a,
+      dealId,
+      u,
+      input(SellerOfferSchema, body),
+    );
   }
 
   @Get('offers')

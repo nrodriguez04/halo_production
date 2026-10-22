@@ -1,6 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Brain, Calculator } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useDealAction } from './use-deal-action';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,13 +42,20 @@ export function UnderwritingCard({
   ai,
   onRun,
   running,
+  dealId,
+  stage,
+  offerAmount,
 }: {
   underwriting: Underwriting | null;
   ai: AiResult | null | undefined;
   onRun: () => void;
   running: boolean;
+  dealId: string;
+  stage: string;
+  offerAmount: number | null;
 }) {
   const u = underwriting;
+  const negotiating = ['new', 'contacted', 'negotiating'].includes(stage);
   return (
     <Card>
       <CardHeader>
@@ -121,6 +131,7 @@ export function UnderwritingCard({
           </ul>
         )}
         {ai?.summary && <p className="border-t border-border pt-3 text-body text-muted-foreground">{ai.summary}</p>}
+        {negotiating && <SellerOfferForm dealId={dealId} current={offerAmount} underwriting={u} />}
       </CardContent>
     </Card>
   );
@@ -131,6 +142,68 @@ function Num({ label, value, strong }: { label: string; value: string; strong?: 
     <div>
       <p className="text-caption uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={`font-mono text-body font-semibold ${strong ? 'text-primary' : 'text-foreground'}`}>{value}</p>
+    </div>
+  );
+}
+
+/**
+ * The offer to the seller, set by a person. Up to the MAO it is within
+ * policy; above it, or while the numbers need review, the reason is asked
+ * for and recorded. The Outreach Drafter repeats this amount, never its own.
+ */
+function SellerOfferForm({
+  dealId,
+  current,
+  underwriting,
+}: {
+  dealId: string;
+  current: number | null;
+  underwriting: Underwriting | null;
+}) {
+  const [amount, setAmount] = useState(current != null ? String(current) : '');
+  const [reason, setReason] = useState('');
+  const n = Number(amount);
+  const outside =
+    !!n &&
+    (underwriting?.mao == null || n > underwriting.mao || underwriting.recommendation === 'needs_review');
+  const save = useDealAction(
+    dealId,
+    () => ({ path: `/deals/${dealId}/seller-offer`, body: { amount: n, ...(reason.trim() ? { reason: reason.trim() } : {}) } }),
+    { success: 'Offer to the seller set', failure: 'Could not set the offer' },
+    () => setReason(''),
+  );
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <p className="text-caption uppercase tracking-wider text-muted-foreground">
+        Offer to the seller {current != null ? `(now ${money(current)})` : ''}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="w-40"
+          inputMode="decimal"
+          aria-label="Offer to the seller"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder={underwriting?.offerRange ? String(underwriting.offerRange.low) : ''}
+        />
+        {outside && (
+          <Input
+            className="min-w-64 flex-1"
+            aria-label="Reason"
+            placeholder="Why offer outside the policy bounds"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        )}
+        <Button size="sm" disabled={!n || (outside && reason.trim().length < 5)} loading={save.isPending} onClick={() => save.mutate()}>
+          Set offer
+        </Button>
+      </div>
+      {outside && (
+        <p className="text-caption text-amber-400">
+          Above the MAO or on numbers that need review: the reason is recorded with the offer.
+        </p>
+      )}
     </div>
   );
 }

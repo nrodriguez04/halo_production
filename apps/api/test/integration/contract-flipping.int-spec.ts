@@ -55,6 +55,7 @@ import { OptOutService } from '../../src/compliance/opt-out.service';
 import { protectBuyerContact } from '../../src/buyers/buyer-pii';
 import { StorageService } from '../../src/storage/storage.service';
 import { AgreementDraftingService } from '../../src/disposition/agreement-drafting.service';
+import { TaxSalesService } from '../../src/disposition/tax-sales.service';
 import { Readable } from 'stream';
 
 @Global()
@@ -978,6 +979,26 @@ describeDb(
         (await offers.underwriting(accountId, weak.id)).recommendation,
       ).toBe('pass');
 
+      // The offer to the seller stays inside the policy bounds unless a
+      // person gives a reason.
+      await expect(
+        offers.setSellerOffer(accountId, strong.id, USER, { amount: 140_000 }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'OFFER_OUT_OF_BOUNDS' }),
+      });
+      await offers.setSellerOffer(accountId, strong.id, USER, {
+        amount: 120_000,
+      });
+      expect(
+        (await prisma.deal.findUnique({ where: { id: strong.id } }))
+          ?.offerAmount,
+      ).toBe(120_000);
+      const above = await offers.setSellerOffer(accountId, strong.id, USER, {
+        amount: 135_000,
+        reason: 'SYNTHETIC: seller has a competing offer',
+      });
+      expect(above.outsidePolicy[0]).toContain('above the MAO');
+
       const ranked = await center.opportunities(accountId);
       expect(ranked.map((r) => r.id)).toEqual([strong.id, weak.id]);
       expect(ranked[0].components.margin).toBeGreaterThan(0);
@@ -1127,6 +1148,76 @@ describeDb(
         where: { dealId: deal.id, status: 'accepted' },
       });
       expect(accepted).toBe(1);
+    });
+
+    it('holds a tax-sale deal until a deed, an ended redemption and insurable title are verified', async () => {
+      const accountId = tenant();
+      const deal = await seedDeal(accountId);
+      await reviewedPolicy(accountId);
+      await executedAgreement(accountId, deal.id);
+      await agreements.verify(accountId, deal.id, USER, {
+        confirmations: ALL_CONFIRMED,
+      });
+      expect((await eligibility.evaluate(accountId, deal.id)).status).toBe(
+        'eligible',
+      );
+      // The deal leaves marketing to be reclassified for this test.
+      await prisma.deal.update({
+        where: { id: deal.id },
+        data: { stage: 'under_contract' },
+      });
+
+      const taxSales = moduleRef.get(TaxSalesService);
+      await taxSales.upsert(accountId, deal.id, USER, {
+        interestType: 'tax_lien_certificate',
+        county: 'SYNTHETIC County',
+        advertisedPrice: 4_500,
+      });
+      let e = await eligibility.evaluate(accountId, deal.id);
+      expect(e.status).toBe('blocked');
+      expect(e.checks[0]).toMatchObject({
+        key: 'tax_sale_interest',
+        status: 'fail',
+      });
+      await expect(
+        deals.updateStage(deal.id, accountId, 'marketing', USER),
+      ).rejects.toThrow('not ownership');
+
+      await taxSales.upsert(accountId, deal.id, USER, {
+        interestType: 'tax_deed',
+        redemptionEndsAt: d(20),
+      });
+      expect(
+        (await eligibility.evaluate(accountId, deal.id)).checks[0].detail,
+      ).toContain('can still redeem');
+
+      const deed = await doc(
+        accountId,
+        'Tax deed',
+        { dealId: deal.id },
+        [],
+        'closing',
+      );
+      await taxSales.upsert(accountId, deal.id, USER, {
+        redemptionEndsAt: d(-5),
+        titleStatus: 'insurable',
+        transferable: 'yes',
+        evidenceDocumentId: deed.id,
+      });
+      e = await eligibility.evaluate(accountId, deal.id);
+      expect(e.status).toBe('review_required');
+      await taxSales.verify(accountId, deal.id, USER);
+      expect((await eligibility.evaluate(accountId, deal.id)).status).toBe(
+        'eligible',
+      );
+
+      // Editing a verified fact clears the verification.
+      await taxSales.upsert(accountId, deal.id, USER, {
+        titleStatus: 'clouded',
+      });
+      expect((await eligibility.evaluate(accountId, deal.id)).status).not.toBe(
+        'eligible',
+      );
     });
 
     it('puts what needs a person at the top of the attention list', async () => {

@@ -108,12 +108,25 @@ The rules:
 - **Templates are pointers, not answers.** `POST /compliance/jurisdictions/TX/from-template` pre-fills Texas's disclosure item and the statutes to check. Every legal question stays `unknown`.
 - **The Texas equitable-interest gate stays in place.** Texas deals always need the notice on file (docs/documents-and-compliance.md), whatever the policy says.
 
+### Tax-sale deals
+
+A deal bought at a tax sale is `acquisitionType: tax_sale`. Recording its `tax_sale_interests` row (`PUT /deals/:id/tax-sale`) sets that. What the sale conveyed decides whether there is anything to sell:
+- **A tax lien certificate is not ownership.** It is a right to be repaid, and the deal is blocked.
+- **An auction bid is not ownership until the deed is issued.** Blocked.
+- **A deed is blocked while the owner can still redeem,** and blocked for good if they did.
+- **Everything else unknown is review:** the interest type, the end of the redemption period, title that is not yet insurable (clouded or needing a quiet-title action), whether the interest can be transferred.
+- **A person verifies it** (`POST /deals/:id/tax-sale/verify`, `deals:approve`) against the deed and the county and title records. Verification is refused unless it is a deed, redemption is over, title is insurable, it is transferable and the deed or county record is on file.
+- **Changing a verified fact clears the verification.**
+
+The opportunity ranking marks an unverified tax-sale deal down, and the Contract tab carries the record and the verify button.
+
 ### The gate
 
 `evaluateDispositionEligibility` (`packages/shared/src/disposition/eligibility.ts`) returns `eligible`, `blocked` or `review_required`. Each check says what was found and how to fix it.
 
 | Check | Fails (blocked) | Needs review |
 |---|---|---|
+| Tax-sale interest (tax-sale deals only) | lien certificate, unconveyed bid, redeemed, redemption open, not transferable | nothing recorded, interest unknown, redemption end missing, title not insurable, transferability unknown, not verified |
 | Seller contract executed | none, draft, sent, terminated, expired | |
 | Executed copy on file | no signed copy | |
 | Terms verified | | not verified |
@@ -322,7 +335,7 @@ Until then `deal_economics.revenueStatus` is `projected`. A cancelled closing ma
   - **margin** (up to 30): the expected net from the deterministic underwriting against the minimum profit; a pass scores nothing;
   - **demand** (up to 20): contactable buyers who fit, strongly or at all; no fit, no points;
   - **velocity** (up to 10): how recent the last activity was;
-  - **risk** (down to -20): numbers that need review, open title issues, no way to reach the seller.
+  - **risk** (down to -36): numbers that need review, open title issues, no way to reach the seller, a tax-sale interest not yet verified.
 
 ### Underwriting
 
@@ -340,6 +353,7 @@ The Deal Underwriter supplies the judgement: ARV, repairs and a confidence. `und
 - **Downside results are warnings,** not review triggers: at the MAO the combined downside nearly always loses, which is what the margin is for.
 - **The model never sets the MAO.** When the Underwriter reports, the MAO written to the deal is this one. The model's own MAO and offer range are kept in `underwriting_results.evaluationMetadata` (`modelMao`, `modelOfferRange`) for comparison.
 - `GET /deals/:id/underwriting` returns it for the deal as it stands, and the workspace includes it.
+- **The offer to the seller stays inside policy.** `POST /deals/:id/seller-offer` (`deals:approve`, before contract) runs the shared `negotiationBoundsRule` against this MAO. An offer above the MAO, or set while the numbers need review, is refused unless the person gives a reason. The amount, the MAO, what was outside policy and the reason go in the audit log.
 
 ## 8. Agents
 
@@ -381,6 +395,10 @@ Roles that need no judgement are deterministic services, not models. Where an ag
   - a cancelled closing;
   - the Texas notice;
   - a seller figure typed into a package;
+  - an agreement generated from an unreviewed or incomplete template;
+  - two people accepting different offers at once, and two launches of one campaign;
+  - a seller offer above the MAO;
+  - a tax-sale lien certificate, an open redemption period, and a verified deed;
   - the attention list.
 
   Every fixture is **synthetic**, on a throwaway tenant, and nothing is sent: the queue is stubbed. CI runs it in the migration job. Locally:
@@ -404,7 +422,7 @@ Roles that need no judgement are deterministic services, not models. Where an ag
 | `DISPOSITION_SWEEP`, `DISPOSITION_SWEEP_HOUR_UTC` | env | on, 13 |
 
 Permissions:
-- `deals:approve`: verify, extend or terminate a contract; launch or resume a campaign; approve a package; counter, reject or accept an offer; verify proof of funds; execute or cancel an assignment; confirm a closing; record the fee; cancel a closing.
+- `deals:approve`: set the offer to the seller; verify a tax-sale interest; verify, extend or terminate a contract; launch or resume a campaign; approve a package; counter, reject or accept an offer; verify proof of funds; execute or cancel an assignment; confirm a closing; record the fee; cancel a closing.
 - `compliance:write`: edit or review jurisdiction policies.
 
 Tenant admins have both.
@@ -416,7 +434,7 @@ Tenant admins have both.
 - **Email delivery needs `EMAIL_FROM`, `EMAIL_POSTAL_ADDRESS`, `PUBLIC_API_URL` and `PUBLIC_APP_URL`, and the email switch on.** Until then, launches are refused at creation with the reason.
 - **Buyer sourcing from public records is manual.** Purchases are entered with their recording reference; no deed-records provider is integrated.
 - **Buyer replies by text are not linked to buyers.** Email only.
-- **The web UI for the Command Center is in progress.**
+- **Tax-sale facts are entered by hand.** No county auction or redemption feed is integrated, and no state's redemption rules are encoded: the dates come from the county records.
 
 ## 12. Audit, 2026-10-21
 

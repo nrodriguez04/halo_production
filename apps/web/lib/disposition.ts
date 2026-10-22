@@ -254,10 +254,28 @@ export interface NextAction {
   priority: number;
 }
 
+export interface TaxSaleRecord {
+  id: string;
+  interestType: 'tax_deed' | 'tax_lien_certificate' | 'auction_bid' | 'unknown';
+  county: string | null;
+  auctionDate: string | null;
+  advertisedPrice: number | null;
+  winningBid: number | null;
+  redemptionEndsAt: string | null;
+  redeemed: boolean;
+  titleStatus: 'unverified' | 'clouded' | 'quiet_title_needed' | 'insurable';
+  transferable: 'yes' | 'no' | 'unknown';
+  evidenceDocumentId: string | null;
+  notes: string | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+}
+
 export interface Workspace {
   deal: {
     id: string;
     stage: string;
+    acquisitionType?: 'standard' | 'tax_sale';
     arv: number | null;
     repairEstimate: number | null;
     mao: number | null;
@@ -286,6 +304,7 @@ export interface Workspace {
   matches: BuyerMatch[];
   buyersConsidered: number;
   underwriting: Underwriting | null;
+  taxSale: TaxSaleRecord | null;
   assignments: Array<Assignment & { offer: { id: string; amount: number; status: string } | null }>;
   approvals: {
     agentRuns: Array<{ id: string; agent: string | null; createdAt: string; summary: unknown }>;
@@ -317,9 +336,10 @@ export function errorText(err: unknown): string {
     const body = err.body as Record<string, unknown> | undefined;
     const msg = body?.message;
     const base = Array.isArray(msg) ? msg.join('; ') : typeof msg === 'string' ? msg : err.message;
-    const problems = Array.isArray(body?.problems) ? (body!.problems as string[]).join('; ') : '';
-    const blockers = Array.isArray(body?.blockers) ? (body!.blockers as string[]).join('; ') : '';
-    return [base, problems, blockers].filter(Boolean).join(' — ');
+    // Only the reasons the message does not already spell out.
+    const listed = (key: 'problems' | 'blockers') =>
+      Array.isArray(body?.[key]) ? (body![key] as string[]).filter((p) => !base.includes(p)).join('; ') : '';
+    return [base, listed('problems'), listed('blockers')].filter(Boolean).join(' — ');
   }
   return (err as Error)?.message ?? 'Unknown error';
 }

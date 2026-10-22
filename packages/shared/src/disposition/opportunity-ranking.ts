@@ -30,7 +30,12 @@ export interface OpportunityInput {
   demand: { contactable: number; strong: number };
   /** Days since the last message, stage change or note. */
   daysSinceActivity: number | null;
-  risk: { titleIssues: number; noSellerContact: boolean };
+  risk: {
+    titleIssues: number;
+    noSellerContact: boolean;
+    /** A tax-sale deal whose acquired interest is not verified yet. */
+    taxSaleUnverified?: boolean;
+  };
 }
 
 export interface RankedOpportunity {
@@ -106,6 +111,10 @@ export function scoreOpportunity(o: OpportunityInput, minNetProfit: number): Ran
   if (o.risk.noSellerContact) {
     risk -= 6;
     reasons.push('No way to reach the seller');
+  }
+  if (o.risk.taxSaleUnverified) {
+    risk -= 8;
+    reasons.push('Tax sale: interest not verified');
   }
 
   const score = Math.max(0, Math.min(100, acquisition + margin + demand + velocity + risk));
