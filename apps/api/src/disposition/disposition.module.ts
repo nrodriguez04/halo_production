@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
 import { DealsModule } from '../deals/deals.module';
 import { TimelineModule } from '../timeline/timeline.module';
 import { CommunicationsModule } from '../communications/communications.module';
@@ -59,7 +58,6 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     PublicDealPagesController,
   ],
   providers: [
-    PrismaService,
     PurchaseAgreementsService,
     ClosingService,
     OffersService,

@@ -125,6 +125,91 @@ export class AttomService {
     };
   }
 
+  /**
+   * Recorded sales of one property, with buyer and seller names and the
+   * mortgage where the county records them (ATTOM sales history). Feeds
+   * comps and investor discovery (docs/data-pipeline.md s3).
+   */
+  async salesHistory(
+    address: string,
+    ctx: CostContext,
+  ): Promise<{ data: unknown; costUsd: number; cached: boolean }> {
+    await this.assertUsable(ctx);
+    const out = await this.costControl.checkAndCall<
+      { address: string },
+      unknown
+    >({
+      provider: 'attom',
+      action: 'sales_history',
+      payload: { address },
+      context: ctx,
+      hints: { idempotencyKey: `attom:saleshistory:${this.hash(address)}` },
+      execute: async () => {
+        const url = `${this.baseUrl}/propertyapi/v1.0.0/saleshistory/detail`;
+        const data = await this.makeRequest(url, { address });
+        await this.storeSourceRecord('attom', url, { address }, data);
+        return data;
+      },
+    });
+    return {
+      data: out.result,
+      costUsd: out.actualCostUsd,
+      cached: out.fromCache,
+    };
+  }
+
+  /**
+   * One page of an area's recorded sales (ATTOM sale snapshot by postal
+   * code and date range): prices and dates for market intelligence. Buyer
+   * names are not in the snapshot; investor discovery needs sales history
+   * or a county export.
+   */
+  async salesSnapshot(
+    q: { postalCode: string; startDate: string; endDate: string; page: number },
+    ctx: CostContext,
+  ): Promise<{ data: unknown; costUsd: number; cached: boolean }> {
+    await this.assertUsable(ctx);
+    const params = {
+      postalcode: q.postalCode,
+      startsalesearchdate: q.startDate.replace(/-/g, '/'),
+      endsalesearchdate: q.endDate.replace(/-/g, '/'),
+      page: String(q.page),
+      pagesize: '100',
+    };
+    const out = await this.costControl.checkAndCall<typeof params, unknown>({
+      provider: 'attom',
+      action: 'sales_snapshot',
+      payload: params,
+      context: ctx,
+      hints: {
+        idempotencyKey: `attom:salesnapshot:${this.hash(JSON.stringify(params))}`,
+      },
+      execute: async () => {
+        const url = `${this.baseUrl}/propertyapi/v1.0.0/sale/snapshot`;
+        const data = await this.makeRequest(url, params);
+        await this.storeSourceRecord('attom', url, params, data);
+        return data;
+      },
+    });
+    return {
+      data: out.result,
+      costUsd: out.actualCostUsd,
+      cached: out.fromCache,
+    };
+  }
+
+  private async assertUsable(ctx: CostContext) {
+    if (!(await this.controlPlane.isExternalDataEnabled(ctx.accountId))) {
+      throw IntegrationUnavailableException.disabled('attom');
+    }
+    if (!(await this.apiKey())) {
+      throw IntegrationUnavailableException.notConfigured(
+        'attom',
+        'ATTOM_API_KEY',
+      );
+    }
+  }
+
   async lookupByAPN(
     apn: string,
     ctx: CostContext,

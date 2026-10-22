@@ -1,5 +1,4 @@
 import { Global, Module } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
 import { AuthModule } from '../auth/auth.module';
 import { IntegrationSecretsModule } from '../integration-secrets/integration-secrets.module';
 import { BatchSkipTraceAdapter } from './adapters/batch-skip-trace.adapter';
@@ -13,7 +12,6 @@ import { LeadSkipTraceService } from './lead-skip-trace.service';
   imports: [AuthModule, IntegrationSecretsModule],
   controllers: [SkipTraceController],
   providers: [
-    PrismaService,
     BatchSkipTraceAdapter,
     StubSkipTraceAdapter,
     SkipTraceService,

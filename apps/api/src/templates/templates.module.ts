@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
 import { DocumentsModule } from '../documents/documents.module';
 import { TimelineModule } from '../timeline/timeline.module';
 import { DispositionGateModule } from '../disposition/disposition-gate.module';
@@ -13,7 +12,7 @@ import {
 @Module({
   imports: [DocumentsModule, TimelineModule, DispositionGateModule],
   controllers: [TemplatesController, DealTemplatesController],
-  providers: [TemplatesService, PrismaService],
+  providers: [TemplatesService],
   exports: [TemplatesService],
 })
 export class TemplatesModule {}

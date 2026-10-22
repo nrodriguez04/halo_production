@@ -3,7 +3,6 @@ import { AgentController } from './agent.controller';
 import { AgentService } from './agent.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { AgentSweepService } from './agent-sweep.service';
-import { PrismaService } from '../prisma.service';
 import { CommunicationsModule } from '../communications/communications.module';
 import { TimelineModule } from '../timeline/timeline.module';
 import { ControlPlaneModule } from '../control-plane/control-plane.module';
@@ -26,12 +25,7 @@ import { DispositionGateModule } from '../disposition/disposition-gate.module';
     DispositionGateModule,
   ],
   controllers: [AgentController],
-  providers: [
-    AgentService,
-    AgentOrchestrationService,
-    AgentSweepService,
-    PrismaService,
-  ],
+  providers: [AgentService, AgentOrchestrationService, AgentSweepService],
   exports: [AgentService, AgentOrchestrationService],
 })
 export class AgentModule {}

@@ -83,6 +83,18 @@ export interface ContractMetadata {
   lastEvent?: string;
   /** The assignment an `assignment` envelope executes. */
   assignmentId?: string;
+  /**
+   * Each signer's status from DocuSign at completion, names only. Lets a
+   * person verifying the contract see that every party signed.
+   */
+  signatures?: Array<{
+    recipientId: string;
+    role: string | null;
+    name: string;
+    status: string;
+    signedAt: string | null;
+  }>;
+  signatureCheckError?: string;
 }
 
 async function readAll(stream: Readable): Promise<Buffer> {
@@ -452,6 +464,17 @@ export class DocuSignService {
         metadata: metadata as unknown as Prisma.InputJsonObject,
       },
     });
+    // Documents Halo generated from approved templates now travel in this envelope.
+    await this.prisma.documentGeneration.updateMany({
+      where: {
+        accountId,
+        OR: [
+          { documentId: { in: input.documentIds } },
+          { pdfDocumentId: { in: input.documentIds } },
+        ],
+      },
+      data: { status: 'sent', envelopeId: envelope.envelopeId },
+    });
     if (purpose === 'purchase_agreement') {
       await this.agreements.onEnvelopeSent(
         accountId,
@@ -694,16 +717,24 @@ export class DocuSignService {
         `Signed copy for contract ${contractId} not stored: ${(err as Error).message}`,
       );
     }
+    await this.recordSignatures(contractId, accountId);
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, deal: { accountId } },
       select: {
         id: true,
         purpose: true,
         metadata: true,
+        docusignEnvelopeId: true,
         deal: { select: { id: true, stage: true } },
       },
     });
     if (!contract) return { signedDocumentId, movedToMarketing: false };
+    if (contract.docusignEnvelopeId) {
+      await this.prisma.documentGeneration.updateMany({
+        where: { accountId, envelopeId: contract.docusignEnvelopeId },
+        data: { status: 'executed' },
+      });
+    }
     const roles = new Set(
       (
         ((contract.metadata ?? {}) as Partial<ContractMetadata>).recipients ??
@@ -770,6 +801,68 @@ export class DocuSignService {
    * its lead, carrying the source documents' checklist tags so the
    * compliance checklist sees the executed copy. Idempotent per contract.
    */
+  /**
+   * Ask DocuSign who signed, and record it on the contract (names, roles,
+   * status and time; never addresses). A failure is recorded, not thrown:
+   * the person verifying the contract then checks the signatures by hand.
+   */
+  async recordSignatures(contractId: string, accountId: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, deal: { accountId } },
+      select: { id: true, docusignEnvelopeId: true, metadata: true },
+    });
+    if (!contract?.docusignEnvelopeId) return null;
+    const metadata = (contract.metadata ??
+      {}) as unknown as Partial<ContractMetadata>;
+    let signatures: ContractMetadata['signatures'] | undefined;
+    let signatureCheckError: string | undefined;
+    try {
+      const session = await this.session();
+      const res = await fetch(
+        this.apiUrl(
+          session,
+          `/envelopes/${contract.docusignEnvelopeId}/recipients`,
+        ),
+        { headers: { Authorization: `Bearer ${session.accessToken}` } },
+      );
+      if (!res.ok) throw new Error(`DocuSign answered ${res.status}`);
+      const body = (await res.json()) as {
+        signers?: Array<{
+          recipientId: string;
+          name?: string;
+          status?: string;
+          signedDateTime?: string;
+        }>;
+      };
+      signatures = (body.signers ?? []).map((sgn) => ({
+        recipientId: String(sgn.recipientId),
+        role:
+          (metadata.recipients ?? []).find(
+            (r) => String(r.recipientId) === String(sgn.recipientId),
+          )?.role ?? null,
+        name: sgn.name ?? '',
+        status: sgn.status ?? 'unknown',
+        signedAt: sgn.signedDateTime ?? null,
+      }));
+    } catch (err) {
+      signatureCheckError = (err as Error).message;
+      this.logger.warn(
+        `Signatures for contract ${contractId} not checked: ${signatureCheckError}`,
+      );
+    }
+    await this.prisma.contract.update({
+      where: { id: contract.id },
+      data: {
+        metadata: {
+          ...metadata,
+          ...(signatures ? { signatures, signatureCheckError: undefined } : {}),
+          ...(signatureCheckError ? { signatureCheckError } : {}),
+        } as unknown as Prisma.InputJsonObject,
+      },
+    });
+    return signatures ?? null;
+  }
+
   async storeSignedCopy(contractId: string, accountId: string) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, deal: { accountId } },

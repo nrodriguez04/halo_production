@@ -124,7 +124,12 @@ export class PurchaseAgreementsService {
             dealId: deal.id,
             pdfUrl: `document:${agreement.executedDocumentId}`,
           },
-          select: { id: true, docusignEnvelopeId: true, status: true },
+          select: {
+            id: true,
+            docusignEnvelopeId: true,
+            status: true,
+            metadata: true,
+          },
         })
       : null;
     const generation = contract?.docusignEnvelopeId
@@ -153,6 +158,42 @@ export class PurchaseAgreementsService {
         ? `Envelope ${contract.docusignEnvelopeId ?? '(none)'} is ${contract.status}.`
         : 'Signed outside DocuSign: the person verifying checks every signature.',
     });
+    const meta = (contract?.metadata ?? {}) as {
+      recipients?: Array<{ recipientId: string; role: string; name: string }>;
+      signatures?: Array<{
+        recipientId: string;
+        name: string;
+        status: string;
+        signedAt: string | null;
+      }>;
+      signatureCheckError?: string;
+    };
+    if (contract) {
+      const expected = meta.recipients ?? [];
+      const signed = meta.signatures;
+      const unsigned = signed
+        ? expected.filter(
+            (r) =>
+              !signed.some(
+                (s) =>
+                  String(s.recipientId) === String(r.recipientId) &&
+                  s.status === 'completed',
+              ),
+          )
+        : [];
+      checks.push({
+        key: 'every_party_signed',
+        label: 'Every party signed in DocuSign',
+        passed: !!signed && unsigned.length === 0,
+        // Only a definite answer from DocuSign blocks; without one, a person checks.
+        blocking: !!signed && unsigned.length > 0,
+        detail: !signed
+          ? `DocuSign's signer list was not read${meta.signatureCheckError ? ` (${meta.signatureCheckError})` : ''}; check every signature on the executed copy.`
+          : unsigned.length
+            ? `Not signed: ${unsigned.map((r) => `${r.role} ${r.name}`).join('; ')}.`
+            : `Signed: ${signed.map((s) => `${s.name}${s.signedAt ? ` (${s.signedAt.slice(0, 10)})` : ''}`).join('; ')}.`,
+      });
+    }
     checks.push({
       key: 'approved_template',
       label: 'Generated from a counsel-approved template',

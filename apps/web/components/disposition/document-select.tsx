@@ -51,7 +51,7 @@ export function DocumentSelect({
         <Link href={uploadHref} className="text-primary underline-offset-2 hover:underline">
           Upload it on the Documents page
         </Link>
-        {buyerId ? ' with this buyer selected.' : ' with this deal selected.'}
+        {buyerId ? ' with this buyer selected.' : dealId ? ' with this deal selected.' : '.'}
       </p>
     </div>
   );
