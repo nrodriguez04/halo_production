@@ -5,7 +5,13 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { Message } from '@prisma/client';
-import { assertPolicy, PolicyViolationError } from '@halo/shared';
+import {
+  assertPolicy,
+  PolicyViolationError,
+  classifyMessage,
+  isInternalRecipient,
+  switchesAllow,
+} from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { MarketsService } from '../markets/markets.service';
 import { ComplianceService } from '../compliance/compliance.service';
@@ -241,6 +247,21 @@ export class MessageDispatchService {
     channel: 'sms' | 'email',
     recipient: string,
   ) {
+    // An internal test goes only to the operator's allowlisted address,
+    // whatever the switches say; nothing else about it is checked.
+    const cls = classifyMessage(message.metadata);
+    if (cls === 'internal_test') {
+      if (
+        channel !== 'email' ||
+        !isInternalRecipient(recipient, process.env.EMAIL_INTERNAL_RECIPIENTS)
+      ) {
+        throw new ComplianceBlockedException(
+          'NOT_INTERNAL_RECIPIENT',
+          'A test send goes only to an address on EMAIL_INTERNAL_RECIPIENTS.',
+        );
+      }
+      return;
+    }
     await this.assertBuyerDisclosure(message);
     await this.assertMarket(message, channel);
     const [controlPlane, facts] = await Promise.all([
@@ -254,6 +275,21 @@ export class MessageDispatchService {
       }),
     ]);
 
+    // Marketing needs its own switch on top of the channel's.
+    const switches = switchesAllow(cls, channel, controlPlane);
+    if (!switches.allowed) {
+      throw new ComplianceBlockedException(
+        cls === 'marketing' &&
+          controlPlane.enabled &&
+          (channel === 'email'
+            ? controlPlane.emailEnabled
+            : controlPlane.smsEnabled)
+          ? 'CONTROL_PLANE_MARKETING_DISABLED'
+          : 'CONTROL_PLANE_MESSAGING_DISABLED',
+        switches.reason,
+        { channel, messageClass: cls },
+      );
+    }
     try {
       assertPolicy({
         tenantId: message.accountId,

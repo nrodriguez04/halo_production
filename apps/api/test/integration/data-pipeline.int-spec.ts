@@ -81,7 +81,7 @@ describeDb('property data pipeline (synthetic, real database)', () => {
     const sales = moduleRef.get(RecordedSalesService);
     const discovery = moduleRef.get(InvestorDiscoveryService);
     const intel = moduleRef.get(BuyerIntelligenceService);
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
 
     const file = await fx.doc(accountId, 'County export', {}, [], 'other', {
       text: countyCsv(),
@@ -180,7 +180,7 @@ describeDb('property data pipeline (synthetic, real database)', () => {
     const sales = moduleRef.get(RecordedSalesService);
     const intelligence = moduleRef.get(MarketIntelligenceService);
     const markets = moduleRef.get(MarketsService);
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const file = await fx.doc(accountId, 'County export', {}, [], 'other', {
       text: countyCsv(),
       fileName: 'synthetic-county.csv',
@@ -234,7 +234,7 @@ describeDb('property data pipeline (synthetic, real database)', () => {
 
   it("puts a provider's facts on the lead's property and links the open deal to it", async () => {
     const facts = moduleRef.get(PropertyFactsService);
-    const accountId = fx.tenant();
+    const accountId = await fx.tenant();
     const lead = await prisma.lead.create({
       data: {
         accountId,

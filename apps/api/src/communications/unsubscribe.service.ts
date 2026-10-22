@@ -59,6 +59,23 @@ export class UnsubscribeService {
       source: 'unsubscribe_link',
       reason: 'Unsubscribed via email link',
     });
+    // A buyer who unsubscribes is taken off buyer marketing altogether, as
+    // the deal page's own unsubscribe does.
+    const meta = (message.metadata ?? {}) as Record<string, unknown>;
+    if (typeof meta.buyerId === 'string') {
+      await this.prisma.buyer.updateMany({
+        where: { id: meta.buyerId, accountId: message.accountId },
+        data: { status: 'do_not_market' },
+      });
+      await this.prisma.dispositionTarget.updateMany({
+        where: {
+          buyerId: meta.buyerId,
+          campaign: { accountId: message.accountId },
+          status: { notIn: ['opted_out'] },
+        },
+        data: { status: 'opted_out', lastActivityAt: new Date() },
+      });
+    }
     await this.timeline.appendEvent({
       tenantId: message.accountId,
       entityType: TimelineEntityType.MESSAGE,

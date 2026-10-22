@@ -198,6 +198,10 @@ services:
       # Inbound email: Reply-To on every send, token for the Inbound Parse webhook
       EMAIL_REPLY_TO: ${EMAIL_REPLY_TO:-}
       INBOUND_EMAIL_TOKEN: ${INBOUND_EMAIL_TOKEN:-}
+      # Delivery events and internal test sends (docs/communications.md)
+      SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY: ${SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      EMAIL_INTERNAL_RECIPIENTS: ${EMAIL_INTERNAL_RECIPIENTS:-}
 
       # Inside the compose network, not localhost.
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}

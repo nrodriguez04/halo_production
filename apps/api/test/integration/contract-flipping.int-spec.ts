@@ -261,7 +261,7 @@ describeDb(
     // -------------------------------------------------------------- tests
 
     it('flips a contract: verified agreement, ranked buyers, campaign, offer, assignment, closing, fee', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await seedDeal(accountId);
 
       // In a research-only market, Halo may not even record a seller contract.
@@ -499,7 +499,7 @@ describeDb(
     });
 
     it('holds a contract that prohibits assignment out of marketing', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await seedDeal(accountId);
       await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id, {
@@ -522,7 +522,7 @@ describeDb(
     });
 
     it('refuses to verify an agreement whose assignment clause nobody read', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await seedDeal(accountId);
       await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id, { assignability: 'unknown' });
@@ -534,7 +534,7 @@ describeDb(
     });
 
     it('blocks disposition on a title blocker until it is resolved', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       await buyer(accountId, 'Title Test Buyer', { pof: 300_000 });
       const issue = await closing.raiseIssue(accountId, deal.id, USER, {
@@ -574,7 +574,7 @@ describeDb(
     });
 
     it('rejects a lowball offer and never lets it be accepted afterwards', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const b = await buyer(accountId, 'Lowball Buyer', { pof: 300_000 });
       const offer = await offers.record(accountId, deal.id, USER, {
@@ -595,7 +595,7 @@ describeDb(
     });
 
     it('refuses an unqualified buyer: no verified proof of funds', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const b = await buyer(accountId, 'Unproven Buyer');
       const offer = await offers.record(accountId, deal.id, USER, {
@@ -631,7 +631,7 @@ describeDb(
     });
 
     it('needs a reason to accept below the minimum profit, and confirmation of an agent-read amount', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const b = await buyer(accountId, 'Thin Margin Buyer', { pof: 300_000 });
       const run = await prisma.automationRun.create({
@@ -669,7 +669,7 @@ describeDb(
     });
 
     it('stops marketing an expired contract: links go dead and the campaign expires', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const b = await buyer(accountId, 'Late Buyer', { pof: 300_000 });
       await launchedCampaign(accountId, deal.id);
@@ -717,7 +717,7 @@ describeDb(
     });
 
     it('cancels an assignment when the buyer walks, re-markets, and remembers it against them', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const walker = await buyer(accountId, 'Walking Buyer', { pof: 300_000 });
       await launchedCampaign(accountId, deal.id);
@@ -778,7 +778,7 @@ describeDb(
     });
 
     it('requires the Texas equitable-interest notice before a Texas deal is marketed', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await seedDeal(accountId, 'TX');
       await approvedMarket(accountId, 'TX', { content: TX_CONTENT });
       await executedAgreement(accountId, deal.id);
@@ -802,7 +802,7 @@ describeDb(
     });
 
     it('keeps seller-side figures out of the package even when a person types them in', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const pkg = await packages.createDraft(accountId, deal.id, USER, 131_000);
       await expect(
@@ -813,7 +813,7 @@ describeDb(
     });
 
     it('underwrites deterministically and ranks early-stage opportunities on real facts', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const strong = await seedDeal(accountId);
       const weak = await seedDeal(accountId);
       await prisma.lead.update({
@@ -878,7 +878,7 @@ describeDb(
     });
 
     it('generates documents only from templates counsel approved for the state, as .docx or .txt with a PDF', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       process.env.HALO_CONTRACTING_ENTITY = 'SYNTHETIC Acquisitions LLC';
       const deal = await seedDeal(accountId);
       await approvedMarket(accountId, 'GA', {
@@ -1060,7 +1060,7 @@ describeDb(
     });
 
     it('launches a campaign once and accepts one offer per deal, even when two happen at once', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await marketableDeal(accountId);
       const a = await buyer(accountId, 'Race Buyer A', { pof: 300_000 });
       const b = await buyer(accountId, 'Race Buyer B', { pof: 300_000 });
@@ -1101,7 +1101,7 @@ describeDb(
     });
 
     it('holds a tax-sale deal until a deed, an ended redemption and insurable title are verified', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await seedDeal(accountId);
       await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id);
@@ -1171,7 +1171,7 @@ describeDb(
     });
 
     it('puts what needs a person at the top of the attention list', async () => {
-      const accountId = tenant();
+      const accountId = await tenant();
       const deal = await seedDeal(accountId);
       await approvedMarket(accountId);
       await executedAgreement(accountId, deal.id);

@@ -4,6 +4,12 @@ import { twiml } from '../keyword-replies';
 
 describe('TwilioController inbound', () => {
   const env = { ...process.env };
+  // The real store reads its own table first, then env.
+  const secrets = {
+    resolve: jest.fn(
+      async (_p: string, key: string) => process.env[key] ?? null,
+    ),
+  };
   beforeEach(() => {
     process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
   });
@@ -39,7 +45,7 @@ describe('TwilioController inbound', () => {
         reply: 'Halo: You have been unsubscribed.',
       }),
     };
-    const controller = new TwilioController(service as any);
+    const controller = new TwilioController(service as any, secrets as any);
     const body = { From: '+15551234567', To: '+15550000000', Body: 'STOP' };
     const { req, signature } = signedRequest(body);
 
@@ -56,7 +62,7 @@ describe('TwilioController inbound', () => {
         .fn()
         .mockResolvedValue({ handled: 'message', reply: null }),
     };
-    const controller = new TwilioController(service as any);
+    const controller = new TwilioController(service as any, secrets as any);
     const body = { From: '+15551234567', To: '+15550000000', Body: 'hi' };
     const { req, signature } = signedRequest(body);
 
@@ -69,5 +75,22 @@ describe('TwilioController inbound', () => {
     expect(twiml(`Tom & Jerry's <help>`)).toBe(
       '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Tom &amp; Jerry&apos;s &lt;help&gt;</Message></Response>',
     );
+  });
+
+  it('verifies with a token saved on the Integrations page, not only env', async () => {
+    delete process.env.TWILIO_AUTH_TOKEN;
+    const stored = { resolve: jest.fn().mockResolvedValue('test-auth-token') };
+    const service = {
+      handleInbound: jest
+        .fn()
+        .mockResolvedValue({ handled: 'message', reply: null }),
+    };
+    const controller = new TwilioController(service as any, stored as any);
+    const body = { From: '+15551234567', To: '+15550000000', Body: 'hi' };
+    const { req, signature } = signedRequest(body);
+    await expect(
+      controller.handleInbound(body, signature, req),
+    ).resolves.toContain('<Response');
+    expect(stored.resolve).toHaveBeenCalledWith('twilio', 'TWILIO_AUTH_TOKEN');
   });
 });

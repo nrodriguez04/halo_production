@@ -22,6 +22,9 @@ export interface ControlPlaneStatus {
   enabled: boolean;
   smsEnabled: boolean;
   emailEnabled: boolean;
+  /** Marketing messages need these on top of the channel switch (docs/communications.md s2). */
+  marketingEmailEnabled: boolean;
+  marketingSmsEnabled: boolean;
   docusignEnabled: boolean;
   externalDataEnabled: boolean;
   aiEnabled: boolean;
@@ -91,6 +94,8 @@ export class ControlPlaneService {
         enabled: false,
         smsEnabled: false,
         emailEnabled: false,
+        marketingEmailEnabled: false,
+        marketingSmsEnabled: false,
         docusignEnabled: false,
         externalDataEnabled: false,
         aiEnabled: false,
@@ -121,6 +126,10 @@ export class ControlPlaneService {
       enabled: tenant.enabled && globalRow.enabled,
       smsEnabled: tenant.smsEnabled && globalRow.smsEnabled,
       emailEnabled: tenant.emailEnabled && globalRow.emailEnabled,
+      marketingEmailEnabled:
+        tenant.marketingEmailEnabled && globalRow.marketingEmailEnabled,
+      marketingSmsEnabled:
+        tenant.marketingSmsEnabled && globalRow.marketingSmsEnabled,
       docusignEnabled: tenant.docusignEnabled && globalRow.docusignEnabled,
       externalDataEnabled:
         tenant.externalDataEnabled && globalRow.externalDataEnabled,
@@ -166,6 +175,8 @@ export class ControlPlaneService {
       enabled?: boolean;
       smsEnabled?: boolean;
       emailEnabled?: boolean;
+      marketingEmailEnabled?: boolean;
+      marketingSmsEnabled?: boolean;
       docusignEnabled?: boolean;
       externalDataEnabled?: boolean;
       aiEnabled?: boolean;

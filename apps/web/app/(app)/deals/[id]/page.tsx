@@ -24,6 +24,7 @@ import { OffersPanel } from '@/components/disposition/offers-panel';
 import { ClosingPanel } from '@/components/disposition/closing-panel';
 import { UnderwritingCard } from '@/components/disposition/underwriting-card';
 import { TaxSalePanel } from '@/components/disposition/tax-sale-panel';
+import { SellerConsentCard } from '@/components/disposition/seller-consent-card';
 import { ELIGIBILITY_LABEL, ELIGIBILITY_VARIANT, day, errorText, type Workspace } from '@/lib/disposition';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
@@ -233,6 +234,7 @@ export default function DealDetailPage() {
             stage={deal.stage}
             offerAmount={deal.offerAmount}
           />
+          {deal.leadId && <SellerConsentCard leadId={deal.leadId} dealId={deal.id} />}
         </TabsContent>
 
         <TabsContent value="contract" className="space-y-4">

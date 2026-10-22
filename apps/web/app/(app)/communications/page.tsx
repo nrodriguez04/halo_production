@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { Card, CardContent } from '@/components/ui/card';
@@ -175,6 +176,11 @@ export default function CommunicationsPage() {
       <PageHeader
         title="Communications"
         description="Inbound and outbound conversations with leads, plus the human approval queue."
+        actions={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/communications/settings">Settings and suppression</Link>
+          </Button>
+        }
       />
 
       {isPending ? (
