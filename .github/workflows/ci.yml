@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20]
+        # 18 is end of life and nodemailer 10 needs 20; the images run 22.
+        node-version: [20, 22]
 
     steps:
       - uses: actions/checkout@v4

@@ -1,4 +1,5 @@
-FROM node:20-alpine AS base
+# Node 20 reached end of life on 2026-04-30; 22 is supported until 2027-04.
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat
 
 # ---- dependency stage ----
