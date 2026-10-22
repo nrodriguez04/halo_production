@@ -42,6 +42,8 @@ export const DealCreateSchema = z.object({
   repairEstimate: z.number().optional(),
   mao: z.number().optional(),
   offerAmount: z.number().optional(),
+  /** standard, or tax_sale: the acquired interest must then be verified before marketing. */
+  acquisitionType: z.enum(['standard', 'tax_sale']).optional(),
 });
 
 export const DealUpdateSchema = DealCreateSchema.partial();

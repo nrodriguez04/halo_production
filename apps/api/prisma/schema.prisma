@@ -286,6 +286,9 @@ model Deal {
   repairEstimate Float?
   mao         Float?
   offerAmount Float?
+  /// standard | tax_sale. A tax-sale deal is marketed only once the interest
+  /// it acquired is verified (tax_sale_interests).
+  acquisitionType String @default("standard")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -302,6 +305,7 @@ model Deal {
   buyerOffers          BuyerOffer[]
   assignmentAgreements AssignmentAgreement[]
   closingFile          ClosingFile?
+  taxSaleInterest      TaxSaleInterest?
 
   @@index([stage])
   @@index([leadId])
@@ -1484,4 +1488,37 @@ model ClosingIssue {
 
   @@index([accountId, dealId, status])
   @@map("closing_issues")
+}
+
+/// What a tax sale actually conveyed (docs/contract-flipping.md s4). The
+/// advertised price is not a purchasable interest: a lien certificate is not
+/// ownership, a bid is nothing until confirmed, and an owner can redeem.
+model TaxSaleInterest {
+  id               String    @id @default(cuid())
+  accountId        String
+  dealId           String    @unique
+  /// tax_deed | tax_lien_certificate | auction_bid | unknown
+  interestType     String    @default("unknown")
+  county           String?
+  auctionDate      DateTime?
+  advertisedPrice  Float?
+  winningBid       Float?
+  redemptionEndsAt DateTime?
+  redeemed         Boolean   @default(false)
+  /// unverified | clouded | quiet_title_needed | insurable
+  titleStatus      String    @default("unverified")
+  /// yes | no | unknown
+  transferable     String    @default("unknown")
+  /// Deed, certificate or county record in the documents library.
+  evidenceDocumentId String?
+  verifiedAt       DateTime?
+  verifiedBy       String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("tax_sale_interests")
 }

@@ -1,5 +1,8 @@
 import type {
+  AcquisitionType,
   Assignability,
+  TaxSaleInterestType,
+  TaxSaleTitleStatus,
   DispositionEligibility,
   DispositionEligibilityStatus,
   GateCheck,
@@ -53,8 +56,22 @@ export interface RequiredDisclosure {
   satisfied: boolean;
 }
 
+export interface EligibilityTaxSale {
+  interestType: TaxSaleInterestType;
+  redemptionEndsAt: Date | null;
+  /** The owner redeemed: the interest is gone. */
+  redeemed: boolean;
+  titleStatus: TaxSaleTitleStatus;
+  /** Whether the interest may be transferred, per a person's check. */
+  transferable: 'yes' | 'no' | 'unknown';
+  verifiedAt: Date | null;
+}
+
 export interface EligibilityInput {
   now: Date;
+  /** A tax-sale deal needs its acquired interest verified before anything else counts. */
+  acquisitionType?: AcquisitionType;
+  taxSale?: EligibilityTaxSale | null;
   /** Two-letter state of the property, when known. */
   state: string | null;
   /** The current seller contract, if one is recorded. */
@@ -77,6 +94,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_WARN_DAYS = 10;
 
 const CHECK_LABEL: Record<GateCheck['key'], string> = {
+  tax_sale_interest: 'Tax-sale interest verified',
   agreement_on_file: 'Seller contract executed',
   executed_copy: 'Executed copy on file',
   terms_verified: 'Terms verified by a person',
@@ -440,6 +458,83 @@ function issuesCheck(input: EligibilityInput): GateCheck {
   );
 }
 
+/**
+ * A tax sale's advertised price is not a purchasable, transferable property
+ * interest. Until a person has verified what was actually acquired, that
+ * redemption is over and that title can be insured, the deal is held.
+ */
+function taxSaleCheck(input: EligibilityInput): GateCheck | null {
+  if (input.acquisitionType !== 'tax_sale') return null;
+  const t = input.taxSale;
+  if (!t) {
+    return check(
+      'tax_sale_interest',
+      'review',
+      'This is a tax-sale deal and nothing is recorded about the interest acquired.',
+      'Record what the sale conveyed (deed, lien certificate or bid), the redemption period, the title status and whether it can be transferred.',
+    );
+  }
+  if (t.interestType === 'tax_lien_certificate') {
+    return check(
+      'tax_sale_interest',
+      'fail',
+      'A tax lien certificate is a right to be repaid, not ownership of the property.',
+      'Do not market the property. It can only be marketed once a deed is issued and the other checks pass.',
+    );
+  }
+  if (t.interestType === 'auction_bid') {
+    return check(
+      'tax_sale_interest',
+      'fail',
+      'A winning bid conveys nothing until the sale is confirmed and the deed issued.',
+      'Wait for the deed, then record it.',
+    );
+  }
+  if (t.redeemed) {
+    return check(
+      'tax_sale_interest',
+      'fail',
+      'The owner redeemed the property: the interest is gone.',
+      'Close the deal as lost.',
+    );
+  }
+  if (t.redemptionEndsAt && t.redemptionEndsAt.getTime() > input.now.getTime()) {
+    return check(
+      'tax_sale_interest',
+      'fail',
+      `The owner can still redeem until ${day(t.redemptionEndsAt)}.`,
+      'Wait for the redemption period to end.',
+    );
+  }
+  const open: string[] = [];
+  if (t.interestType === 'unknown') open.push('what the sale conveyed');
+  if (!t.redemptionEndsAt) open.push('the redemption period');
+  if (t.titleStatus !== 'insurable') open.push(`the title (${t.titleStatus.replace(/_/g, ' ')})`);
+  if (t.transferable === 'no') {
+    return check(
+      'tax_sale_interest',
+      'fail',
+      'The interest cannot be transferred.',
+      'Do not market it as assignable.',
+    );
+  }
+  if (t.transferable === 'unknown') open.push('whether it can be transferred');
+  if (!t.verifiedAt) open.push("a person's verification");
+  if (open.length) {
+    return check(
+      'tax_sale_interest',
+      'review',
+      `Not yet established: ${open.join(', ')}.`,
+      'Confirm with the county records and the title company, then verify the tax-sale record.',
+    );
+  }
+  return check(
+    'tax_sale_interest',
+    'pass',
+    'Deed issued, redemption over, title insurable, transferable, verified.',
+  );
+}
+
 export function overallStatus(
   checks: GateCheck[],
 ): DispositionEligibilityStatus {
@@ -451,7 +546,9 @@ export function overallStatus(
 export function evaluateDispositionEligibility(
   input: EligibilityInput,
 ): DispositionEligibility {
+  const tax = taxSaleCheck(input);
   const checks = [
+    ...(tax ? [tax] : []),
     ...agreementChecks(input),
     ...policyChecks(input),
     disclosureCheck(input),

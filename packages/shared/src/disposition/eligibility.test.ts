@@ -2,6 +2,7 @@ import {
   evaluateDispositionEligibility,
   eligibilitySummary,
   type EligibilityAgreement,
+  type EligibilityTaxSale,
   type EligibilityInput,
   type EligibilityPolicy,
 } from './eligibility';
@@ -193,5 +194,46 @@ describe('evaluateDispositionEligibility', () => {
     const e = evaluateDispositionEligibility(input({ policy: null, agreement: agreement({ assignability: 'prohibited' }) }));
     expect(e.status).toBe('blocked');
     expect(eligibilitySummary(e)).toMatch(/^Blocked: Contract may be assigned/);
+  });
+});
+
+describe('tax-sale deals', () => {
+  const verifiedDeed: EligibilityTaxSale = {
+    interestType: 'tax_deed',
+    redemptionEndsAt: days(-10),
+    redeemed: false,
+    titleStatus: 'insurable',
+    transferable: 'yes',
+    verifiedAt: days(-1),
+  };
+  const tax = (over: Partial<EligibilityTaxSale> | null) =>
+    evaluateDispositionEligibility(
+      input({ acquisitionType: 'tax_sale', taxSale: over === null ? null : { ...verifiedDeed, ...over } }),
+    );
+
+  it('never treats an unrecorded tax-sale interest as marketable', () => {
+    const e = tax(null);
+    expect(e.status).toBe('review_required');
+    expect(e.checks[0]).toMatchObject({ key: 'tax_sale_interest', status: 'review' });
+  });
+
+  it('blocks a lien certificate, a bare bid, a redemption still open and a redeemed property', () => {
+    expect(tax({ interestType: 'tax_lien_certificate' }).checks[0].detail).toContain('not ownership');
+    expect(tax({ interestType: 'auction_bid' }).status).toBe('blocked');
+    expect(tax({ redemptionEndsAt: days(30) }).checks[0].detail).toContain('can still redeem');
+    expect(tax({ redeemed: true }).status).toBe('blocked');
+    expect(tax({ transferable: 'no' }).status).toBe('blocked');
+  });
+
+  it('holds for review until title, transferability and a person check out', () => {
+    const e = tax({ titleStatus: 'quiet_title_needed', transferable: 'unknown', verifiedAt: null });
+    expect(e.status).toBe('review_required');
+    expect(e.checks[0].detail).toContain('the title (quiet title needed)');
+    expect(e.checks[0].detail).toContain("a person's verification");
+  });
+
+  it('passes a verified deed and leaves standard deals alone', () => {
+    expect(tax({}).status).toBe('eligible');
+    expect(evaluateDispositionEligibility(input()).checks.some((c) => c.key === 'tax_sale_interest')).toBe(false);
   });
 });

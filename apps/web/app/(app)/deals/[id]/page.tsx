@@ -23,6 +23,7 @@ import { CampaignPanel } from '@/components/disposition/campaign-panel';
 import { OffersPanel } from '@/components/disposition/offers-panel';
 import { ClosingPanel } from '@/components/disposition/closing-panel';
 import { UnderwritingCard } from '@/components/disposition/underwriting-card';
+import { TaxSalePanel } from '@/components/disposition/tax-sale-panel';
 import { ELIGIBILITY_LABEL, ELIGIBILITY_VARIANT, day, errorText, type Workspace } from '@/lib/disposition';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
@@ -228,12 +229,21 @@ export default function DealDetailPage() {
             ai={uwResult}
             onRun={() => analyze.mutate(undefined)}
             running={analyze.isPending}
+            dealId={deal.id}
+            stage={deal.stage}
+            offerAmount={deal.offerAmount}
           />
         </TabsContent>
 
         <TabsContent value="contract" className="space-y-4">
           <EligibilityCard eligibility={ws.eligibility} />
           <AgreementPanel dealId={deal.id} agreement={ws.agreement} />
+          <TaxSalePanel
+            dealId={deal.id}
+            acquisitionType={deal.acquisitionType}
+            record={ws.taxSale}
+            check={ws.eligibility.checks.find((c) => c.key === 'tax_sale_interest')}
+          />
           <ContractsPanel
             dealId={deal.id}
             propertyAddress={deal.property?.address}

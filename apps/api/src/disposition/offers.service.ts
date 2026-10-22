@@ -9,6 +9,8 @@ import { Prisma } from '@prisma/client';
 import {
   assignmentFeeFor,
   canTransitionOffer,
+  evaluatePolicy,
+  negotiationBoundsRule,
   recommendAssignmentPricing,
   underwriteDeal,
   type DealStructure,
@@ -150,6 +152,104 @@ export class OffersService {
           : (e?.contractPrice ?? null),
       sellerAsk: deal.property?.salePrice ?? null,
     });
+  }
+
+  /**
+   * The offer to the seller, set by a person within the policy bounds
+   * (the shared negotiationBoundsRule): up to the computed MAO. Above it,
+   * or while the numbers need review, a reason is required and recorded.
+   * The Outreach Drafter may then repeat this amount to the seller; it
+   * never proposes one of its own.
+   */
+  async setSellerOffer(
+    accountId: string,
+    dealId: string,
+    userId: string,
+    input: { amount: number; reason?: string },
+  ) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, accountId },
+      select: { id: true, stage: true, offerAmount: true },
+    });
+    if (!deal) throw new NotFoundException(`Deal ${dealId} not found`);
+    if (!['new', 'contacted', 'negotiating'].includes(deal.stage)) {
+      throw new ConflictException(
+        `The deal is ${deal.stage.replace('_', ' ')}: the price is in the seller contract now.`,
+      );
+    }
+    const u = await this.underwriting(accountId, dealId);
+    const [bounds] = evaluatePolicy(
+      {
+        tenantId: accountId,
+        actorId: userId,
+        actorType: 'user',
+        now: new Date(),
+        requestedAction: 'deal.set_seller_offer',
+        channel: 'other',
+        dealId,
+        minOffer: 1,
+        maxOffer: u.mao ?? 0,
+        proposedOffer: input.amount,
+      },
+      [negotiationBoundsRule],
+    );
+    const problems: string[] = [];
+    if (!bounds.allow) {
+      problems.push(
+        u.mao != null && u.mao > 0
+          ? `$${input.amount.toLocaleString('en-US')} is above the MAO of $${u.mao.toLocaleString('en-US')}`
+          : 'there is no positive MAO for this deal',
+      );
+    }
+    if (u.recommendation === 'needs_review') {
+      problems.push(`the numbers need review (${u.flags.join(', ')})`);
+    }
+    if (problems.length && !input.reason) {
+      throw new BadRequestException({
+        code: 'OFFER_OUT_OF_BOUNDS',
+        message: `This offer needs a reason: ${problems.join('; ')}.`,
+        problems,
+      });
+    }
+    await this.prisma.deal.update({
+      where: { id: deal.id },
+      data: { offerAmount: input.amount },
+    });
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'deal.seller_offer',
+      resource: `deal:${dealId}`,
+      details: {
+        amount: input.amount,
+        previous: deal.offerAmount,
+        mao: u.mao,
+        offerRange: u.offerRange,
+        outsidePolicy: problems,
+        reason: input.reason ?? null,
+      },
+    });
+    await dealEvent(
+      this.timeline,
+      accountId,
+      dealId,
+      'SELLER_OFFER_SET',
+      {
+        amount: input.amount,
+        mao: u.mao,
+        offerRange: u.offerRange,
+        ...(problems.length
+          ? { outsidePolicy: problems, reason: input.reason }
+          : {}),
+      },
+      userId,
+    );
+    return {
+      offerAmount: input.amount,
+      mao: u.mao,
+      offerRange: u.offerRange,
+      outsidePolicy: problems,
+    };
   }
 
   /** The pricing recommendation for the deal, with the inputs it used. */

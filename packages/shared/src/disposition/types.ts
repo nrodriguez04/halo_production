@@ -102,6 +102,7 @@ export type PermissionValue = (typeof PERMISSION_VALUES)[number];
 export type GateStatus = 'pass' | 'fail' | 'review';
 
 export const DISPOSITION_CHECK_KEYS = [
+  'tax_sale_interest',
   'agreement_on_file',
   'executed_copy',
   'terms_verified',
@@ -145,6 +146,32 @@ export interface DispositionEligibility {
   state: string | null;
   evaluatedAt: string;
 }
+
+// --------------------------------------------------------------- Tax sales
+
+export const ACQUISITION_TYPES = ['standard', 'tax_sale'] as const;
+export type AcquisitionType = (typeof ACQUISITION_TYPES)[number];
+
+/**
+ * What a tax sale actually conveyed. A deed can be ownership; a lien
+ * certificate is a right to be repaid (or to foreclose later), not the
+ * property; a winning bid is nothing until the sale is confirmed.
+ */
+export const TAX_SALE_INTEREST_TYPES = [
+  'tax_deed',
+  'tax_lien_certificate',
+  'auction_bid',
+  'unknown',
+] as const;
+export type TaxSaleInterestType = (typeof TAX_SALE_INTEREST_TYPES)[number];
+
+export const TAX_SALE_TITLE_STATUSES = [
+  'unverified',
+  'clouded',
+  'quiet_title_needed',
+  'insurable',
+] as const;
+export type TaxSaleTitleStatus = (typeof TAX_SALE_TITLE_STATUSES)[number];
 
 // --------------------------------------------------------------- Buyers
 

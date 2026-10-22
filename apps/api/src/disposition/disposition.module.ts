@@ -20,6 +20,7 @@ import { PublicDealPagesService } from './public-deal-pages.service';
 import { CommandCenterService } from './command-center.service';
 import { DispositionSweepService } from './disposition-sweep.service';
 import { AgreementDraftingService } from './agreement-drafting.service';
+import { TaxSalesService } from './tax-sales.service';
 import {
   AgreementTemplatesController,
   AssignmentsController,
@@ -78,6 +79,7 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     CommandCenterService,
     DispositionSweepService,
     AgreementDraftingService,
+    TaxSalesService,
   ],
   exports: [
     PurchaseAgreementsService,
