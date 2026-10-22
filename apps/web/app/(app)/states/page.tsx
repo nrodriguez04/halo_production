@@ -167,6 +167,7 @@ export default function StatesPage() {
               )}
             </CardContent>
           </Card>
+          <TemplatesCard />
           {editing && (
             <PolicyDialog
               state={editing}
@@ -357,5 +358,115 @@ function PolicyDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface TemplateRow {
+  id: string;
+  title: string;
+  fileName: string;
+  jurisdiction: string | null;
+  fillable: boolean;
+  reviewed: boolean;
+  kinds: string[];
+}
+
+const FIELDS_HINT =
+  'Purchase agreement blanks: {{effective_date}} {{buyer_entity}} {{seller_name}} {{property_address}} {{property_city}} {{property_state}} {{property_zip}} {{purchase_price}} {{earnest_money}} {{earnest_money_due}} {{inspection_ends}} {{closing_deadline}}. ' +
+  'Assignment blanks: {{effective_date}} {{assignor_entity}} {{assignee_name}} {{seller_name}} {{property_address}} {{property_city}} {{property_state}} {{property_zip}} {{original_contract_date}} {{original_purchase_price}} {{assignment_price}} {{assignment_fee}} {{buyer_deposit}} {{buyer_deposit_due}} {{closing_deadline}} {{closing_agent}}.';
+
+/**
+ * Agreement templates: the wording counsel approved, as text with blanks.
+ * Marking one reviewed lets Halo fill it for deals in its state; the
+ * blanks are checked at review so a reviewed template never asks for a
+ * field Halo cannot fill.
+ */
+function TemplatesCard() {
+  const qc = useQueryClient();
+  const list = useApiQuery<TemplateRow[]>('/agreement-templates');
+  const [kind, setKind] = useState<Record<string, string>>({});
+  const [state, setState] = useState<Record<string, string>>({});
+  const review = useApiMutation<{ id: string; kind: string; jurisdiction: string | null }>(
+    ({ id, kind, jurisdiction }) =>
+      apiJson(`/agreement-templates/${id}/review`, { method: 'POST', body: JSON.stringify({ kind, jurisdiction }) }),
+    {
+      onSuccess: () => {
+        toast.success('Template marked reviewed');
+        qc.invalidateQueries({ queryKey: ['/agreement-templates'] });
+      },
+      onError: (err) => toast.error('Could not mark reviewed', { description: errorText(err) }),
+    },
+  );
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle>Agreement templates</CardTitle>
+        <CardDescription>
+          Upload the wording counsel approved as a .txt file (Documents, category Agreement template). Halo fills only the
+          blanks, from verified records, and refuses a template with a blank it cannot fill.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {list.isPending ? (
+          <LoadingState />
+        ) : (list.data ?? []).length === 0 ? (
+          <p className="text-body text-muted-foreground">No agreement template in the library yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {(list.data ?? []).map((t) => (
+              <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-body font-medium text-foreground">{t.title}</p>
+                  <p className="text-caption text-muted-foreground">
+                    {t.fileName} · {t.jurisdiction ?? 'every state'}
+                    {t.kinds.length ? ` · ${t.kinds.map((k) => k.replace('_', ' ')).join(', ')}` : ''}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {t.reviewed ? <Badge variant="success">reviewed</Badge> : <Badge variant="warning">not reviewed</Badge>}
+                  {!t.fillable ? (
+                    <Badge variant="secondary">not fillable (save as .txt)</Badge>
+                  ) : (
+                    <>
+                      <Select
+                        aria-label="Kind"
+                        value={kind[t.id] ?? t.kinds[0] ?? 'purchase_agreement'}
+                        onChange={(e) => setKind((k) => ({ ...k, [t.id]: e.target.value }))}
+                      >
+                        <option value="purchase_agreement">Purchase agreement</option>
+                        <option value="assignment">Assignment</option>
+                      </Select>
+                      <Input
+                        className="w-20 uppercase"
+                        maxLength={2}
+                        placeholder="ST"
+                        aria-label="State"
+                        value={state[t.id] ?? t.jurisdiction ?? ''}
+                        onChange={(e) => setState((x) => ({ ...x, [t.id]: e.target.value.toUpperCase() }))}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        loading={review.isPending}
+                        onClick={() =>
+                          review.mutate({
+                            id: t.id,
+                            kind: kind[t.id] ?? t.kinds[0] ?? 'purchase_agreement',
+                            jurisdiction: (state[t.id] ?? t.jurisdiction ?? '') || null,
+                          })
+                        }
+                      >
+                        Mark reviewed
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-caption text-muted-foreground">{FIELDS_HINT}</p>
+      </CardContent>
+    </Card>
   );
 }

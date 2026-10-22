@@ -53,6 +53,9 @@ import {
 } from '../../src/disposition/deal-packages.service';
 import { OptOutService } from '../../src/compliance/opt-out.service';
 import { protectBuyerContact } from '../../src/buyers/buyer-pii';
+import { StorageService } from '../../src/storage/storage.service';
+import { AgreementDraftingService } from '../../src/disposition/agreement-drafting.service';
+import { Readable } from 'stream';
 
 @Global()
 @Module({
@@ -65,6 +68,23 @@ import { protectBuyerContact } from '../../src/buyers/buyer-pii';
   exports: [OpsAlertService],
 })
 class TestAlertsModule {}
+
+/** Object storage in memory: the suite never touches a real bucket. */
+const objects = new Map<string, Buffer>();
+const memoryStorage = {
+  upload: jest.fn(
+    async (tenant: string, category: string, name: string, body: Buffer) => {
+      const key = `${tenant}/${category}/${name}`;
+      objects.set(key, Buffer.from(body));
+      return { key };
+    },
+  ),
+  download: jest.fn(async (key: string) => ({
+    body: Readable.from([objects.get(key) ?? Buffer.alloc(0)]),
+    contentType: 'text/plain',
+  })),
+  delete: jest.fn(async (key: string) => void objects.delete(key)),
+};
 
 const d = (days: number) => new Date(Date.now() + days * 86_400_000);
 const USER = 'synthetic-operator';
@@ -98,6 +118,7 @@ describeDb(
     let center: CommandCenterService;
     let packages: DealPackagesService;
     let optOut: OptOutService;
+    let drafting: AgreementDraftingService;
     const queue = {
       enqueueCommunication: jest.fn().mockResolvedValue({}),
       enqueueAgent: jest.fn().mockResolvedValue({}),
@@ -118,6 +139,8 @@ describeDb(
       })
         .overrideProvider(QueueService)
         .useValue(queue)
+        .overrideProvider(StorageService)
+        .useValue(memoryStorage)
         .overrideGuard(AuthGuard)
         .useValue({ canActivate: () => true })
         .overrideGuard(PermissionsGuard)
@@ -137,6 +160,7 @@ describeDb(
       center = moduleRef.get(CommandCenterService);
       packages = moduleRef.get(DealPackagesService);
       optOut = moduleRef.get(OptOutService);
+      drafting = moduleRef.get(AgreementDraftingService);
     });
 
     afterAll(async () => {
@@ -959,6 +983,109 @@ describeDb(
       expect(ranked[0].components.margin).toBeGreaterThan(0);
       expect(ranked[0].components.demand).toBeGreaterThan(0);
       expect(ranked[1].reasons).toContain('Underwriting says pass');
+    });
+
+    it('fills only a reviewed template, only from recorded terms, and refuses a missing value', async () => {
+      const accountId = tenant();
+      process.env.HALO_CONTRACTING_ENTITY = 'SYNTHETIC Acquisitions LLC';
+      const deal = await seedDeal(accountId);
+      const wording =
+        'SYNTHETIC PURCHASE AGREEMENT\nSeller {{seller_name}} sells to {{buyer_entity}} the property at {{property_address}}, ' +
+        '{{property_city}}, {{property_state}} for {{purchase_price}}. Earnest money {{earnest_money}} due {{earnest_money_due}}. ' +
+        'Close by {{closing_deadline}}. Buyer may assign this agreement.\n[SELLER_SIGNATURE]';
+      const key = `${accountId}/documents/template.txt`;
+      objects.set(key, Buffer.from(wording));
+      const template = await prisma.document.create({
+        data: {
+          accountId,
+          category: 'agreement_template',
+          title: 'SYNTHETIC GA purchase agreement',
+          storageKey: key,
+          fileName: 'template.txt',
+          contentType: 'text/plain',
+          sizeBytes: wording.length,
+          jurisdiction: 'GA',
+          tags: [],
+        },
+      });
+
+      // Not reviewed yet: nothing to fill from.
+      await agreements.record(accountId, deal.id, USER, {
+        status: 'draft',
+        purchasePrice: 120_000,
+        earnestMoneyAmount: 1_000,
+        closingDeadline: new Date('2026-11-20T12:00:00Z'),
+        assignability: 'permitted',
+      } as never);
+      await expect(
+        drafting.generate(accountId, deal.id, USER, {
+          kind: 'purchase_agreement',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'NO_REVIEWED_TEMPLATE' }),
+      });
+
+      await drafting.reviewTemplate(accountId, template.id, USER, {
+        kind: 'purchase_agreement',
+      });
+      // Reviewed, but the earnest money due date is not on the record.
+      await expect(
+        drafting.generate(accountId, deal.id, USER, {
+          kind: 'purchase_agreement',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'TEMPLATE_INCOMPLETE',
+          missing: ['earnest_money_due'],
+        }),
+      });
+
+      await agreements.update(accountId, deal.id, USER, {
+        earnestMoneyDueAt: new Date('2026-10-24T12:00:00Z'),
+      });
+      const out = await drafting.generate(accountId, deal.id, USER, {
+        kind: 'purchase_agreement',
+      });
+      const doc = await prisma.document.findUnique({
+        where: { id: out.documentId },
+      });
+      expect(doc).toMatchObject({
+        dealId: deal.id,
+        category: 'contract',
+        contentType: 'text/plain',
+      });
+      const text = objects.get(doc!.storageKey)!.toString('utf8');
+      expect(text).toContain(
+        'Seller SYNTHETIC Seller sells to SYNTHETIC Acquisitions LLC',
+      );
+      expect(text).toContain(
+        'for $120,000.00. Earnest money $1,000.00 due October 24, 2026. Close by November 20, 2026.',
+      );
+      expect(text).toContain('[SELLER_SIGNATURE]');
+      expect(text).not.toMatch(/\{\{/);
+
+      // A template asking for a field Halo does not know cannot be reviewed.
+      const badKey = `${accountId}/documents/bad.txt`;
+      objects.set(badKey, Buffer.from('Seller SSN: {{seller_ssn}}'));
+      const bad = await prisma.document.create({
+        data: {
+          accountId,
+          category: 'agreement_template',
+          title: 'bad',
+          storageKey: badKey,
+          fileName: 'bad.txt',
+          contentType: 'text/plain',
+          sizeBytes: 1,
+          tags: [],
+        },
+      });
+      await expect(
+        drafting.reviewTemplate(accountId, bad.id, USER, {
+          kind: 'purchase_agreement',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'TEMPLATE_UNKNOWN_FIELDS' }),
+      });
     });
 
     it('puts what needs a person at the top of the attention list', async () => {

@@ -30,6 +30,7 @@ import { DealPackagesService } from './deal-packages.service';
 import { ShareLinksService } from './share-links.service';
 import { AssignmentsService } from './assignments.service';
 import { CommandCenterService } from './command-center.service';
+import { AgreementDraftingService } from './agreement-drafting.service';
 import {
   AcceptOfferSchema,
   AssignmentExecutedSchema,
@@ -118,6 +119,21 @@ const PackageEditSchema = z
   })
   .strict();
 
+const AgreementKindSchema = z.enum(['purchase_agreement', 'assignment']);
+const GenerateAgreementSchema = z
+  .object({
+    kind: AgreementKindSchema,
+    templateDocumentId: z.string().trim().min(1).max(64).optional(),
+  })
+  .strict();
+const ReviewTemplateSchema = z
+  .object({
+    kind: AgreementKindSchema,
+    /** Two-letter state, or null for a template valid in every state. */
+    jurisdiction: z.string().trim().length(2).nullable().optional(),
+  })
+  .strict();
+
 const ConfirmOfferSchema = z
   .object({ amount: z.number().finite().min(1).max(100_000_000).optional() })
   .strict();
@@ -141,7 +157,36 @@ export class DealDispositionController {
     private links: ShareLinksService,
     private assignments: AssignmentsService,
     private buyers: BuyerIntelligenceService,
+    private drafting: AgreementDraftingService,
   ) {}
+
+  @Get('agreement-templates')
+  agreementTemplates(
+    @CurrentAccountId() a: string,
+    @Param('dealId') dealId: string,
+    @Query('kind') kind: string,
+  ) {
+    return this.drafting.templatesForDeal(
+      a,
+      dealId,
+      AgreementKindSchema.parse(kind),
+    );
+  }
+
+  @Post('agreements/generate')
+  generateAgreement(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('dealId') dealId: string,
+    @Body() body: unknown,
+  ) {
+    return this.drafting.generate(
+      a,
+      dealId,
+      u,
+      input(GenerateAgreementSchema, body),
+    );
+  }
 
   @Get('workspace')
   workspace(
@@ -717,6 +762,33 @@ export class ClosingIssuesController {
       id,
       u,
       ResolveIssueSchema.parse(body).resolution,
+    );
+  }
+}
+
+@Controller('agreement-templates')
+@UseGuards(AuthGuard, PermissionsGuard)
+export class AgreementTemplatesController {
+  constructor(private drafting: AgreementDraftingService) {}
+
+  @Get()
+  list(@CurrentAccountId() a: string) {
+    return this.drafting.listTemplates(a);
+  }
+
+  @Post(':id/review')
+  @Permissions('compliance:write')
+  review(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.drafting.reviewTemplate(
+      a,
+      id,
+      u,
+      input(ReviewTemplateSchema, body),
     );
   }
 }

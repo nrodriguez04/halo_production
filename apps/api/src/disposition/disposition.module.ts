@@ -19,7 +19,9 @@ import { BuyerMessagingService } from './buyer-messaging.service';
 import { PublicDealPagesService } from './public-deal-pages.service';
 import { CommandCenterService } from './command-center.service';
 import { DispositionSweepService } from './disposition-sweep.service';
+import { AgreementDraftingService } from './agreement-drafting.service';
 import {
+  AgreementTemplatesController,
   AssignmentsController,
   CampaignsController,
   ClosingIssuesController,
@@ -58,6 +60,7 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     ClosingIssuesController,
     JurisdictionPoliciesController,
     CommandCenterController,
+    AgreementTemplatesController,
     PublicDealPagesController,
   ],
   providers: [
@@ -74,6 +77,7 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     PublicDealPagesService,
     CommandCenterService,
     DispositionSweepService,
+    AgreementDraftingService,
   ],
   exports: [
     PurchaseAgreementsService,

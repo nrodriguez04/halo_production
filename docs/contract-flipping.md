@@ -76,6 +76,21 @@ How an agreement gets there:
   - Extensions: `/extend` needs the signed extension in the library.
   - Termination: `/terminate` ends every campaign and revokes every buyer link at once.
 
+### Agreements from reviewed templates
+
+The wording is the operator's (and counsel's); Halo fills only the blanks.
+
+1. **Upload.** A template is a `.txt` file in the documents library (category `agreement_template`) with `{{field}}` blanks.
+2. **Review.** A person with `compliance:write` marks it reviewed for a kind (`purchase_agreement` or `assignment`) and a state, or for every state, on the State Rules page. The blanks are checked at review: a template that asks for a field Halo cannot fill cannot be reviewed.
+3. **Generate.** `POST /deals/:id/agreements/generate {kind}` fills the reviewed template for the deal's state (falling back to one for every state):
+   - a purchase agreement from the recorded terms, before it is signed;
+   - an assignment from the approved assignment, only while the deal is eligible.
+
+   A blank with no value on record refuses the whole generation and names what is missing, so a half-filled agreement never reaches a signer.
+4. **Send.** The result is a draft `.txt` document on the deal (tags `generated`, `draft:<kind>`), sent for signature from the Contracts card. DocuSign accepts text and the anchors work in it.
+
+Fields are listed in `packages/shared/src/disposition/agreement-templates.ts`. `{{buyer_entity}}` and `{{assignor_entity}}` come from `HALO_CONTRACTING_ENTITY`.
+
 ## 4. State rules
 
 `jurisdiction_policies` holds one row per state per tenant. It records what the operator, with counsel, has confirmed:
@@ -396,7 +411,7 @@ Tenant admins have both.
 
 ## 11. Not operational yet
 
-- **Contract text is the operator's.** Halo stores and tracks agreements; the purchase agreement and assignment templates come from the documents library, and their wording needs counsel. Generating a filled agreement from a reviewed template is not built: envelopes send library documents as they are.
+- **Contract text is the operator's.** Halo fills blanks; it never writes clauses. Templates must be plain text (.txt); Word templates are sent as they are, unfilled. Generated agreements are drafts a person reads before sending for signature.
 - **State rules start empty by design.** No state is marketable until its policy is reviewed.
 - **Email delivery needs `EMAIL_FROM`, `EMAIL_POSTAL_ADDRESS`, `PUBLIC_API_URL` and `PUBLIC_APP_URL`, and the email switch on.** Until then, launches are refused at creation with the reason.
 - **Buyer sourcing from public records is manual.** Purchases are entered with their recording reference; no deed-records provider is integrated.

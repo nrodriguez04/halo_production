@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { DocumentSelect } from './document-select';
+import { GenerateAgreementButton } from './generate-agreement-button';
 import { useDealAction } from './use-deal-action';
 import { dateInput, day, money, toIsoDate, type PurchaseAgreement } from '@/lib/disposition';
 
@@ -247,6 +248,7 @@ export function AgreementPanel({ dealId, agreement }: { dealId: string; agreemen
               </Button>
               {open.status !== 'executed' && (
                 <>
+                  <GenerateAgreementButton dealId={dealId} kind="purchase_agreement" label="Generate from reviewed template" />
                   <div className="min-w-64 flex-1">
                     <DocumentSelect dealId={dealId} value={executedDoc} onChange={setExecutedDoc} placeholder="Executed copy…" />
                   </div>
