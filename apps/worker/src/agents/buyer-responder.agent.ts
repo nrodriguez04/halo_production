@@ -182,6 +182,17 @@ export function decisionFromOutput(
     },
     { type: 'append_note', note: `${out.rationale}${offerText}` },
   ];
+  if (offer?.amount != null && offer.amount > 0 && out.intent !== 'opt_out') {
+    actions.push({
+      type: 'record_buyer_offer',
+      buyerId: buyer.id,
+      messageId: inbound.id,
+      amount: offer.amount,
+      terms: offer.terms ?? null,
+      kind: out.intent === 'offer' ? 'written_offer' : 'indication',
+      confidence: out.confidence,
+    });
+  }
   let drafted = false;
   if (out.intent === 'opt_out') {
     actions.push({

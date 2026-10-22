@@ -16,6 +16,7 @@ const prisma = {
   message: { findFirst: jest.fn(), update: jest.fn() },
   marketingMaterial: { create: jest.fn() },
   buyer: { findMany: jest.fn(), findFirst: jest.fn() },
+  dispositionCampaign: { findFirst: jest.fn() },
 };
 const communications = { create: jest.fn() };
 jest.mock('../../pii/contact-crypto', () => ({
@@ -38,7 +39,9 @@ const deals = { create: jest.fn(), updateStage: jest.fn() };
 const lifecycle = { transition: jest.fn() };
 const queues = { enqueueAgent: jest.fn() };
 const timeline = { appendEvent: jest.fn() };
-const agentService = { draftMessage: jest.fn() };
+const agentService = { draftMessage: jest.fn(), requestSend: jest.fn() };
+const offers = { recordFromAgent: jest.fn() };
+const eligibility = { assertEligible: jest.fn(), currentAgreement: jest.fn() };
 const disclosure = { assertEquitableInterest: jest.fn() };
 const skipTrace = { traceLead: jest.fn() };
 
@@ -56,6 +59,8 @@ const service = () =>
     communications as any,
     disclosure as any,
     skipTrace as any,
+    offers as any,
+    eligibility as any,
   );
 
 const baseRun = {
@@ -162,6 +167,13 @@ describe('AgentOrchestrationService', () => {
       accountIds: ['acct'],
       consentsRevoked: 1,
     });
+    agentService.requestSend.mockResolvedValue({ status: 'pending_approval' });
+    eligibility.assertEligible.mockResolvedValue({ status: 'eligible' });
+    eligibility.currentAgreement.mockResolvedValue({
+      id: 'pa-1',
+      status: 'executed',
+    });
+    prisma.dispositionCampaign.findFirst.mockResolvedValue(null);
   });
 
   describe('enqueue', () => {
@@ -446,6 +458,12 @@ describe('AgentOrchestrationService', () => {
           automationRunId: 'run-1',
         },
       );
+      // The approved draft is submitted to the communications approval
+      // queue; it used to stay a draft no screen submitted.
+      expect(agentService.requestSend).toHaveBeenCalledWith('m1', 'acct', {
+        agentName: 'lead_analyst',
+        automationRunId: 'run-1',
+      });
       expect(deals.create).not.toHaveBeenCalled();
       expect(automation.approveRun).toHaveBeenCalledWith(
         'run-1',
@@ -1202,6 +1220,36 @@ describe('AgentOrchestrationService', () => {
       );
     });
 
+    it('refuses a blast for a deal that may not be marketed, or that a campaign is already marketing', async () => {
+      const awaiting = {
+        ...dealRun,
+        status: 'AWAITING_APPROVAL',
+        decisionJson: {
+          ...ranking,
+          outcomes: [{ action: ranking.actions[2], result: 'pending' }],
+        },
+      };
+      prisma.automationRun.findFirst.mockResolvedValue(awaiting);
+      eligibility.assertEligible.mockRejectedValueOnce(
+        new ForbiddenException('The closing deadline has passed'),
+      );
+      await expect(
+        service().approve('acct', 'run-1', 'user-1'),
+      ).rejects.toThrow('closing deadline');
+      expect(eligibility.assertEligible).toHaveBeenCalledWith(
+        'acct',
+        'deal-1',
+        'marketing this deal to buyers',
+      );
+
+      prisma.dispositionCampaign.findFirst.mockResolvedValue({ id: 'camp-1' });
+      await expect(
+        service().approve('acct', 'run-1', 'user-1'),
+      ).rejects.toThrow('campaign is already running');
+      expect(communications.create).not.toHaveBeenCalled();
+      expect(automation.completeRun).not.toHaveBeenCalled();
+    });
+
     it('reports a blast that produced no draft as failed without losing the approval', async () => {
       prisma.automationRun.findFirst.mockResolvedValue({
         ...dealRun,
@@ -1228,6 +1276,72 @@ describe('AgentOrchestrationService', () => {
         ),
       });
       expect(automation.completeRun).toHaveBeenCalled();
+    });
+  });
+
+  describe('buyer offers read from a reply (Buyer Responder)', () => {
+    const dealRun = { ...baseRun, entityType: 'deal', entityId: 'deal-1' };
+    const decision: AgentDecision = {
+      agent: 'buyer_responder',
+      promptVersion: 'buyer_responder.v1',
+      model: 'gpt-4o',
+      recommendation: 'offer',
+      summary: 'offer (0.92) from Sarah; offer $70,000',
+      rationale: 'r',
+      hardRule: null,
+      actions: [
+        {
+          type: 'record_buyer_offer',
+          buyerId: 'b1',
+          messageId: 'in-1',
+          amount: 70_000,
+          terms: 'cash, close in 10 days',
+          kind: 'written_offer',
+          confidence: 0.92,
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      prisma.automationRun.findFirst.mockResolvedValue({ ...dealRun });
+      prisma.message.findFirst.mockResolvedValue({ channel: 'email' });
+      offers.recordFromAgent.mockResolvedValue({ id: 'offer-1' });
+    });
+
+    it('captures the offer at once, as agent-captured and unconfirmed', async () => {
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision,
+      });
+      expect(offers.recordFromAgent).toHaveBeenCalledWith('acct', 'deal-1', {
+        buyerId: 'b1',
+        amount: 70_000,
+        kind: 'written_offer',
+        source: 'email',
+        sourceMessageId: 'in-1',
+        conditions: 'cash, close in 10 days',
+        confidence: 0.92,
+        automationRunId: 'run-1',
+      });
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.decisionJson.outcomes[0]).toMatchObject({
+        result: 'applied',
+        detail: 'offer:offer-1 (to be confirmed by a person)',
+      });
+    });
+
+    it('skips the capture when the deal has no executed seller contract', async () => {
+      eligibility.currentAgreement.mockResolvedValue({
+        id: 'pa-1',
+        status: 'sent',
+      });
+      await service().recordDecision('acct', 'run-1', {
+        status: 'COMPLETED',
+        decision,
+      });
+      expect(offers.recordFromAgent).not.toHaveBeenCalled();
+      const data = prisma.automationRun.update.mock.calls[0][0].data;
+      expect(data.decisionJson.outcomes[0].result).toBe('skipped');
     });
   });
 

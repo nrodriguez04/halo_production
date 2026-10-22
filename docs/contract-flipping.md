@@ -318,7 +318,10 @@ The runtime is still the TypeScript worker. `docs/agent-design.md` s9 records th
 | Transaction Coordinator | `ClosingService` + `DispositionSweepService` (deterministic) |
 | Compliance | the disposition gate, jurisdiction policies, consent/DNC/quiet hours (deterministic) |
 
-Roles that need no judgement are deterministic services, not models. Where an agent adds value (reading a buyer's email), it captures facts as agent-captured, for a person to confirm.
+Roles that need no judgement are deterministic services, not models. Where an agent adds value, it captures facts as agent-captured, for a person to confirm:
+
+- **Buyer Responder.** When it reads a price in a buyer's reply, it records `record_buyer_offer`: a `written_offer` when the buyer offered, an `indication` otherwise. The offer cannot be accepted until a person confirms the amount.
+- **Disposition Matcher.** Approving one of its blasts checks the gate, and is refused while a campaign is already running for the deal.
 
 ## 9. Tests
 
@@ -399,7 +402,9 @@ What was missing, and is now built:
 - the workspace and attention and portfolio reads;
 - real-database lifecycle tests.
 
-Found along the way and still open:
-- **Seller drafts from approved agent runs are created as `draft` and never reach the approval queue.** No UI calls `/agent/communications/:id/request-send`.
+Found along the way:
+- **Fixed: seller drafts from approved agent runs never reached the approval queue.** They were created as `draft` and nothing submitted them; they are now submitted on approval.
+
+Still open:
 - **`agentAutonomy` gates only rule-based lead transitions.** Scores, notes, numbers and rankings apply in both tiers, unlike docs/agent-design.md s5.
 - **Deals, buyers, documents and communications routes have no role checks.** Only the new binding steps require `deals:approve`.

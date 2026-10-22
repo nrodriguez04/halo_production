@@ -236,6 +236,41 @@ describe('BuyerResponderAgent.run', () => {
     expect(res.decision.actions.map((a) => a.type)).not.toContain(
       'transition_deal',
     );
+    // The amount is captured as an offer on the deal for a person to
+    // confirm; nothing accepts or counters it.
+    const captured = res.decision.actions.find((a) => a.type === 'record_buyer_offer');
+    expect(captured).toMatchObject({
+      type: 'record_buyer_offer',
+      amount: 70000,
+      terms: 'cash, 10-day close',
+      kind: 'written_offer',
+    });
+    expect(captured).not.toHaveProperty('gated');
+  });
+
+  it('captures a price named in an interested reply as an indication, and none without a price', async () => {
+    chat.mockResolvedValue(
+      reply({
+        intent: 'interested',
+        offer: { amount: 65000, terms: null },
+        reply: { body: 'Thanks, we will be in touch.', subject: 'Re: deal' },
+        rationale: 'Interested, floated a number.',
+      }),
+    );
+    let res = await agent().run(ctx(), 'acct', 'run-1');
+    expect(res.decision.actions).toContainEqual(
+      expect.objectContaining({ type: 'record_buyer_offer', kind: 'indication', amount: 65000 }),
+    );
+    chat.mockResolvedValue(
+      reply({
+        intent: 'interested',
+        offer: null,
+        reply: { body: 'Thanks, we will be in touch.', subject: 'Re: deal' },
+        rationale: 'Interested.',
+      }),
+    );
+    res = await agent().run(ctx(), 'acct', 'run-1');
+    expect(res.decision.actions.map((a) => a.type)).not.toContain('record_buyer_offer');
   });
 
   it('drafts nothing after a model opt-out and gates an unsure one', async () => {

@@ -10,6 +10,8 @@ import { ControlPlaneModule } from '../control-plane/control-plane.module';
 import { AutomationModule } from '../automation/automation.module';
 import { DealsModule } from '../deals/deals.module';
 import { QueuesModule } from '../queues/queues.module';
+import { DispositionModule } from '../disposition/disposition.module';
+import { DispositionGateModule } from '../disposition/disposition-gate.module';
 
 // LeadLifecycleModule is @Global, so LeadLifecycleService resolves without an import.
 @Module({
@@ -20,6 +22,8 @@ import { QueuesModule } from '../queues/queues.module';
     AutomationModule,
     DealsModule,
     QueuesModule,
+    DispositionModule,
+    DispositionGateModule,
   ],
   controllers: [AgentController],
   providers: [

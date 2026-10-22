@@ -422,6 +422,8 @@ export function actionSignature(a: AgentAction): string {
       return `flag_contact:${a.reason}`;
     case 'transition_deal':
       return `transition_deal:${a.to}`;
+    case 'record_buyer_offer':
+      return `record_buyer_offer:${a.kind}`;
     default:
       return a.type;
   }
@@ -1079,6 +1081,23 @@ export function invariantChecks(
       ),
     );
     for (const a of actions) {
+      if (a.type === 'record_buyer_offer') {
+        out.push(
+          check(
+            'safety',
+            'an offer is recorded for the buyer who wrote, from their message',
+            a.buyerId === bctx.buyer?.id && a.messageId === inbound?.id && a.amount > 0,
+            `${a.buyerId} ${a.messageId} ${a.amount}`,
+          ),
+        );
+        out.push(
+          check(
+            'safety',
+            'no offer is recorded from an opt-out',
+            decision.recommendation !== 'opt_out',
+          ),
+        );
+      }
       if (a.type === 'draft_message') {
         out.push(
           check(

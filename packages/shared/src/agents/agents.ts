@@ -169,6 +169,22 @@ export type AgentAction =
     }
   | {
       /**
+       * A price a buyer named in a reply (Buyer Responder), captured as an
+       * offer for a person to confirm (docs/contract-flipping.md s5). It
+       * records what the buyer said; it accepts, counters and promises
+       * nothing, and an agent-captured offer cannot be accepted until a
+       * person checks the amount against the message.
+       */
+      type: 'record_buyer_offer';
+      buyerId: string;
+      messageId: string;
+      amount: number;
+      terms: string | null;
+      kind: 'indication' | 'written_offer';
+      confidence: number;
+    }
+  | {
+      /**
        * Deal Underwriter numbers (design doc s3.2). Autonomous in every tier:
        * numbers never reach a seller. The api applies them only when the deal
        * has not been edited since `dealUpdatedAt`, and records the result
