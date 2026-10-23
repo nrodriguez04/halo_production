@@ -33,6 +33,8 @@ set -a; . "$ENV_FILE"; set +a
 : "${DESCOPE_PROJECT_ID:?DESCOPE_PROJECT_ID is empty}"
 
 say "Deploying $(git rev-parse --short HEAD) ($(git log -1 --pretty=%s | cut -c1-60))"
+# The web image shows the commit on its 404 page (docker-compose.prod.yml).
+export BUILD_SHA="$(git rev-parse --short=12 HEAD)"
 
 say "Building images"
 "${COMPOSE[@]}" build --pull api web worker

@@ -231,6 +231,8 @@ services:
         NEXT_PUBLIC_DESCOPE_PROJECT_ID: ${DESCOPE_PROJECT_ID}
         NEXT_PUBLIC_DESCOPE_FLOW_ID: ${NEXT_PUBLIC_DESCOPE_FLOW_ID:-sign-in}
         NEXT_PUBLIC_DESCOPE_BASE_URL: ${DESCOPE_BASE_URL:-}
+        # The commit, for the 404 debugger: BUILD_SHA=$(git rev-parse --short=12 HEAD)
+        BUILD_SHA: ${BUILD_SHA:-}
     container_name: halo-web
     restart: unless-stopped
     depends_on:
