@@ -147,6 +147,7 @@ export function RouteDebugger({ pathname }: { pathname: string }) {
     try {
       const res = await fetch(`${API}/auth/session`, {
         cache: 'no-store',
+        credentials: 'include',
         headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;

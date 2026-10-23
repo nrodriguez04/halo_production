@@ -102,6 +102,9 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   const jwt = await getJwt();
 
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+    // When Descope manages tokens in cookies (production), the session
+    // cookie is the credential and the page may never see the token.
+    credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -144,6 +147,7 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
     method: 'POST',
     body: form,
+    credentials: 'include',
     headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
   });
   if (res.status === 401 || (res.status === 403 && (await refusedForTenant(res)))) await toSignIn(res);
