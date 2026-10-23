@@ -49,9 +49,12 @@ export class ApiError extends Error {
 
 const SIGN_IN_REASON_KEY = 'halo.signInReason';
 
+/** A signed-in user the API cannot place in an account: no tenant on them in Descope. */
+const NO_TENANT = /tenant\/account claim/i;
+
 /**
- * The API refused the session (401): go to sign-in and keep the API's own
- * reason for the page to show. Without it a login that Descope accepts but
+ * The API refused the session (401, or a 403 for a user with no tenant):
+ * go to sign-in and keep the API's own reason for the page to show. Without it a login that Descope accepts but
  * the API rejects (no tenant on the user, say) only ever returned to the
  * sign-in page, with nothing to say why. Never redirects from sign-in itself.
  */
@@ -71,6 +74,17 @@ async function toSignIn(res: Response) {
     // Storage blocked: the page shows no reason.
   }
   window.location.href = '/sign-in';
+}
+
+/** Whether a 403 is the API refusing a session with no tenant (not a missing permission). */
+async function refusedForTenant(res: Response): Promise<boolean> {
+  try {
+    const body = (await res.clone().json()) as { message?: string | string[] };
+    const m = Array.isArray(body?.message) ? body.message.join(' ') : body?.message;
+    return !!m && NO_TENANT.test(m);
+  } catch {
+    return false;
+  }
 }
 
 /** The reason the last 401 gave, once: reading it clears it. */
@@ -96,7 +110,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     },
   });
 
-  if (res.status === 401) await toSignIn(res);
+  if (res.status === 401 || (res.status === 403 && (await refusedForTenant(res)))) await toSignIn(res);
 
   return res;
 }
@@ -132,7 +146,7 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
     body: form,
     headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
   });
-  if (res.status === 401) await toSignIn(res);
+  if (res.status === 401 || (res.status === 403 && (await refusedForTenant(res)))) await toSignIn(res);
   if (!res.ok) {
     let body: unknown;
     try {

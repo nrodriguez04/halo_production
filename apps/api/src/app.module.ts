@@ -51,9 +51,11 @@ import { TemplatesModule } from './templates/templates.module';
 import { DataModule } from './data/data.module';
 import { CommunicationsAdminModule } from './communications/communications-admin.module';
 import { AuditModule } from './audit/audit.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
+    AuthModule,
     PrismaModule,
     LoggerModule.forRoot({
       pinoHttp: {
