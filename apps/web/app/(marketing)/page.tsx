@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Shield, Zap, LayoutGrid, ArrowRight, Sparkles } from 'lucide-react';
+import { Logo } from '@/components/brand/logo';
 
 const features = [
   {
@@ -42,9 +43,10 @@ export default function LandingPage() {
         <header className="flex items-center justify-between py-6">
           <Link
             href="/"
-            className="flex items-center gap-2 rounded-md text-h3 font-bold tracking-tight text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label="Hålo home"
+            className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            Hālo
+            <Logo height={30} priority />
           </Link>
           <Button asChild>
             <Link href="/sign-in">Login</Link>

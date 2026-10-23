@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ArrowLeft } from 'lucide-react';
+import { Logo } from '@/components/brand/logo';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -51,7 +52,9 @@ export default function SignInPage() {
         </div>
 
         <div className="mb-8 text-center">
-          <h1 className="text-display font-bold tracking-tight text-primary">Hālo</h1>
+          <h1 className="flex justify-center">
+            <Logo height={56} priority />
+          </h1>
           <p className="mt-1 text-body text-muted-foreground">Sign in to continue</p>
         </div>
 
@@ -66,7 +69,7 @@ export default function SignInPage() {
         </Card>
 
         <p className="mt-6 text-center text-caption text-muted-foreground">
-          Internal Hālo platform · Production environment
+          Internal Hålo platform · Production environment
         </p>
       </div>
     </main>
