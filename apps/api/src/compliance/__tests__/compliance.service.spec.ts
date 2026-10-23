@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ComplianceService } from '../compliance.service';
+import { DncRegistryService } from '../dnc-registry.service';
 import { PrismaService } from '../../prisma.service';
 import { hashEmail, hashPhone } from '@halo/shared';
 import { protectContact } from '../../leads/lead-pii';
@@ -7,6 +8,7 @@ import { protectContact } from '../../leads/lead-pii';
 describe('ComplianceService', () => {
   let service: ComplianceService;
   let prisma: any;
+  let registry: { check: jest.Mock; required: jest.Mock };
 
   beforeAll(() => {
     process.env.PII_ENCRYPTION_KEY_V1 = '11'.repeat(32);
@@ -21,11 +23,16 @@ describe('ComplianceService', () => {
       consent: { findFirst: jest.fn().mockResolvedValue(null) },
       quietHours: { findFirst: jest.fn().mockResolvedValue(null) },
     };
+    registry = {
+      check: jest.fn().mockResolvedValue('clear'),
+      required: jest.fn().mockResolvedValue(true),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ComplianceService,
         { provide: PrismaService, useValue: prisma },
+        { provide: DncRegistryService, useValue: registry },
       ],
     }).compile();
 
@@ -37,6 +44,47 @@ describe('ComplianceService', () => {
   });
 
   const dncWhere = () => prisma.dNCList.findFirst.mock.calls[0][0].where;
+
+  describe('Do Not Call registry', () => {
+    it('checks a text recipient against the registry and reports written consent', async () => {
+      registry.check.mockResolvedValue('listed');
+      prisma.consent.findFirst.mockResolvedValue({ source: 'written' });
+      const facts = await service.getFacts({
+        accountId: 'acct-1',
+        channel: 'sms',
+        phone: '+1 (214) 555-0100',
+      });
+      expect(registry.check).toHaveBeenCalledWith(
+        'acct-1',
+        '+1 (214) 555-0100',
+      );
+      expect(facts).toMatchObject({
+        dncRegistry: 'listed',
+        dncRegistryRequired: true,
+        writtenConsent: true,
+      });
+    });
+
+    it('does not count verbal consent as written', async () => {
+      prisma.consent.findFirst.mockResolvedValue({ source: 'verbal' });
+      const facts = await service.getFacts({
+        accountId: 'acct-1',
+        channel: 'sms',
+        phone: '2145550100',
+      });
+      expect(facts.writtenConsent).toBe(false);
+    });
+
+    it('leaves email out of it', async () => {
+      const facts = await service.getFacts({
+        accountId: 'acct-1',
+        channel: 'email',
+        email: 'someone@example.test',
+      });
+      expect(registry.check).not.toHaveBeenCalled();
+      expect(facts.dncRegistry).toBeUndefined();
+    });
+  });
 
   describe('DNC', () => {
     it('scopes the lookup to the tenant plus the GLOBAL opt-out scope', async () => {

@@ -115,6 +115,29 @@ export const consentDncQuietHoursRule: PolicyCheck = (ctx) => {
     return deny('MISSING_CONSENT', 'Outbound messaging requires consent');
   }
 
+  // A marketing text is a telephone solicitation. While scrubbing is
+  // required, a number the registry data on file does not cover is
+  // refused like a listed one: an unknown never permits.
+  if (
+    ctx.channel === 'sms' &&
+    ctx.messageClass === 'marketing' &&
+    ctx.dncRegistryRequired !== false
+  ) {
+    const registry = ctx.dncRegistry ?? 'not_covered';
+    if (registry === 'not_covered') {
+      return deny(
+        'DNC_REGISTRY_NOT_CURRENT',
+        'No Do Not Call registry data from the last 31 days covers this area code',
+      );
+    }
+    if (registry === 'listed' && !ctx.writtenConsent) {
+      return deny(
+        'DNC_REGISTRY_LISTED',
+        'The number is on the Do Not Call registry and there is no written consent on file',
+      );
+    }
+  }
+
   if (isQuietHour(ctx)) {
     return deny('QUIET_HOURS_BLOCKED', 'Outbound messaging blocked during quiet hours', {
       timezone: ctx.timezone ?? 'unknown',

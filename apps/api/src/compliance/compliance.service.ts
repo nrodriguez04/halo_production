@@ -4,6 +4,21 @@ import { hashEmail, hashPhone, isWithinQuietWindow } from '@halo/shared';
 import { GLOBAL_ACCOUNT_ID } from '../control-plane/control-plane.service';
 import { cleanValue, openValue } from '../pii/contact-crypto';
 import { recipientTimeZones } from './recipient-time-zones';
+import {
+  DncRegistryService,
+  type RegistryStatus,
+} from './dnc-registry.service';
+
+/**
+ * Consent the Do Not Call registry exemption accepts: a signed or form
+ * agreement. Verbal, recorded-call and relationship consents still allow
+ * texts to numbers not on the registry.
+ */
+export const WRITTEN_CONSENT_SOURCES = new Set([
+  'written',
+  'form',
+  'deal_page',
+]);
 
 export interface ComplianceSubject {
   accountId: string;
@@ -17,6 +32,11 @@ export interface ComplianceFacts {
   isDnc: boolean;
   hasConsent: boolean;
   consentSource?: string;
+  /** The consent on file is a written or form agreement. */
+  writtenConsent?: boolean;
+  /** Texts only: what the registry data on file says about the recipient. */
+  dncRegistry?: RegistryStatus;
+  dncRegistryRequired?: boolean;
   timezone?: string;
   /**
    * Where `timezone` came from: the recipient's area code or address, or the
@@ -49,17 +69,31 @@ interface LeadSignals {
 export class ComplianceService {
   private readonly logger = new Logger(ComplianceService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private registry: DncRegistryService,
+  ) {}
 
   async getFacts(subject: ComplianceSubject): Promise<ComplianceFacts> {
     const lead = await this.leadSignals(subject);
-    const [isDnc, consent, quietHours] = await Promise.all([
-      this.isOnDncList(subject, lead),
-      this.findConsent(subject),
-      this.prisma.quietHours.findFirst({
-        where: { accountId: subject.accountId },
-      }),
-    ]);
+    const textPhone =
+      subject.channel === 'sms'
+        ? (cleanValue(subject.phone) ?? this.leadPhone(lead))
+        : null;
+    const [isDnc, consent, quietHours, dncRegistry, dncRegistryRequired] =
+      await Promise.all([
+        this.isOnDncList(subject, lead),
+        this.findConsent(subject),
+        this.prisma.quietHours.findFirst({
+          where: { accountId: subject.accountId },
+        }),
+        subject.channel === 'sms'
+          ? this.registry.check(subject.accountId, textPhone)
+          : Promise.resolve(undefined),
+        subject.channel === 'sms'
+          ? this.registry.required(subject.accountId)
+          : Promise.resolve(undefined),
+      ]);
 
     const facts: ComplianceFacts = {
       isDnc,
@@ -68,6 +102,10 @@ export class ComplianceService {
       // look up, so consent is not asserted either way.
       hasConsent: consent.applicable ? consent.granted : true,
       consentSource: consent.source,
+      writtenConsent:
+        consent.granted && WRITTEN_CONSENT_SOURCES.has(consent.source ?? ''),
+      dncRegistry,
+      dncRegistryRequired,
     };
 
     if (quietHours?.enabled) {

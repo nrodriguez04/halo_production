@@ -71,7 +71,12 @@ describe('MessageDispatchService', () => {
         .mockResolvedValue({ required: false, satisfied: true }),
     };
     compliance = {
-      getFacts: jest.fn().mockResolvedValue({ isDnc: false, hasConsent: true }),
+      getFacts: jest.fn().mockResolvedValue({
+        isDnc: false,
+        hasConsent: true,
+        dncRegistry: 'clear',
+        dncRegistryRequired: true,
+      }),
     };
     controlPlane = {
       getStatus: jest.fn().mockResolvedValue({
@@ -267,11 +272,36 @@ describe('MessageDispatchService', () => {
       noProviderCalled();
     });
 
+    it('blocks a marketing text the registry data does not cover, or a listed number without written consent', async () => {
+      for (const [facts, code] of [
+        [{ dncRegistry: 'not_covered' }, 'DNC_REGISTRY_NOT_CURRENT'],
+        [
+          { dncRegistry: 'listed', writtenConsent: false },
+          'DNC_REGISTRY_LISTED',
+        ],
+      ] as const) {
+        prisma.message.findFirst.mockResolvedValue(approved());
+        compliance.getFacts.mockResolvedValue({
+          isDnc: false,
+          hasConsent: true,
+          dncRegistryRequired: true,
+          ...facts,
+        });
+        const err = await service
+          .sendApproved('tenant-1', 'msg-1')
+          .catch((e) => e);
+        expect(err).toBeInstanceOf(ComplianceBlockedException);
+        expect(err.reason).toBe(code);
+      }
+      noProviderCalled();
+    });
+
     it("blocks during the recipient's quiet hours and says which zone", async () => {
       prisma.message.findFirst.mockResolvedValue(approved());
       compliance.getFacts.mockResolvedValue({
         isDnc: false,
         hasConsent: true,
+        dncRegistry: 'clear',
         timezone: 'America/New_York',
         timezoneSource: 'recipient',
         localHour: 22,

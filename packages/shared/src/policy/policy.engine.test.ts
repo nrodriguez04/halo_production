@@ -135,6 +135,50 @@ describe('PolicyRules', () => {
       expect(d.code).toBe('MISSING_CONSENT');
     });
 
+    describe('Do Not Call registry', () => {
+      const marketing = { messageClass: 'marketing' as const };
+
+      it('refuses a marketing text the registry data does not cover', () => {
+        for (const dncRegistry of ['not_covered' as const, undefined]) {
+          const d = consentDncQuietHoursRule(baseCtx({ ...marketing, dncRegistry }));
+          expect(d.code).toBe('DNC_REGISTRY_NOT_CURRENT');
+        }
+      });
+
+      it('refuses a listed number without written consent, allows it with', () => {
+        expect(
+          consentDncQuietHoursRule(
+            baseCtx({ ...marketing, dncRegistry: 'listed', writtenConsent: false }),
+          ).code,
+        ).toBe('DNC_REGISTRY_LISTED');
+        expect(
+          consentDncQuietHoursRule(
+            baseCtx({ ...marketing, dncRegistry: 'listed', writtenConsent: true }),
+          ).allow,
+        ).toBe(true);
+        expect(
+          consentDncQuietHoursRule(baseCtx({ ...marketing, dncRegistry: 'clear' })).allow,
+        ).toBe(true);
+      });
+
+      it('leaves replies, paperwork, email and a switched-off requirement alone', () => {
+        for (const ctx of [
+          { messageClass: 'conversational' as const, dncRegistry: 'listed' as const },
+          { messageClass: 'transactional' as const, dncRegistry: 'not_covered' as const },
+          { ...marketing, channel: 'email' as const, dncRegistry: 'listed' as const },
+          { ...marketing, dncRegistryRequired: false, dncRegistry: 'not_covered' as const },
+        ]) {
+          expect(consentDncQuietHoursRule(baseCtx(ctx)).allow).toBe(true);
+        }
+      });
+
+      it('still puts the internal list and consent first', () => {
+        expect(
+          consentDncQuietHoursRule(baseCtx({ ...marketing, isDnc: true, dncRegistry: 'clear' })).code,
+        ).toBe('DNC_BLOCKED');
+      });
+    });
+
     it('denies during quiet hours (late night)', () => {
       const d = consentDncQuietHoursRule(baseCtx({ localHour: 22 }));
       expect(d.allow).toBe(false);
