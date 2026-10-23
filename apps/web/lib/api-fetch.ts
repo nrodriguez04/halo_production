@@ -47,6 +47,43 @@ export class ApiError extends Error {
   }
 }
 
+const SIGN_IN_REASON_KEY = 'halo.signInReason';
+
+/**
+ * The API refused the session (401): go to sign-in and keep the API's own
+ * reason for the page to show. Without it a login that Descope accepts but
+ * the API rejects (no tenant on the user, say) only ever returned to the
+ * sign-in page, with nothing to say why. Never redirects from sign-in itself.
+ */
+async function toSignIn(res: Response) {
+  if (typeof window === 'undefined' || window.location.pathname.startsWith('/sign-in')) return;
+  let reason = 'Your session was not accepted. Sign in again.';
+  try {
+    const body = (await res.clone().json()) as { message?: string | string[] };
+    const m = Array.isArray(body?.message) ? body.message.join(' ') : body?.message;
+    if (m) reason = m;
+  } catch {
+    // Not JSON: keep the generic reason.
+  }
+  try {
+    sessionStorage.setItem(SIGN_IN_REASON_KEY, reason);
+  } catch {
+    // Storage blocked: the page shows no reason.
+  }
+  window.location.href = '/sign-in';
+}
+
+/** The reason the last 401 gave, once: reading it clears it. */
+export function takeSignInReason(): string | null {
+  try {
+    const r = sessionStorage.getItem(SIGN_IN_REASON_KEY);
+    if (r) sessionStorage.removeItem(SIGN_IN_REASON_KEY);
+    return r;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}) {
   const jwt = await getJwt();
 
@@ -59,9 +96,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     },
   });
 
-  if (res.status === 401 && typeof window !== 'undefined') {
-    window.location.href = '/sign-in';
-  }
+  if (res.status === 401) await toSignIn(res);
 
   return res;
 }
@@ -97,9 +132,7 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
     body: form,
     headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
   });
-  if (res.status === 401 && typeof window !== 'undefined') {
-    window.location.href = '/sign-in';
-  }
+  if (res.status === 401) await toSignIn(res);
   if (!res.ok) {
     let body: unknown;
     try {

@@ -91,9 +91,6 @@ export default function LandingPage() {
                 />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/dashboard">View Dashboard</Link>
-            </Button>
           </div>
         </section>
 
