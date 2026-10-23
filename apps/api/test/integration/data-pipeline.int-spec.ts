@@ -232,6 +232,58 @@ describeDb('property data pipeline (synthetic, real database)', () => {
     expect(recs.dataCoverage).toEqual({ counties: 2, states: 2 });
   });
 
+  it('ranks a metro across state lines where its weakest state stands', async () => {
+    const sales = moduleRef.get(RecordedSalesService);
+    const intelligence = moduleRef.get(MarketIntelligenceService);
+    const markets = moduleRef.get(MarketsService);
+    const accountId = await fx.tenant();
+    const file = await fx.doc(accountId, 'County export', {}, [], 'other', {
+      text: countyCsv(),
+      fileName: 'synthetic-county.csv',
+    });
+    const { guess } = await sales.previewCsv(accountId, file.id);
+    // Shelby County, TN and DeSoto County, MS are both in the Memphis metro.
+    await sales.importCsv(accountId, USER, {
+      documentId: file.id,
+      state: 'TN',
+      county: 'Shelby',
+      countyFips: '47157',
+      mapping: { ...guess, zip: 'Situs Zip' },
+    });
+    await sales.importCsv(accountId, USER, {
+      documentId: file.id,
+      state: 'MS',
+      county: 'DeSoto',
+      countyFips: '28033',
+      mapping: { ...guess, zip: 'Situs Zip' },
+      source: 'county_csv_ms',
+    });
+    await markets.importResearch(accountId, USER, { states: ['TN', 'MS'] });
+    await fx.approvedMarket(accountId, 'TN', {
+      status: 'APPROVED_FOR_ACQUISITION',
+    });
+
+    const counties = await intelligence.geos(accountId, { level: 'county' });
+    const metros = await intelligence.geos(accountId, { level: 'metro' });
+    expect(metros.geos).toHaveLength(1);
+    const memphis = metros.geos[0];
+    expect(memphis).toMatchObject({
+      level: 'metro',
+      key: '32820',
+      label: 'Memphis, TN-MS-AR',
+      state: 'TN',
+      states: ['MS', 'TN'],
+      sales12m: counties.geos.reduce((n, g) => n + g.sales12m, 0),
+    });
+    // Approved in Tennessee, research only in Mississippi: the metro
+    // scores Mississippi's standing, not Tennessee's.
+    const shelby = counties.geos.find((g) => g.key === '47157')!;
+    expect(shelby.components.find((c) => c.key === 'legal')!.points).toBe(10);
+    expect(
+      memphis.components.find((c) => c.key === 'legal')!.points,
+    ).toBeLessThan(10);
+  });
+
   it("puts a provider's facts on the lead's property and links the open deal to it", async () => {
     const facts = moduleRef.get(PropertyFactsService);
     const accountId = await fx.tenant();

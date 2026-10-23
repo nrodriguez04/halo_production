@@ -24,8 +24,12 @@ interface Component {
   detail: string;
 }
 
+type Level = 'metro' | 'county' | 'zip';
+
+const LEVEL_PLURAL: Record<Level, string> = { metro: 'metros', county: 'counties', zip: 'zips' };
+
 interface Geo {
-  level: 'county' | 'zip';
+  level: Level;
   key: string;
   label: string;
   state: string;
@@ -60,7 +64,7 @@ const BASIS_VARIANT = { recorded: 'success', halo: 'primary-soft', policy: 'info
  * every jurisdiction Halo holds data for, whatever its legal status.
  */
 export default function MarketIntelligencePage() {
-  const [level, setLevel] = useState<'county' | 'zip'>('county');
+  const [level, setLevel] = useState<Level>('county');
   const [state, setState] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const recs = useApiQuery<{ recommendations: Recommendation[]; dataCoverage: { counties: number; states: number } }>(
@@ -80,7 +84,7 @@ export default function MarketIntelligencePage() {
           </Link>
         }
         title="Market intelligence"
-        description="Counties and zips ranked from recorded sales and Halo's own leads and closings, and the states worth activating next. Every point names its basis; estimates are labelled as such."
+        description="Metros, counties and zips ranked from recorded sales and Halo's own leads and closings, and the states worth activating next. Every point names its basis; estimates are labelled as such."
       />
 
       <MarketBriefCard
@@ -134,8 +138,9 @@ export default function MarketIntelligencePage() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="mr-2">Ranked {level === 'county' ? 'counties' : 'zips'}</CardTitle>
-            <Select className="w-32" value={level} onChange={(e) => setLevel(e.target.value as 'county' | 'zip')} aria-label="Level">
+            <CardTitle className="mr-2">Ranked {LEVEL_PLURAL[level]}</CardTitle>
+            <Select className="w-32" value={level} onChange={(e) => setLevel(e.target.value as Level)} aria-label="Level">
+              <option value="metro">Metros</option>
               <option value="county">Counties</option>
               <option value="zip">Zips</option>
             </Select>

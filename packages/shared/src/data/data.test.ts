@@ -9,6 +9,7 @@ import {
 } from './records';
 import { discoverInvestors } from './investors';
 import { aggregateSales, rankGeos, recommendMarkets, scoreGeo } from './market-intelligence';
+import { CBSA_VINTAGE, countyName, metroByCode, metroForCounty } from './metros';
 
 /** SYNTHETIC recorded sale; every name and parcel is made up. */
 function sale(over: Partial<NormalizedSale>): NormalizedSale {
@@ -215,6 +216,41 @@ describe('market intelligence', () => {
     expect(scored.components.find((c) => c.key === 'profitability')).toMatchObject({ basis: 'unknown' });
     expect(scored.score).toBeGreaterThan(0);
     expect(scored.opportunity).toBeGreaterThan(0);
+  });
+
+  it('maps counties to metros from the Census delineation', () => {
+    expect(CBSA_VINTAGE).toBe('2023-07');
+    expect(metroForCounty('48113')).toEqual({
+      code: '19100',
+      title: 'Dallas-Fort Worth-Arlington, TX',
+      metropolitan: true,
+      states: ['TX'],
+    });
+    expect(metroForCounty('47157')?.states).toEqual(['TN', 'MS', 'AR']);
+    expect(metroByCode('10100')?.metropolitan).toBe(false);
+    expect(metroForCounty('48999')).toBeNull();
+    expect(metroForCounty(null)).toBeNull();
+    expect(countyName('48113')).toBe('Dallas County');
+    expect(countyName('48999')).toBeNull();
+    const [unnamed] = aggregateSales([sale({ county: null, countyFips: '48113' })], 'county', AS_OF);
+    expect(unnamed.label).toBe('Dallas County, TX');
+  });
+
+  it('groups counties into one metro and leaves out sales outside every metro', () => {
+    const geos = aggregateSales(
+      [
+        ...many.slice(0, 20).map((s) => ({ ...s, countyFips: '48113', county: 'Dallas' })),
+        ...many.slice(20, 30).map((s) => ({ ...s, countyFips: '48439', county: 'Tarrant' })),
+        ...many.slice(30, 40).map((s) => ({ ...s, countyFips: '28033', county: 'DeSoto', state: 'MS' })),
+        ...many.slice(40),
+      ],
+      'metro',
+      AS_OF,
+    );
+    expect(geos.map((g) => [g.key, g.label, g.state, g.states, g.sales12m])).toEqual([
+      ['19100', 'Dallas-Fort Worth-Arlington, TX', 'TX', ['TX'], 30],
+      ['32820', 'Memphis, TN-MS-AR', 'TN', ['MS'], 10],
+    ]);
   });
 
   it('recommends states by opportunity times how close they are to operating', () => {

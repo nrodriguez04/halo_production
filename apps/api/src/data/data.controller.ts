@@ -253,7 +253,7 @@ export class DataController {
     @Query('limit') limit?: string,
   ) {
     return this.intelligence.geos(a, {
-      level: level === 'zip' ? 'zip' : 'county',
+      level: level === 'zip' || level === 'metro' ? level : 'county',
       state,
       limit: Number(limit) || undefined,
     });
