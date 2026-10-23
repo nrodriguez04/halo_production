@@ -33,7 +33,7 @@ const VERIFY_ITEMS: Array<{ key: string; label: string }> = [
   { key: 'signatures', label: 'Every party signed and dated' },
   {
     key: 'legal_sufficiency',
-    label: 'The agreement is legally sufficient for this state: a counsel-approved template, or counsel reviewed it',
+    label: 'The agreement is right for this state: from a counsel-approved or owner-accepted template, or reviewed by counsel',
   },
   {
     key: 'disclosures',

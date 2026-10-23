@@ -18,6 +18,7 @@ import {
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { Permissions } from '../auth/permissions.decorator';
+import { OwnerRoleGuard } from '../auth/owner-role.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { input } from '../disposition/parse-input';
 import { MarketsService } from './markets.service';
@@ -41,6 +42,18 @@ const ApproveSchema = z
     counselName: z.string().trim().min(2).max(200),
     counselFirm: z.string().trim().max(200).nullable().optional(),
     memoDocumentId: z.string().trim().min(1).max(64),
+    attest: z.literal(true),
+    reviewExpiresAt: z.coerce.date().nullable().optional(),
+  })
+  .strict();
+
+/** An owner's risk acceptance (docs/markets.md s3.1). */
+export const AcceptRiskSchema = z
+  .object({
+    /** The full name the owner signs with. */
+    acceptedByName: z.string().trim().min(2).max(200),
+    /** Why the business accepts this risk now. */
+    reason: z.string().trim().min(20).max(4000),
     attest: z.literal(true),
     reviewExpiresAt: z.coerce.date().nullable().optional(),
   })
@@ -234,6 +247,18 @@ export class MarketsController {
     @Body() body: unknown,
   ) {
     return this.markets.approve(a, state, u, input(ApproveSchema, body));
+  }
+
+  /** The owner accepts the risk instead of counsel approving; labelled as such everywhere. */
+  @Post(':state/accept-risk')
+  @UseGuards(OwnerRoleGuard)
+  acceptRisk(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('state') state: string,
+    @Body() body: unknown,
+  ) {
+    return this.markets.acceptRisk(a, state, u, input(AcceptRiskSchema, body));
   }
 
   @Post(':state/status')

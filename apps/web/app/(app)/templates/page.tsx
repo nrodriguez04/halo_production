@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import { toast } from '@/components/ui/toast';
 import { Field } from '@/components/disposition/agreement-panel';
 import { DocumentSelect } from '@/components/disposition/document-select';
 import { day, errorText } from '@/lib/disposition';
-import { TEMPLATE_KIND_LABEL } from '@/lib/markets';
+import { BASIS_LABEL, BASIS_VARIANT, TEMPLATE_KIND_LABEL, type ApprovalBasis } from '@/lib/markets';
 
 interface Version {
   id: string;
@@ -35,6 +36,8 @@ interface Version {
   unknownFields: string[];
   missingRequired: string[];
   counselName: string | null;
+  approvalBasis: ApprovalBasis | null;
+  acceptedByName: string | null;
   approvedAt: string | null;
   createdAt: string;
   document: { id: string; title: string; fileName: string } | null;
@@ -99,6 +102,10 @@ export default function TemplatesPage() {
   const [counselFirm, setCounselFirm] = useState('');
   const [approvalDoc, setApprovalDoc] = useState('');
   const [attest, setAttest] = useState(false);
+  const [acceptFor, setAcceptFor] = useState<Version | null>(null);
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerReason, setOwnerReason] = useState('');
+  const [ownerAttest, setOwnerAttest] = useState(false);
 
 
   const create = useTemplateCall<void>(
@@ -136,6 +143,16 @@ export default function TemplatesPage() {
     'Approved: it now generates documents in those states',
     'Could not approve',
     () => setApproveFor(null),
+  );
+  const acceptRisk = useTemplateCall<void>(
+    () =>
+      apiJson(`/templates/versions/${acceptFor?.id}/accept-risk`, {
+        method: 'POST',
+        body: JSON.stringify({ acceptedByName: ownerName, reason: ownerReason, attest: true, states: statesOf(states) }),
+      }),
+    'Accepted as the owner: it now generates documents in those states',
+    'Could not accept it',
+    () => setAcceptFor(null),
   );
   const retire = useTemplateCall<string>(
     (id) => apiJson(`/templates/versions/${id}/retire`, { method: 'POST', body: JSON.stringify({ reason: 'Retired from the Templates page' }) }),
@@ -234,8 +251,11 @@ export default function TemplatesPage() {
                       {v.unknownFields.length > 0 && <p className="text-caption text-destructive">Unknown fields: {v.unknownFields.join(', ')}</p>}
                       {v.missingRequired.length > 0 && <p className="text-caption text-destructive">Missing required fields: {v.missingRequired.join(', ')}</p>}
                       {v.approvedAt && (
-                        <p className="text-caption text-muted-foreground">
-                          Approved {day(v.approvedAt)} on the advice of {v.counselName}
+                        <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+                          {v.approvalBasis === 'owner_risk_acceptance'
+                            ? `Accepted ${day(v.approvedAt)} by ${v.acceptedByName}`
+                            : `Approved ${day(v.approvedAt)} on the advice of ${v.counselName}`}
+                          {v.approvalBasis && <Badge variant={BASIS_VARIANT[v.approvalBasis]}>{BASIS_LABEL[v.approvalBasis]}</Badge>}
                         </p>
                       )}
                     </div>
@@ -255,6 +275,21 @@ export default function TemplatesPage() {
                         >
                           <Gavel size={14} className="mr-1" aria-hidden />
                           Approve
+                        </Button>
+                      )}
+                      {v.status === 'validated' && !t.starter && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setAcceptFor(v);
+                            setStates(v.states.join(', '));
+                            setOwnerName('');
+                            setOwnerReason('');
+                            setOwnerAttest(false);
+                          }}
+                        >
+                          Accept as owner
                         </Button>
                       )}
                       {v.status !== 'retired' && (
@@ -396,6 +431,48 @@ export default function TemplatesPage() {
             </Button>
             <Button disabled={!attest || !approvalDoc || counselName.trim().length < 2 || statesOf(states).length === 0} loading={approve.isPending} onClick={() => approve.mutate()}>
               Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!acceptFor} onOpenChange={(o) => !o && setAcceptFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Accept v{acceptFor?.version} as the owner</DialogTitle>
+            <DialogDescription>
+              Not counsel&apos;s approval, and never shown as one: the version is labelled &quot;Owner-accepted, not counsel-approved&quot; wherever it
+              appears and on every document generated from it. Hålo still never writes clauses.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field label="States you accept it for" htmlFor="to-states">
+              <Input id="to-states" value={states} onChange={(e) => setStates(e.target.value)} />
+            </Field>
+            <Field label="Your full name, as your signature" htmlFor="to-name">
+              <Input id="to-name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
+            </Field>
+            <Field label="Why this text is right for these states (who wrote it, what it was checked against)" htmlFor="to-reason">
+              <Textarea id="to-reason" rows={3} value={ownerReason} onChange={(e) => setOwnerReason(e.target.value)} />
+            </Field>
+            <label className="flex items-start gap-2 text-body">
+              <Checkbox checked={ownerAttest} onCheckedChange={(v) => setOwnerAttest(v === true)} className="mt-1" />
+              <span>
+                I am not acting as legal counsel, and this is not an attorney&apos;s approval. I reviewed this exact text, chose it for the jurisdictions listed,
+                and accept the legal and business risk of using it there.
+              </span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAcceptFor(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!ownerAttest || ownerName.trim().length < 2 || ownerReason.trim().length < 20 || statesOf(states).length === 0}
+              loading={acceptRisk.isPending}
+              onClick={() => acceptRisk.mutate()}
+            >
+              Accept the risk
             </Button>
           </DialogFooter>
         </DialogContent>

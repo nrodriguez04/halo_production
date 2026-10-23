@@ -4,6 +4,7 @@ import { TEMPLATE_KINDS } from '@halo/shared';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { Permissions } from '../auth/permissions.decorator';
+import { OwnerRoleGuard } from '../auth/owner-role.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { input } from '../disposition/parse-input';
 import {
@@ -43,6 +44,16 @@ const ApproveSchema = z
     counselName: z.string().trim().min(2).max(200),
     counselFirm: z.string().trim().max(200).nullable().optional(),
     approvalDocumentId: z.string().trim().min(1).max(64),
+    attest: z.literal(true),
+    states: STATES.optional(),
+  })
+  .strict();
+
+/** The owner accepts the text for named jurisdictions (docs/markets.md s6). */
+const AcceptRiskSchema = z
+  .object({
+    acceptedByName: z.string().trim().min(2).max(200),
+    reason: z.string().trim().min(20).max(4000),
     attest: z.literal(true),
     states: STATES.optional(),
   })
@@ -114,6 +125,17 @@ export class TemplatesController {
     @Body() body: unknown,
   ) {
     return this.templates.approve(a, id, u, input(ApproveSchema, body));
+  }
+
+  @Post('versions/:id/accept-risk')
+  @UseGuards(OwnerRoleGuard)
+  acceptRisk(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.templates.acceptRisk(a, id, u, input(AcceptRiskSchema, body));
   }
 
   @Post('versions/:id/retire')

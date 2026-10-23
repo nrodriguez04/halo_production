@@ -16,6 +16,7 @@ import { ErrorState, LoadingState } from '@/components/states';
 import { toast } from '@/components/ui/toast';
 import { errorText } from '@/lib/disposition';
 import {
+  BASIS_LABEL,
   CHANNEL_SHORT,
   PERMISSION_VARIANT,
   STATUS_LABEL,
@@ -117,7 +118,7 @@ export default function MarketsPage() {
       <PageHeader
         eyebrow="Compliance"
         title="Market activation"
-        description="Every state and DC. Research is a lead for counsel; a market operates only as far as counsel's approved policy, its requirements and a person's decision allow. Unknown never means allowed."
+        description="Every state and DC. A market operates only as far as its approved policy (approved by counsel, or accepted by the owner and labelled so), its requirements and a person's decision allow. Unknown never means allowed."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" loading={importResearch.isPending} onClick={() => importResearch.mutate()}>
@@ -155,7 +156,7 @@ export default function MarketsPage() {
               label="Active transaction markets"
               value={matrix.data.kpis.active.count}
               total={matrix.data.kpis.total}
-              detail={`Approved by counsel, requirements met and activated by a person. ${matrix.data.kpis.active.transactionEnabled} may sign seller contracts.`}
+              detail={`Approved by counsel or accepted by the owner, requirements met and activated by a person. ${matrix.data.kpis.active.transactionEnabled} may sign seller contracts.`}
             />
           </div>
           <Card>
@@ -211,7 +212,7 @@ export default function MarketsPage() {
                     <TableHead>State</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Counsel review</TableHead>
+                    <TableHead>Approval</TableHead>
                     <TableHead>Structures</TableHead>
                     <TableHead>Channels</TableHead>
                     <TableHead>Requirements</TableHead>
@@ -235,7 +236,7 @@ export default function MarketsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={r.classificationSource === 'approved' ? 'default' : 'outline'} title={r.classificationSource === 'approved' ? 'Approved by counsel' : 'Proposed in the draft, not reviewed'}>
+                        <Badge variant={r.classificationSource === 'approved' ? 'default' : 'outline'} title={r.approvalBasis ? BASIS_LABEL[r.approvalBasis] : 'Proposed in the draft, not reviewed'}>
                           {r.classification === 'unclassified' ? '—' : r.classification}
                         </Badge>
                         {r.classificationSource === 'draft' && r.classification !== 'unclassified' && (
@@ -251,7 +252,7 @@ export default function MarketsPage() {
                       <TableCell className="text-caption">
                         {r.legal.state === 'approved' || r.legal.state === 'expired' ? (
                           <>
-                            v{r.legal.version} · {r.legal.counselName}
+                            v{r.legal.version} · {r.legal.basis === 'owner_risk_acceptance' ? 'owner-accepted, not counsel' : r.legal.counselName}
                             <div className={r.legal.state === 'expired' ? 'text-destructive' : 'text-muted-foreground'}>
                               {r.legal.state === 'expired' ? 'lapsed ' : 'until '}
                               {r.legal.reviewExpiresAt?.slice(0, 10) ?? '—'}

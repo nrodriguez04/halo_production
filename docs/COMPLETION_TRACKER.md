@@ -38,7 +38,8 @@ Gaps the audit found and where they stand:
 
 | # | Item | Built | Operational | External dependency |
 |---|---|---|---|---|
-| 1 | All 51 jurisdictions in the framework, with research and uncertainties | done | research drafts only | counsel review of each policy |
+| 1 | All 51 jurisdictions in the framework, with research and uncertainties | done | research drafts only | a decision on each policy: counsel's approval or the owner's risk acceptance (21 acceptable on current research) |
+| 1 | Owner risk acceptance as a second approval basis for policies and templates, labelled "Owner-accepted, not counsel-approved" everywhere (decided 2026-10-23) | done (unit and real-Postgres tests; docs/markets.md s3.1) | nothing accepted yet | the owner's decision per state |
 | 1 | Classifications A–E, activation statuses, structures, channels, disclosures, deadlines, requirements, sources, counsel review, versions | done | done | — |
 | 1 | Licence/registration tracking, authorized operators, broker-partner agreements | done | done | the licences themselves |
 | 2 | Market Activation Matrix dashboard | done | done | — |
@@ -48,8 +49,8 @@ Gaps the audit found and where they stand:
 | 3 | Recommend markets to activate next | done | done | — |
 | 4 | Lifecycle: discover → enrich → underwrite | done | with a provider key | data provider keys |
 | 4 | Lifecycle: negotiate → contract → verify → market → offers → assign → close → fee | done | in approved markets only | counsel, DocuSign, title company |
-| 4 | Texas end-to-end lifecycle test | done (synthetic, real Postgres) | not until counsel approves TX | counsel approval of the TX policy and templates |
-| 5 | DOCX templates, merge fields, required-field validation, versioning, state selection | done | done | counsel's templates |
+| 4 | Texas end-to-end lifecycle test | done (synthetic, real Postgres) | not until TX is approved or accepted | the TX policy and templates, approved by counsel or accepted by the owner |
+| 5 | DOCX templates, merge fields, required-field validation, versioning, state selection | done | done | real agreement templates per state, approved by counsel or accepted by the owner |
 | 5 | PDF generation | done: .txt through pdf-lib; .docx through Gotenberg, verified against a local `gotenberg/gotenberg:8` (the compose image) and run in CI's integration job | wherever Gotenberg runs (in `docker-compose.prod.yml`) | — |
 | 5 | Deadline and cancellation calculations | done | done | — |
 | 5 | Executed-document verification with automated checks (DocuSign signers recorded at completion); explicit legal sufficiency and disclosure confirmations | done | done | DocuSign account |
