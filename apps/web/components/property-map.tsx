@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import MapGL, { Marker, Popup, NavigationControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { apiFetch } from '@/lib/api-fetch';
+import { MAPLIBRE_WORKER_URL } from '@/lib/maplibre';
 import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -101,6 +102,7 @@ export default function PropertyMap() {
             {...viewState}
             onMove={(evt) => setViewState(evt.viewState)}
             mapStyle={TILE_URL}
+            workerUrl={MAPLIBRE_WORKER_URL}
             style={{ width: '100%', height: '100%' }}
           >
             <NavigationControl position="top-right" />
