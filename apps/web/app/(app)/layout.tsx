@@ -34,6 +34,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { prefetchApi, useQueryClient } from '@/lib/api-query';
+import { Logo } from '@/components/brand/logo';
 
 // Nav link → list of {path, params?} entries that the destination page will
 // useApiQuery for. We fire these on mouseEnter so by the time the user clicks,
@@ -230,9 +231,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {!collapsed && (
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 rounded-md px-1 py-0.5 text-h3 font-bold text-primary transition-colors duration-fast hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              aria-label="Hålo dashboard"
+              className="flex items-center gap-2 rounded-md px-1 py-0.5 transition-opacity duration-fast hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             >
-              Hālo
+              <Logo height={26} priority />
             </Link>
           )}
           <Tooltip>

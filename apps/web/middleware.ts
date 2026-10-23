@@ -22,6 +22,12 @@ const descopeMiddleware = authMiddleware({
 
 export default devAuthBypass ? () => NextResponse.next() : descopeMiddleware;
 
+// Static files are not pages: the logo on the sign-in page, the app icons
+// and the map worker must load for someone who has not signed in yet. Only
+// paths ending in a static file extension are skipped; app routes and the
+// /api proxy have none.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|mjs|js|css|map|txt|woff2?)$).*)',
+  ],
 };

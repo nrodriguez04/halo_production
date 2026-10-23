@@ -6,7 +6,7 @@ import { Providers } from './providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Hālo - Internal AI Wholesaling Platform',
+  title: 'Hålo - Internal AI Wholesaling Platform',
   description: 'Internal platform for real estate wholesaling',
 };
 
