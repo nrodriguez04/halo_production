@@ -54,6 +54,11 @@ A monorepo for the Hālo wholesaling platform with Next.js frontend, NestJS API,
    DESCOPE_MANAGEMENT_KEY=""
    ```
 
+   **Signing in locally needs three things from Descope:**
+   - **Tokens in the response body.** Session Management must be "Manage in response body". With "Manage in cookies", the session cookie lives on the custom auth domain (`auth.haloacquisitions.com`), which `localhost` cannot read, so every sign-in bounces back to the sign-in page.
+   - **The custom domain in both env files.** When the project uses a custom domain, set it as `NEXT_PUBLIC_DESCOPE_BASE_URL` (web) and `DESCOPE_BASE_URL` (api).
+   - **A tenant for every user, with a role.** The API refuses a session that names no tenant, and the sign-in page then says so.
+
 2. **Start infrastructure:**
    ```bash
    docker compose up -d
