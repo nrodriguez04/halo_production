@@ -61,8 +61,8 @@ export const WHOLESALE_CHECKLIST: readonly ChecklistItem[] = [
     title: 'Equitable interest disclosure (Texas)',
     category: 'disclosure',
     jurisdiction: 'TX',
-    why: 'Texas requires written notice to a prospective buyer that you hold only a contractual (equitable) interest and not title, before the buyer commits; sellers should also be told in writing that you intend to assign.',
-    reference: 'Tex. Prop. Code 5.086; Tex. Occ. Code 1101.0045',
+    why: 'Texas requires written notice to a prospective buyer that you hold only a contractual (equitable) interest and not title, before the buyer commits. Since 2024 (SB 1577) the owner must also be told in writing that you intend to assign.',
+    reference: 'Tex. Prop. Code 5.0205; Tex. Occ. Code 1101.0045',
   },
   {
     key: 'seller_disclosure',
