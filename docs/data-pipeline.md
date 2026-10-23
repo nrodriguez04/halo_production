@@ -50,8 +50,8 @@ Sources:
 | Source | How | Gives buyer names | Status |
 |---|---|---|---|
 | County export (CSV) | Upload to Documents, then **Buyer discovery → Import county sales**. Columns are guessed, a person confirms the mapping, and blank mortgage means cash. | yes | works; tested on synthetic files |
-| ATTOM sales history | `POST /data/attom/sales-history {address}` | yes, where the county records them | built to ATTOM's documented API; **not run against a live key** |
-| ATTOM area snapshot | `POST /data/attom/area-sales {postalCode, dates, maxPages}` | no (prices and dates only) | built; **not run against a live key** |
+| ATTOM sales history | `POST /data/attom/sales-history {address}` | yes, where the county records them | built to ATTOM's documented API; not yet run against a live key |
+| ATTOM area snapshot | `POST /data/attom/area-sales {postalCode, dates, maxPages}` | no (prices and dates only) | **live-verified 2026-10-23**: one page for Dallas 75217 imported 96 sales with county FIPS, no county name |
 | Regrid parcel | `POST /data/regrid/parcel` | owner, not buyer | built to Regrid's v2 API; **not run against a live token** |
 
 **Only import data you are authorized to use.** County terms differ, and the import screen says so.
@@ -86,7 +86,7 @@ Sources:
 
 ## 5. Market intelligence
 
-`aggregateSales` and `scoreGeo` (`market-intelligence.ts`) rank counties or zips out of 100. Each component names its basis: `recorded`, `halo`, `policy`, `estimate` or `unknown`.
+`aggregateSales` and `scoreGeo` (`market-intelligence.ts`) rank metros, counties or zips out of 100. Each component names its basis: `recorded`, `halo`, `policy`, `estimate` or `unknown`.
 
 | Component | Max | Basis |
 |---|---|---|
@@ -105,8 +105,15 @@ Sources:
 - **`recommendMarkets`** orders states by opportunity × feasibility. Feasibility comes from the market's status and class: A is easiest, E is hardest. Active, restricted and blocked states are left out.
 - **A recommendation never activates anything.** On the page, a class from research is marked "proposed".
 
+**Metros** are the Census Bureau's core based statistical areas (CBSAs), from its July 2023 delineation (OMB Bulletin 23-01).
+- `metros.ts` reads the generated crosswalk in `cbsa.ts`: 935 CBSAs and the 1,915 counties inside them. Regenerate it with `npx tsx scripts/generate-cbsa.ts` when OMB issues a new delineation.
+- A sale reaches a metro only through its county FIPS. Sales in a county outside every metro appear at county and zip level only.
+- A metro's legal standing is that of its weakest state. Memphis (TN-MS-AR) with Tennessee approved and Mississippi research-only scores Mississippi's standing.
+- With a `state` filter, only that state's sales count, so a metro across state lines shows its part in that state.
+- County labels fall back to the delineation's county name when a source gives only the FIPS, as ATTOM's area snapshot does.
+
 Routes:
-- `GET /market-intelligence?level=county|zip&state=`;
+- `GET /market-intelligence?level=metro|county|zip&state=`;
 - `GET /market-intelligence/recommendations`.
 
 **Analyst brief.** The Market Intelligence agent explains this ranking: why the leaders rank where they do, their risks and what to verify, plus the data gaps that limit it. Ask for a brief on the Market Intelligence page, nationwide or for one state.
@@ -117,14 +124,13 @@ Routes:
 - See docs/agent-design.md s3.6.
 
 **Not yet:**
-- metro (CBSA) level, which needs a county-to-CBSA crosswalk;
 - aggregation in SQL for very large sale tables. Today sales are aggregated in memory, which is fine to roughly a few hundred thousand rows per tenant.
 
 ## 6. Configuration
 
 | Setting | Where |
 |---|---|
-| `ATTOM_API_KEY`, `REALIE_API_KEY`, `RENTCAST_API_KEY` | Integrations page or env (existing) |
+| `ATTOM_API_KEY`, `REALIE_API_KEY`, `RENTCAST_API_KEY` | Integrations page or env (existing). A key saved on the Integrations page wins over env. |
 | `REGRID_API_TOKEN` | Integrations page or env |
 | External data switch | Control Plane: provider calls are refused while it is off |
 | Costs | `cost-control/seed-providers.ts`: ATTOM `sales_history` and `sales_snapshot` at $0.10 per call; Regrid `parcel_lookup` at a $0.02 placeholder. Set these from the contracts. |

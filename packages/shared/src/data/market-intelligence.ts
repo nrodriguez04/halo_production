@@ -1,24 +1,28 @@
 import { partyKey } from './entities';
+import { countyName, metroForCounty } from './metros';
 import type { NormalizedSale } from './records';
 import type { ActivationStatus, MarketClassification } from '../markets/policy';
 
 /**
- * Market intelligence (docs/data-pipeline.md s5): which counties and zips
- * look worth working, and which states to activate next. Deterministic and
+ * Market intelligence (docs/data-pipeline.md s5): which metros, counties and
+ * zips look worth working, and which states to activate next. Deterministic and
  * explained: every point names its basis, and a basis is one of
  * `recorded` (public records Halo holds), `halo` (Halo's own closed deals),
  * `policy` (the market's legal standing), `estimate` (a rule of thumb, said
  * as such) or `unknown` (no data, scored low rather than guessed).
  */
 
-export type GeoLevel = 'county' | 'zip';
+export type GeoLevel = 'metro' | 'county' | 'zip';
 export type Basis = 'recorded' | 'halo' | 'policy' | 'estimate' | 'unknown';
 
 export interface GeoStats {
   level: GeoLevel;
   key: string;
   label: string;
+  /** The state used for legal standing: a metro's principal-city state. */
   state: string;
+  /** Every state the sales came from; a metro can span several. */
+  states?: string[];
   sales12m: number;
   medianPrice: number | null;
   investorPurchases12m: number;
@@ -66,17 +70,25 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString('en-US')}`;
 }
 
-/** Group recorded sales into counties or zips over the last 12 months. */
+/** The key a sale is grouped under at a level; null when it cannot be placed. */
+export function geoKey(s: Pick<NormalizedSale, 'state' | 'county' | 'countyFips' | 'zip'>, level: GeoLevel): string | null {
+  if (level === 'metro') return metroForCounty(s.countyFips)?.code ?? null;
+  if (level === 'county') {
+    return s.countyFips ?? (s.county ? `${s.state}:${s.county.toUpperCase().replace(/\s+COUNTY$/, '')}` : null);
+  }
+  return s.zip ? s.zip.slice(0, 5) : null;
+}
+
+/**
+ * Group recorded sales into metros, counties or zips over the last 12
+ * months. A sale reaches a metro only through its county FIPS; sales in a
+ * county outside every metro are left out of the metro level.
+ */
 export function aggregateSales(sales: NormalizedSale[], level: GeoLevel, asOf: Date): GeoStats[] {
   const since = new Date(asOf.getTime() - 365 * DAY).toISOString().slice(0, 10);
   const groups = new Map<string, NormalizedSale[]>();
   for (const s of sales) {
-    const key =
-      level === 'county'
-        ? (s.countyFips ?? (s.county ? `${s.state}:${s.county.toUpperCase().replace(/\s+COUNTY$/, '')}` : null))
-        : s.zip
-          ? s.zip.slice(0, 5)
-          : null;
+    const key = geoKey(s, level);
     if (!key) continue;
     const list = groups.get(key) ?? [];
     list.push(s);
@@ -113,14 +125,19 @@ export function aggregateSales(sales: NormalizedSale[], level: GeoLevel, asOf: D
       }
     }
     const first = all[0];
+    const metro = level === 'metro' ? metroForCounty(first.countyFips) : null;
+    // Area pulls carry a county FIPS but no name; the delineation names most counties.
+    const county = first.county ?? countyName(first.countyFips);
     out.push({
       level,
       key,
-      label:
-        level === 'county'
-          ? `${first.county ?? key}${first.county && !/county|parish|borough/i.test(first.county) ? ' County' : ''}, ${first.state}`
+      label: metro
+        ? `${metro.title}${metro.metropolitan ? '' : ' (micropolitan)'}`
+        : level === 'county'
+          ? `${county ?? key}${county && !/county|parish|borough|municipality|census area|region|city$/i.test(county) ? ' County' : ''}, ${first.state}`
           : `${key}${first.city ? ` (${first.city}, ${first.state})` : `, ${first.state}`}`,
-      state: first.state,
+      state: metro?.states[0] ?? first.state,
+      states: Array.from(new Set(all.map((s) => s.state))).sort(),
       sales12m: recent.length,
       medianPrice: median(recent.map((s) => s.price).filter((p): p is number => p != null)),
       investorPurchases12m: investorSales.length,

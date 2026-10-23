@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   aggregateSales,
+  lowerStatus,
+  metroForCounty,
   rankGeos,
   recommendMarkets,
   toJurisdictionCode,
@@ -32,11 +34,22 @@ function median(values: number[]): number | null {
 }
 
 /**
- * Market intelligence (docs/data-pipeline.md s5): counties and zips ranked
- * from recorded sales and Halo's own leads and closings, and the states to
- * activate next. Covers every jurisdiction Halo has data for, whatever its
- * legal status: research is allowed everywhere.
+ * Market intelligence (docs/data-pipeline.md s5): metros, counties and zips
+ * ranked from recorded sales and Halo's own leads and closings, and the
+ * states to activate next. Covers every jurisdiction Halo has data for,
+ * whatever its legal status: research is allowed everywhere.
  */
+
+/** Where a county or zip lands at a level: the zip itself, the county, or the county's metro. */
+function placeAt(
+  level: GeoLevel,
+  zip: string | null | undefined,
+  countyFips: string | null | undefined,
+): string | null | undefined {
+  if (level === 'zip') return zip?.slice(0, 5);
+  if (level === 'metro') return metroForCounty(countyFips)?.code;
+  return countyFips;
+}
 @Injectable()
 export class MarketIntelligenceService {
   constructor(
@@ -74,10 +87,7 @@ export class MarketIntelligenceService {
     });
     const distress = new Map<string, number>();
     for (const l of leads) {
-      const k =
-        level === 'zip'
-          ? l.canonicalZip?.slice(0, 5)
-          : l.properties[0]?.countyFips;
+      const k = placeAt(level, l.canonicalZip, l.properties[0]?.countyFips);
       if (k) distress.set(k, (distress.get(k) ?? 0) + 1);
     }
 
@@ -101,10 +111,11 @@ export class MarketIntelligenceService {
     });
     const outcomes = new Map<string, { fees: number[]; days: number[] }>();
     for (const c of closed) {
-      const k =
-        level === 'zip'
-          ? c.deal?.property?.zip?.slice(0, 5)
-          : c.deal?.property?.countyFips;
+      const k = placeAt(
+        level,
+        c.deal?.property?.zip,
+        c.deal?.property?.countyFips,
+      );
       if (!k) continue;
       const o = outcomes.get(k) ?? { fees: [], days: [] };
       if (c.realizedFee != null) o.fees.push(c.realizedFee);
@@ -118,7 +129,20 @@ export class MarketIntelligenceService {
     const byState = new Map(matrix.rows.map((r) => [r.state, r]));
     return geos.map((g) => {
       const o = outcomes.get(g.key);
-      const m = byState.get(g.state);
+      // A metro across state lines stands where its weakest state stands.
+      let m = byState.get(g.state);
+      for (const s of g.states ?? []) {
+        const other = byState.get(s);
+        if (
+          other &&
+          (!m ||
+            lowerStatus(
+              m.effectiveStatus as ActivationStatus,
+              other.effectiveStatus as ActivationStatus,
+            ) !== m.effectiveStatus)
+        )
+          m = other;
+      }
       return {
         ...g,
         distressLeads: distress.get(g.key) ?? 0,
@@ -131,7 +155,11 @@ export class MarketIntelligenceService {
     });
   }
 
-  /** Counties or zips, best first, each with its ten explained components. */
+  /**
+   * Metros, counties or zips, best first, each with its ten explained
+   * components. With a state, only that state's sales count, so a metro
+   * across state lines shows its part in that state.
+   */
   async geos(
     accountId: string,
     q: { level?: GeoLevel; state?: string | null; limit?: number },

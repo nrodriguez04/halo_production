@@ -44,7 +44,7 @@ Gaps the audit found and where they stand:
 | 2 | Market Activation Matrix dashboard | done | done | — |
 | 2 | Three coverage KPIs (research, technical, active) | done | done | data provider key for research coverage |
 | 2 | A documented path to activation per state | done (research activation steps, ladder checks, next step) | done | — |
-| 3 | Market intelligence engine (county/ZIP ranking; metro not yet) | done | with imported or pulled sales | property data for coverage; CBSA crosswalk for metros |
+| 3 | Market intelligence engine (metro, county and ZIP ranking; metros from the Census 2023 CBSA delineation) | done | with imported or pulled sales (ATTOM area pull live-verified 2026-10-23) | property data for coverage |
 | 3 | Recommend markets to activate next | done | done | — |
 | 4 | Lifecycle: discover → enrich → underwrite | done | with a provider key | data provider keys |
 | 4 | Lifecycle: negotiate → contract → verify → market → offers → assign → close → fee | done | in approved markets only | counsel, DocuSign, title company |
@@ -53,7 +53,7 @@ Gaps the audit found and where they stand:
 | 5 | PDF generation | done: .txt through pdf-lib; .docx through Gotenberg, verified against a local `gotenberg/gotenberg:8` (the compose image) and run in CI's integration job | wherever Gotenberg runs (in `docker-compose.prod.yml`) | — |
 | 5 | Deadline and cancellation calculations | done | done | — |
 | 5 | Executed-document verification with automated checks (DocuSign signers recorded at completion); explicit legal sufficiency and disclosure confirmations | done | done | DocuSign account |
-| 6 | Provider-neutral property and recorded-sales ingestion | done (county CSV tested; ATTOM and Regrid built, not run live) | county CSV: yes | ATTOM / Regrid keys; county data licences |
+| 6 | Provider-neutral property and recorded-sales ingestion | done (county CSV tested; ATTOM area snapshot and property lookups live-verified 2026-10-23; ATTOM sales history and Regrid not run live) | county CSV and ATTOM: yes | Regrid token; county data licences; the env `ATTOM_API_KEY` is rejected, the Integrations-page key works |
 | 6 | Investor discovery, entity matching, cash-purchase signals, inferred buy box | done | done | — |
 | 6 | Inbound SMS response matching to buyers | done (a number held on exactly one buyer; Buyer Responder drafts the reply) | when Twilio is configured | Twilio number and A2P registration |
 | 7 | Email infrastructure: readiness, message classes and switches, internal test sends, inbound, unsubscribe, suppression list, delivery events, deliverability, seller consent, audit | done (internal test send verified against a local SMTP catcher; signed event webhooks verified over HTTP with local keys) | internal test sends only; external sending stays off by instruction | user authorization to send; SendGrid or Resend account, domain authentication and the event webhook key |
@@ -62,7 +62,7 @@ Gaps the audit found and where they stand:
 | 8 | The twelve roles mapped to agents or deterministic services (Compliance, Transaction Coordinator, Contract, Property and Buyer Intelligence are services by design) | done (docs/agent-design.md s12) | as each agent or service | — |
 | 8 | CrewAI evaluation | done (docs/crewai-evaluation.md: no agent moves now) | — | — |
 | 9 | Security, regression, deployment validation | done: approval permissions and upload typing fixed; every suite green; the compose config resolves; four existing deploy defects fixed (images did not build; `.dockerignore` let `.env.local` into images; the web image lacked its build-time Descope and API values); api, worker and web images build and start; CI builds them and runs integration with Gotenberg (docs/OPERATIONAL_READINESS.md s5) | not deployed | — |
-| 9 | Dependency security: Next 15.5 and React 19, nodemailer 10, maplibre 6, multer 2.5 and patch overrides, Node 22 images; production advisories 52 -> 14, none critical, none reachable at runtime | done (docs/DEPENDENCY_SECURITY.md; the map's tile drawing not yet seen in a browser) | not deployed | — |
+| 9 | Dependency security: Next 15.5 and React 19, nodemailer 10, maplibre 6, multer 2.5 and patch overrides, Node 22 images; production advisories 52 -> 14, none critical, none reachable at runtime | done (docs/DEPENDENCY_SECURITY.md; the map's tiles seen drawing in a browser 2026-10-23) | not deployed | — |
 | 9 | Final engineering and operational readiness report | done (docs/OPERATIONAL_READINESS.md) | — | — |
 
 ## Milestones
