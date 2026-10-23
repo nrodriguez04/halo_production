@@ -36,6 +36,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/markets', label: 'Market Activation', auth: true },
   { path: '/markets/[state]', label: 'Market', auth: true, suggest: false },
   { path: '/markets/intelligence', label: 'Market Intelligence', auth: true },
+  { path: '/funnel', label: 'Conversion Funnel', auth: true },
   { path: '/templates', label: 'Templates', auth: true },
   { path: '/states', label: 'State rules (moved to Market Activation)', auth: true, suggest: false },
   { path: '/admin', label: 'Control Plane', auth: true },

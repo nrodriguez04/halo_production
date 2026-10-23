@@ -1,12 +1,29 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
+import { FunnelService } from './funnel.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
 
 @Controller('analytics')
 @UseGuards(AuthGuard)
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly funnelService: FunnelService,
+  ) {}
+
+  /** Conversion economics for leads created in a period (default: the last 90 days). */
+  @Get('funnel')
+  funnel(
+    @CurrentAccountId() accountId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.funnelService.funnel(accountId, {
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    });
+  }
 
   @Get('kpis')
   async getKPIs(

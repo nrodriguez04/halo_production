@@ -126,6 +126,26 @@ Routes:
 **Not yet:**
 - aggregation in SQL for very large sale tables. Today sales are aggregated in memory, which is fine to roughly a few hundred thousand rows per tenant.
 
+### 5.1 Conversion funnel
+
+`GET /analytics/funnel?from=&to=` (default: the last 90 days) and the **Conversion Funnel** page show how the leads created in a period moved, and what each source and state cost and earned. `funnel.ts` (shared) does the arithmetic; `FunnelService` gathers one record per lead.
+
+| Stage | A lead counts when |
+|---|---|
+| Leads | it was created in the period |
+| Reachable | it has a phone or email that is not on the do-not-contact list |
+| Contacted | an outbound message to it was sent or delivered |
+| Conversations | the owner wrote back |
+| Offers | a deal on it has an offer amount |
+| Contracts | a purchase agreement on it was executed |
+| Assignments | an assignment agreement on it was executed |
+| Closed | its closing file is closed; the realized fee counts |
+
+- **Stages nest.** A lead counts at every stage up to the furthest it reached, so each rate stays between 0 and 1. A close is measured against contracts, because a double close has no assignment.
+- **Costs** are the completed provider charges recorded against each lead. Spend tied to no lead (area pulls, agent runs, tests) is reported separately and not spread across sources.
+- **Sources** come from a lead's `source:` tag. Listing imports already set one; CSV imports now tag `source:csv_import`, and leads entered by hand or through the API `source:manual`. Leads created before 2026-10-23 without a tag are `unattributed`.
+- **Not yet:** campaign spend that is not a provider charge (mail, ads, list purchases) has no record to count, and leads are grouped in memory, which suits up to a few hundred thousand per period.
+
 ## 6. Configuration
 
 | Setting | Where |
