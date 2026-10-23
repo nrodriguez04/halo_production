@@ -85,7 +85,7 @@ It was verified end to end against a local SMTP catcher.
 
 ## 7. Do Not Call registry
 
-A marketing text to a homeowner is a telephone solicitation. Hālo checks every marketing text against the National Do Not Call Registry data an operator imports, and refuses it when the data says no or says nothing.
+A marketing text to a homeowner is a telephone solicitation. In *Coffey v. Fast Easy Offer, LLC*, No. 25-4066 (9th Cir. June 4, 2026), texts asking a registered owner whether they had given up on selling were held adequately pleaded as telephone solicitations: the purpose of initiating the message decides, not whether it names a product. Hālo checks every marketing text against the National Do Not Call Registry data an operator imports, and refuses it when the data says no or says nothing.
 
 **Getting the data.** The account subscribes to the registry for its area codes at telemarketing.donotcall.gov and downloads the files. An operator imports each unzipped file on **Communications → Settings → Do Not Call registry**: one number per line, with the area codes the file covers and the day it was downloaded. A state's own list can be imported the same way; it adds numbers but never covers an area code by itself.
 

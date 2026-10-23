@@ -1525,12 +1525,12 @@ export const JURISDICTION_RESEARCH: readonly unknown[] = [
   {
     code: 'GA',
     name: 'Georgia',
-    researchedAt: '2026-10-22',
+    researchedAt: '2026-10-23',
     summary:
-      "Georgia has no wholesaling-specific statute or registration; licensing turns on acting for another for a fee under O.C.G.A. 43-40-1, and secondary sources say a principal may assign its own contract or double close but may not market the property itself. Since 2024-01-01, unsolicited written offers or mailings from unlicensed persons expressing interest in buying real property must carry prescribed solicitation notices on the letter and envelope (O.C.G.A. 10-1-393.19), enforceable as an unfair practice with class-action exposure. Secondary sources and the Attorney General's consumer page report later-added monetary-offer notices and higher penalties whose enacting text was not verified.",
+      'Georgia has no wholesaling-specific statute or registration; licensing turns on acting for another for a fee under O.C.G.A. 43-40-1, and secondary sources say a principal may assign its own contract or double close but may not market the property itself. Since 2024-01-01, unsolicited written offers or mailings from unlicensed persons expressing interest in buying real property must carry prescribed solicitation notices on the letter and envelope (O.C.G.A. 10-1-393.19), enforceable as an unfair practice with class-action exposure. HB 1292 (effective 2024-05-02) added money-offer notices, damages of the greater of $600 or three times actual damages per violation, and misdemeanor liability; the current text was checked on 2026-10-23. Separately, O.C.G.A. 43-40-29(a)(1), amended by HB 399 effective 2025-07-01, exempts acts by an owner or prospective purchaser with reference to property to be acquired, done incident to managing and investing in it.',
     proposedClassification: 'B',
     classificationRationale:
-      "Principal assignments appear permitted without a license (on secondary sources and the 'for another' definition), but seller acquisition marketing by unlicensed buyers is conditioned on statutory solicitation notices. That condition is a disclosure requirement, which fits B. Confidence is low because the license-law reading rests on secondary sources and the current text of the solicitation statute after its reported amendment was not confirmed.",
+      "Principal assignments appear permitted without a license (on secondary sources and the 'for another' definition), but seller acquisition marketing by unlicensed buyers is conditioned on statutory solicitation notices. That condition is a disclosure requirement, which fits B. Confidence is low because the license-law reading rests on secondary sources and the 43-40-29 prospective-purchaser exemption has not been tested against assigning a contract for a fee.",
     regulator: {
       name: 'Georgia Real Estate Commission & Appraisers Board',
       url: 'https://grec.state.ga.us',
@@ -1538,8 +1538,8 @@ export const JURISDICTION_RESEARCH: readonly unknown[] = [
     findings: {
       principal_assignment_without_license: {
         answer: 'conditional',
-        note: "O.C.G.A. 43-40-1 defines a broker as one acting for another for a fee, including negotiating or dealing in options. Secondary sources say assigning one's own contract interest is permitted without a license if the wholesaler does not represent the seller or buyer or market the property. No GREC guidance on wholesaling was found (its FAQ does not address it).",
-        sourceIds: ['s1', 's7'],
+        note: "O.C.G.A. 43-40-1 defines a broker as one acting for another for a fee, including negotiating or dealing in options. Secondary sources say assigning one's own contract interest is permitted without a license if the wholesaler does not represent the seller or buyer or market the property. No GREC guidance on wholesaling was found (its FAQ does not address it). O.C.G.A. 43-40-29(a)(1) (amended by HB 399, eff. 2025-07-01) exempts a person acting as owner or prospective purchaser with reference to property to be acquired by them, where the acts are in the regular course of, or incident to, managing and investing in the property; whether assigning a purchase contract for a fee fits that exemption is unresolved.",
+        sourceIds: ['s1', 's7', 's9'],
       },
       wholesaler_registration_required: {
         answer: 'no',
@@ -1553,8 +1553,8 @@ export const JURISDICTION_RESEARCH: readonly unknown[] = [
       },
       disclosures_required: {
         answer: 'yes',
-        note: 'O.C.G.A. 10-1-393.19 (SB 90, eff. 2024-01-01) applies to unsolicited written inquiries or mailings by persons not licensed under Title 43 ch. 40 or 41 (or Title 15 ch. 19) that express interest in buying real property or offer real estate services. Failure is an unfair or deceptive practice; the enacted text allows class actions and the greater of actual damages or $200 per violation. Secondary sources and the AG consumer page report added monetary-offer notices, treble or $600 damages, and misdemeanor liability; verify the current text.',
-        sourceIds: ['s2', 's3', 's4', 's5', 's6'],
+        note: 'O.C.G.A. 10-1-393.19 (SB 90, eff. 2024-01-01; amended by HB 1292, eff. 2024-05-02) applies to any unsolicited written inquiry or mailing by a person not licensed under Title 43 ch. 40 or 41 (or Title 15 ch. 19) that expresses interest in buying real property, or an option on it, or offers real estate services. Failure is an unfair or deceptive practice: representative and class actions are allowed, damages are the greater of three times actual damages or $600 per violation, and a violation is a misdemeanor. Current text checked 2026-10-23.',
+        sourceIds: ['s2', 's3', 's4', 's10'],
         items: [
           {
             audience: 'seller',
@@ -1572,7 +1572,7 @@ export const JURISDICTION_RESEARCH: readonly unknown[] = [
           {
             audience: 'seller',
             description:
-              "Reported but not verified in enacted text: if a money offer is included, a notice that it may not be fair market value, and if below the prior year's county assessed value, a notice saying so.",
+              "If the solicitation states a money offer, after the top notice: 'THIS OFFER MAY OR MAY NOT BE THE FAIR MARKET VALUE OF THE PROPERTY.' If the offer is below the previous year's county assessed value, also: 'THIS OFFER IS LESS THAN THE COUNTY ASSESSED VALUE FOR THIS PROPERTY.'",
             timing: 'On unsolicited written offers that state a price.',
           },
         ],
@@ -1696,17 +1696,40 @@ export const JURISDICTION_RESEARCH: readonly unknown[] = [
         summary:
           'A foreign LLC must obtain a certificate of authority before transacting business, with a $500 penalty if not obtained within 30 days of starting business.',
       },
+      {
+        id: 's9',
+        citation:
+          'O.C.G.A. 43-40-29 (2025), as amended by Ga. L. 2025, p. 882, HB 399',
+        title: 'Georgia Code 43-40-29, Exceptions to operation of chapter',
+        url: 'https://law.justia.com/codes/georgia/title-43/chapter-40/section-43-40-29/',
+        type: 'statute',
+        effectiveDate: '2025-07-01',
+        summary:
+          'Exempts acts by an owner, an LLC officer or a prospective purchaser with reference to property owned, leased or to be acquired, done in the regular course of or incident to managing and investing in it.',
+      },
+      {
+        id: 's10',
+        citation:
+          'O.C.G.A. 10-1-393.19 (2025), as amended by Ga. L. 2024, p. 553, HB 1292',
+        title:
+          'Georgia Code 10-1-393.19, Requirements of unsolicited inquiries relating to the sale of real estate; penalties',
+        url: 'https://law.justia.com/codes/georgia/title-10/chapter-1/article-15/part-2/section-10-1-393-19/',
+        type: 'statute',
+        effectiveDate: '2024-05-02',
+        summary:
+          'Current text: the solicitation notices, money-offer notices, 16-point minimum, class actions, damages of the greater of $600 or treble actual damages, and misdemeanor liability.',
+      },
     ],
     pendingLegislation: [],
     openQuestions: [
-      'What is the current text of O.C.G.A. 10-1-393.19 after the reported 2024 amendment (monetary-offer notices, treble or $600 damages, misdemeanor), and which act made it?',
-      'Does 10-1-393.19 reach text messages, emails, or online ads, or only written inquiries and mailings?',
+      "10-1-393.19 covers a 'written inquiry or mailing'. Does it reach text messages, emails or online ads?",
+      'Does assigning a purchase contract for a fee fall within the 43-40-29(a)(1) prospective-purchaser exemption as amended by HB 399?',
       "Does repeated assignment of contracts for a fee amount to dealing in options or negotiating 'for another' under 43-40-1? Is there GREC enforcement history against wholesalers?",
       'What property details may an unlicensed principal include when marketing a contract interest?',
       'Georgia income tax and withholding registration for a foreign LLC.',
     ],
     activationSteps: [
-      'Add the 10-1-393.19 notices (top-of-letter and envelope, at least 16 point, contrasting color, nothing larger) to every Georgia seller mailing, and get counsel to confirm the current monetary-offer notice wording before any mailer states a price.',
+      'Add the 10-1-393.19 notices (top-of-letter and envelope, at least 16 point, contrasting color, nothing larger) to every Georgia seller mailing, and the two money-offer notices to any mailer that states a price.',
       'Market Georgia deals only as assignable contract interests; do not list or advertise the property as for sale.',
       'Obtain Georgia counsel confirmation that repeated principal assignments and double closings fall outside 43-40-1.',
       'Obtain a certificate of authority from the Georgia Secretary of State within 30 days of starting business and appoint a Georgia registered agent.',
