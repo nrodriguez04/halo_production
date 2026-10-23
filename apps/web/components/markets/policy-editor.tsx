@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Gavel, Plus, Send, Trash2, Undo2 } from 'lucide-react';
+import { Gavel, Plus, Send, ShieldCheck, Trash2, Undo2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -63,7 +63,8 @@ function Section({ title, description, children, action }: { title: string; desc
 
 /**
  * The draft policy: research and counsel's answers, edited here and
- * approved as an immutable version. Editing a draft that is with counsel
+ * approved as an immutable version, by counsel or by the owner accepting
+ * the risk (docs/markets.md s3.1). Editing a draft that is with counsel
  * takes it back; the gates keep relying on the last approved version.
  */
 export function PolicyEditor({ m }: { m: MarketDetail }) {
@@ -76,6 +77,10 @@ export function PolicyEditor({ m }: { m: MarketDetail }) {
   const [expires, setExpires] = useState('');
   const [attest, setAttest] = useState(false);
   const [returnNote, setReturnNote] = useState('');
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerReason, setOwnerReason] = useState('');
+  const [ownerAttest, setOwnerAttest] = useState(false);
 
   useEffect(() => {
     setC(m.draft);
@@ -120,6 +125,15 @@ export function PolicyEditor({ m }: { m: MarketDetail }) {
     { success: 'Approved: a new policy version is in force', failure: 'Could not approve' },
     () => setApproveOpen(false),
   );
+  const acceptRisk = useMarketAction(
+    m.state,
+    () => ({
+      path: `/markets/${m.state}/accept-risk`,
+      body: { acceptedByName: ownerName, reason: ownerReason, attest: true },
+    }),
+    { success: 'Accepted as the owner: a new policy version is in force', failure: 'Could not accept it' },
+    () => setOwnerOpen(false),
+  );
 
   if (!c) {
     return <p className="text-body text-destructive">The draft could not be read: {m.draftError}</p>;
@@ -144,6 +158,16 @@ export function PolicyEditor({ m }: { m: MarketDetail }) {
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>
                 Save draft
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={dirty}
+                title={m.ownerAcceptance.length ? `Cannot accept yet: ${m.ownerAcceptance.join('; ')}` : undefined}
+                onClick={() => setOwnerOpen(true)}
+              >
+                <ShieldCheck size={14} className="mr-1" aria-hidden />
+                Accept the risk as owner
               </Button>
               {!inReview ? (
                 <Button size="sm" disabled={dirty} loading={submit.isPending} onClick={() => submit.mutate()}>
@@ -511,6 +535,57 @@ export function PolicyEditor({ m }: { m: MarketDetail }) {
             </Button>
             <Button disabled={!attest || !memo || counselName.trim().length < 2} loading={approve.isPending} onClick={() => approve.mutate()}>
               Approve version
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ownerOpen} onOpenChange={setOwnerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Accept the {m.name} policy as the owner</DialogTitle>
+            <DialogDescription>
+              This is not counsel&apos;s approval and will never be shown as one. It snapshots the draft as a version the gates rely on, labelled
+              &quot;Owner-accepted, not counsel-approved&quot;, for six months. Requirements, templates, consent and Do Not Call rules still apply.
+            </DialogDescription>
+          </DialogHeader>
+          {m.ownerAcceptance.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-body font-medium">The draft cannot be accepted yet:</p>
+              <ul className="list-disc space-y-1 pl-5 text-body text-muted-foreground">
+                {m.ownerAcceptance.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-caption text-muted-foreground">
+                Research {m.research.date ?? 'undated'}, {m.research.confidence ?? 'unknown'} confidence; {m.sources.official} official and{' '}
+                {m.sources.count - m.sources.official} secondary source(s); {m.openQuestions} open question(s).
+              </p>
+              <Field label="Your full name, as your signature" htmlFor="own-name">
+                <Input id="own-name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
+              </Field>
+              <Field label="Why the business accepts this risk now" htmlFor="own-reason">
+                <Textarea id="own-reason" rows={3} value={ownerReason} onChange={(e) => setOwnerReason(e.target.value)} />
+              </Field>
+              <label className="flex items-start gap-2 text-body">
+                <Checkbox checked={ownerAttest} onCheckedChange={(v) => setOwnerAttest(v === true)} className="mt-1" />
+                <span>{m.ownerAttestation}</span>
+              </label>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOwnerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={m.ownerAcceptance.length > 0 || !ownerAttest || ownerName.trim().length < 2 || ownerReason.trim().length < 20}
+              loading={acceptRisk.isPending}
+              onClick={() => acceptRisk.mutate()}
+            >
+              Accept the risk
             </Button>
           </DialogFooter>
         </DialogContent>

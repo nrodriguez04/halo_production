@@ -17,6 +17,8 @@ import { AuthorizationsCard } from '@/components/markets/authorizations-card';
 import { ExpansionProposals } from '@/components/markets/market-agents';
 import { day, errorText } from '@/lib/disposition';
 import {
+  BASIS_LABEL,
+  BASIS_VARIANT,
   CLASSIFICATION_LABEL,
   STATUS_LABEL,
   STATUS_VARIANT,
@@ -48,7 +50,11 @@ export default function MarketPage() {
           <span className="flex flex-wrap items-center gap-2">
             <Badge variant={STATUS_VARIANT[d.effectiveStatus]}>{STATUS_LABEL[d.effectiveStatus]}</Badge>
             <span>{CLASSIFICATION_LABEL[d.classification]}</span>
-            <span className="text-muted-foreground">({d.classificationSource === 'approved' ? 'approved by counsel' : 'proposed, not reviewed'})</span>
+            {d.approvalBasis ? (
+              <Badge variant={BASIS_VARIANT[d.approvalBasis]}>{BASIS_LABEL[d.approvalBasis]}</Badge>
+            ) : (
+              <span className="text-muted-foreground">(proposed, not reviewed)</span>
+            )}
             {d.openDeals > 0 && <span>{d.openDeals} open deal(s)</span>}
           </span>
         }
@@ -119,23 +125,34 @@ export default function MarketPage() {
           <Card>
             <CardHeader>
               <CardTitle>Approved versions</CardTitle>
-              <CardDescription>Each is the policy exactly as counsel approved it. The newest current one is in force.</CardDescription>
+              <CardDescription>
+                Each is the policy exactly as it was approved by counsel or accepted by the owner, and says which. The newest current one is in force.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {d.versions.length === 0 && <p className="text-caption text-muted-foreground">Nothing approved yet.</p>}
               {d.versions.map((v) => (
                 <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
                   <div>
-                    <p className="font-medium">
-                      v{v.version} · class {v.classification} · {v.counselName}
-                      {v.counselFirm ? `, ${v.counselFirm}` : ''}
+                    <p className="flex flex-wrap items-center gap-2 font-medium">
+                      <span>
+                        v{v.version} · class {v.classification} ·{' '}
+                        {v.basis === 'counsel' ? `${v.counselName}${v.counselFirm ? `, ${v.counselFirm}` : ''}` : `accepted by ${v.acceptedByName}`}
+                      </span>
+                      <Badge variant={BASIS_VARIANT[v.basis]}>{BASIS_LABEL[v.basis]}</Badge>
                     </p>
                     <p className="text-caption text-muted-foreground">
-                      approved {day(v.approvedAt)} · review until {day(v.reviewExpiresAt)} ·{' '}
-                      <Link href={`/documents?q=${v.memoDocumentId}`} className="underline-offset-2 hover:underline">
-                        memo
-                      </Link>
+                      {v.basis === 'counsel' ? 'approved' : 'accepted'} {day(v.approvedAt)} · review until {day(v.reviewExpiresAt)}
+                      {v.memoDocumentId && (
+                        <>
+                          {' · '}
+                          <Link href={`/documents?q=${v.memoDocumentId}`} className="underline-offset-2 hover:underline">
+                            memo
+                          </Link>
+                        </>
+                      )}
                     </p>
+                    {v.acceptanceReason && <p className="text-caption text-muted-foreground">Why: {v.acceptanceReason}</p>}
                   </div>
                   <Badge variant={v.supersededAt ? 'outline' : 'success'}>{v.supersededAt ? `superseded ${day(v.supersededAt)}` : 'in force'}</Badge>
                 </div>

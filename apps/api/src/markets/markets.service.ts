@@ -8,6 +8,9 @@ import { Prisma } from '@prisma/client';
 import {
   ACTIVATION_LABEL,
   APPROVAL_REQUIRED_QUESTIONS,
+  OWNER_ACCEPTANCE_ATTESTATION,
+  OWNER_ACCEPTANCE_MAX_MONTHS,
+  type ApprovalBasis,
   AUTHORIZATION_LABEL,
   JURISDICTIONS,
   JURISDICTION_CODES,
@@ -195,6 +198,7 @@ export class MarketsService {
               classification: approved.classification as MarketClassification,
               approvedAt: approved.approvedAt,
               reviewExpiresAt: approved.reviewExpiresAt,
+              basis: approved.basis as ApprovalBasis,
             }
           : null,
       authorizations: auths.map((a) => ({
@@ -285,6 +289,7 @@ export class MarketsService {
         ? r.approved.classification
         : r.market.classification,
       classificationSource: r.approved ? 'approved' : 'draft',
+      approvalBasis: (r.approved?.basis as ApprovalBasis | undefined) ?? null,
       requestedStatus: e.requestedStatus,
       effectiveStatus: e.effectiveStatus,
       maxStatus: e.maxStatus,
@@ -293,7 +298,9 @@ export class MarketsService {
         version: e.legal.version,
         approvedAt: e.legal.approvedAt,
         reviewExpiresAt: e.legal.reviewExpiresAt,
+        basis: e.legal.basis,
         counselName: r.approved?.counselName ?? null,
+        acceptedByName: r.approved?.acceptedByName ?? null,
       },
       structures: c
         ? TRANSACTION_STRUCTURES.map((s) => ({
@@ -337,6 +344,7 @@ export class MarketsService {
         name: t.name,
         version: t.version,
         specific: t.specific,
+        approvalBasis: t.approvalBasis,
       })),
       sources: {
         count: c?.sources.length ?? 0,
@@ -386,9 +394,12 @@ export class MarketsService {
           classification: true,
           approvedAt: true,
           approvedBy: true,
+          basis: true,
           counselName: true,
           counselFirm: true,
           memoDocumentId: true,
+          acceptedByName: true,
+          acceptanceReason: true,
           reviewExpiresAt: true,
           supersededAt: true,
         },
@@ -420,6 +431,8 @@ export class MarketsService {
         requiredForApproval: APPROVAL_REQUIRED_QUESTIONS.includes(q),
       })),
       attestation: APPROVAL_ATTESTATION,
+      ownerAttestation: OWNER_ACCEPTANCE_ATTESTATION,
+      ownerAcceptance: this.ownerAcceptanceProblems(r),
     };
   }
 
@@ -735,8 +748,73 @@ export class MarketsService {
         `The ${code} draft is not valid: ${r.draftError}`,
       );
     const c = r.draft;
+    const problems = this.draftProblems(r.market.classification, c);
+    const memo = await this.prisma.document.findFirst({
+      where: { id: input.memoDocumentId, accountId, status: 'active' },
+      select: { id: true, tags: true },
+    });
+    if (!memo) problems.push("counsel's memo is not in the documents library");
+    const now = new Date();
+    const expires =
+      input.reviewExpiresAt ??
+      new Date(now.getTime() + DEFAULT_REVIEW_MONTHS * 30.44 * 86_400_000);
+    if (expires <= now)
+      problems.push('the review expiry must be in the future');
+    if (
+      expires.getTime() - now.getTime() >
+      MAX_REVIEW_MONTHS * 30.44 * 86_400_000
+    )
+      problems.push(`a review lasts at most ${MAX_REVIEW_MONTHS} months`);
+    if (problems.length) {
+      throw new BadRequestException({
+        code: 'POLICY_NOT_APPROVABLE',
+        message: `The ${code} policy cannot be approved: ${problems.join('; ')}.`,
+        problems,
+      });
+    }
+
+    const version = await this.createVersion(r, c, userId, now, expires, {
+      basis: 'counsel',
+      counselName: input.counselName,
+      counselFirm: input.counselFirm ?? null,
+      memoDocumentId: input.memoDocumentId,
+      attestation: APPROVAL_ATTESTATION,
+    });
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'market.policy.approve',
+      resource: `market:${code}`,
+      details: {
+        version: version.version,
+        classification: version.classification,
+        basis: 'counsel',
+        counselName: input.counselName,
+        counselFirm: input.counselFirm ?? null,
+        memoDocumentId: input.memoDocumentId,
+        reviewExpiresAt: expires.toISOString(),
+        structures: Object.fromEntries(
+          TRANSACTION_STRUCTURES.map((s) => [s, c.structures[s].permission]),
+        ),
+        channels: Object.fromEntries(
+          MARKETING_CHANNELS.map((ch) => [ch, c.channels[ch].permission]),
+        ),
+      },
+    });
+    return this.detail(accountId, code);
+  }
+
+  /**
+   * What stops a draft from being approved on either basis: a class, an
+   * answer to every question the gates turn on, and the conditions of
+   * anything conditional.
+   */
+  private draftProblems(
+    classification: string,
+    c: MarketPolicyContent,
+  ): string[] {
     const problems: string[] = [];
-    if (r.market.classification === 'unclassified')
+    if (classification === 'unclassified')
       problems.push('the market has no classification');
     for (const q of APPROVAL_REQUIRED_QUESTIONS) {
       if (c.answers[q].answer === 'unknown')
@@ -775,31 +853,131 @@ export class MarketsService {
     ) {
       problems.push('sellers may cancel but no cancellation window is set');
     }
-    const memo = await this.prisma.document.findFirst({
-      where: { id: input.memoDocumentId, accountId, status: 'active' },
-      select: { id: true, tags: true },
-    });
-    if (!memo) problems.push("counsel's memo is not in the documents library");
+    return problems;
+  }
+
+  /**
+   * Why the owner could not accept the draft now, or an empty list. On top
+   * of counsel's checks: every required answer cites a source, and a
+   * market research classes as not currently authorized (E) needs counsel.
+   */
+  private ownerAcceptanceProblems(r: Loaded): string[] {
+    if (!r.draft) return [`the draft is not valid: ${r.draftError}`];
+    const c = r.draft;
+    const problems = this.draftProblems(r.market.classification, c);
+    if (r.market.classification === 'E')
+      problems.push(
+        'class E (not currently authorized) can only be approved by counsel',
+      );
+    for (const q of APPROVAL_REQUIRED_QUESTIONS) {
+      if (c.answers[q].answer !== 'unknown' && !c.answers[q].sourceIds.length)
+        problems.push(`"${QUESTION_LABEL[q]}" cites no source`);
+    }
+    return problems;
+  }
+
+  /**
+   * The owner's acceptance of the legal and business risk, on the strength
+   * of the research (docs/markets.md s3.1). It makes an approved version
+   * the gates use exactly as they use counsel's, but it is recorded,
+   * labelled and audited as the owner's acceptance, never as counsel's
+   * approval, and it lapses after at most six months. The draft need not
+   * be with counsel; one that is stays there.
+   */
+  async acceptRisk(
+    accountId: string,
+    state: string,
+    userId: string,
+    input: {
+      acceptedByName: string;
+      reason: string;
+      attest: boolean;
+      reviewExpiresAt?: Date | null;
+    },
+  ) {
+    const r = await this.one(accountId, state);
+    const code = r.market.state;
+    if (!input.attest)
+      throw new BadRequestException('Confirm the risk-acceptance statement.');
+    const problems = this.ownerAcceptanceProblems(r);
     const now = new Date();
-    const expires =
-      input.reviewExpiresAt ??
-      new Date(now.getTime() + DEFAULT_REVIEW_MONTHS * 30.44 * 86_400_000);
-    if (expires <= now)
-      problems.push('the review expiry must be in the future');
-    if (
-      expires.getTime() - now.getTime() >
-      MAX_REVIEW_MONTHS * 30.44 * 86_400_000
-    )
-      problems.push(`a review lasts at most ${MAX_REVIEW_MONTHS} months`);
-    if (problems.length) {
+    const max = OWNER_ACCEPTANCE_MAX_MONTHS * 30.44 * 86_400_000;
+    const expires = input.reviewExpiresAt ?? new Date(now.getTime() + max);
+    if (expires <= now) problems.push('the review date must be in the future');
+    if (expires.getTime() - now.getTime() > max + 86_400_000)
+      problems.push(
+        `an owner's acceptance lasts at most ${OWNER_ACCEPTANCE_MAX_MONTHS} months`,
+      );
+    if (problems.length || !r.draft) {
       throw new BadRequestException({
-        code: 'POLICY_NOT_APPROVABLE',
-        message: `The ${code} policy cannot be approved: ${problems.join('; ')}.`,
+        code: 'POLICY_NOT_ACCEPTABLE',
+        message: `The ${code} policy cannot be accepted: ${problems.join('; ')}.`,
         problems,
       });
     }
+    const c = r.draft;
+    const version = await this.createVersion(r, c, userId, now, expires, {
+      basis: 'owner_risk_acceptance',
+      acceptedByName: input.acceptedByName,
+      acceptanceReason: input.reason,
+      attestation: OWNER_ACCEPTANCE_ATTESTATION,
+    });
+    const secondaryOnly = APPROVAL_REQUIRED_QUESTIONS.filter((q) =>
+      c.answers[q].sourceIds.every(
+        (id) => c.sources.find((s) => s.id === id)?.type === 'secondary',
+      ),
+    );
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'market.policy.accept_risk',
+      resource: `market:${code}`,
+      details: {
+        version: version.version,
+        classification: version.classification,
+        basis: 'owner_risk_acceptance',
+        acceptedByName: input.acceptedByName,
+        reason: input.reason,
+        reviewExpiresAt: expires.toISOString(),
+        researchConfidence: r.market.researchConfidence,
+        openQuestions: c.openQuestions.length,
+        requiredAnswersOnSecondarySourcesOnly: secondaryOnly,
+        structures: Object.fromEntries(
+          TRANSACTION_STRUCTURES.map((s) => [s, c.structures[s].permission]),
+        ),
+        channels: Object.fromEntries(
+          MARKETING_CHANNELS.map((ch) => [ch, c.channels[ch].permission]),
+        ),
+      },
+    });
+    return this.detail(accountId, code);
+  }
 
-    const version = await this.prisma.$transaction(async (tx) => {
+  /** Snapshot the draft as the new approved version and supersede the old one. */
+  private async createVersion(
+    r: Loaded,
+    c: MarketPolicyContent,
+    userId: string,
+    now: Date,
+    expires: Date,
+    basis:
+      | {
+          basis: 'counsel';
+          counselName: string;
+          counselFirm: string | null;
+          memoDocumentId: string;
+          attestation: string;
+        }
+      | {
+          basis: 'owner_risk_acceptance';
+          acceptedByName: string;
+          acceptanceReason: string;
+          attestation: string;
+        },
+  ) {
+    const accountId = r.market.accountId;
+    const code = r.market.state;
+    return this.prisma.$transaction(async (tx) => {
       const last = await tx.marketPolicyVersion.findFirst({
         where: { accountId, state: code },
         orderBy: { version: 'desc' },
@@ -814,11 +992,8 @@ export class MarketsService {
           content: asJson(c),
           approvedBy: userId,
           approvedAt: now,
-          counselName: input.counselName,
-          counselFirm: input.counselFirm ?? null,
-          memoDocumentId: input.memoDocumentId,
-          attestation: APPROVAL_ATTESTATION,
           reviewExpiresAt: expires,
+          ...basis,
         },
       });
       await tx.marketPolicyVersion.updateMany({
@@ -834,35 +1009,16 @@ export class MarketsService {
         where: { id: r.market.id },
         data: {
           approvedVersionId: created.id,
-          draftStatus: 'draft',
-          submittedAt: null,
-          submittedBy: null,
+          // Counsel's approval closes the review; an owner's acceptance
+          // leaves a draft that is with counsel where it is.
+          ...(basis.basis === 'counsel'
+            ? { draftStatus: 'draft', submittedAt: null, submittedBy: null }
+            : {}),
           configChangedAt: now,
         },
       });
       return created;
     });
-    await this.audit.log({
-      accountId,
-      userId,
-      action: 'market.policy.approve',
-      resource: `market:${code}`,
-      details: {
-        version: version.version,
-        classification: version.classification,
-        counselName: input.counselName,
-        counselFirm: input.counselFirm ?? null,
-        memoDocumentId: input.memoDocumentId,
-        reviewExpiresAt: expires.toISOString(),
-        structures: Object.fromEntries(
-          TRANSACTION_STRUCTURES.map((s) => [s, c.structures[s].permission]),
-        ),
-        channels: Object.fromEntries(
-          MARKETING_CHANNELS.map((ch) => [ch, c.channels[ch].permission]),
-        ),
-      },
-    });
-    return this.detail(accountId, code);
   }
 
   // ------------------------------------------------------------ activation
@@ -1473,7 +1629,7 @@ export class MarketsService {
           true,
         );
       }
-      // As if counsel approved this content and every requirement were met.
+      // As if this content were approved and every requirement were met.
       const sim = evaluateMarket({
         ...r.input,
         requestedStatus: 'ACTIVE',
@@ -1487,6 +1643,7 @@ export class MarketsService {
               : (r.market.classification as MarketClassification),
           approvedAt: new Date(),
           reviewExpiresAt: null,
+          basis: 'counsel',
         },
         authorizations: c.requirements.map((q) => ({
           kind: q.kind,

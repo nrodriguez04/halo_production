@@ -1247,23 +1247,29 @@ model Market {
 /// An approved policy: a snapshot of the draft as counsel approved it.
 /// Never updated except to record when a later version superseded it.
 model MarketPolicyVersion {
-  id              String    @id @default(cuid())
-  accountId       String
-  state           String
-  version         Int
-  classification  String
-  content         Json
-  approvedBy      String
-  approvedAt      DateTime  @default(now())
-  counselName     String
-  counselFirm     String?
-  /// Counsel's memo or approval letter, in the documents library.
-  memoDocumentId  String
+  id               String    @id @default(cuid())
+  accountId        String
+  state            String
+  version          Int
+  classification   String
+  content          Json
+  approvedBy       String
+  approvedAt       DateTime  @default(now())
+  /// counsel | owner_risk_acceptance (docs/markets.md s3.1). An owner's
+  /// acceptance is never shown as counsel's approval.
+  basis            String    @default("counsel")
+  /// Counsel's approval: who, and the memo or letter in the documents library.
+  counselName      String?
+  counselFirm      String?
+  memoDocumentId   String?
+  /// An owner's risk acceptance: the name they signed with and why.
+  acceptedByName   String?
+  acceptanceReason String?
   /// The statement the approver confirmed.
-  attestation     String
-  reviewExpiresAt DateTime?
-  supersededAt    DateTime?
-  createdAt       DateTime  @default(now())
+  attestation      String
+  reviewExpiresAt  DateTime?
+  supersededAt     DateTime?
+  createdAt        DateTime  @default(now())
 
   @@unique([accountId, state, version])
   @@index([accountId, state])
@@ -1344,9 +1350,13 @@ model DocumentTemplateVersion {
   states             String[]
   /// draft | validated | approved | retired
   status             String           @default("draft")
+  /// counsel | owner_risk_acceptance, once approved.
+  approvalBasis      String?
   counselName        String?
   counselFirm        String?
   approvalDocumentId String?
+  acceptedByName     String?
+  acceptanceReason   String?
   attestation        String?
   approvedBy         String?
   approvedAt         DateTime?

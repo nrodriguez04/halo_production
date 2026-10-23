@@ -39,6 +39,7 @@ function input(over: Partial<MarketInput> = {}): MarketInput {
       classification: 'B',
       approvedAt: new Date('2026-10-01T00:00:00Z'),
       reviewExpiresAt: new Date('2027-10-01T00:00:00Z'),
+      basis: 'counsel',
     },
     authorizations: [{ kind: 'entity_registration', status: 'active', verifiedAt: NOW, expiresAt: null }],
     templates: [
@@ -95,6 +96,20 @@ describe('market evaluation', () => {
     expect(e.legal.state).toBe('expired');
     expect(e.effectiveStatus).toBe('PENDING_LEGAL_REVIEW');
     expect(e.missing[0]).toContain('lapsed');
+  });
+
+  it("reports the basis, and says an owner's lapsed acceptance needs renewing", () => {
+    const ap = input().approved!;
+    expect(evaluateMarket(input()).legal.basis).toBe('counsel');
+    const owner = evaluateMarket(input({ approved: { ...ap, basis: 'owner_risk_acceptance' } }));
+    expect(owner.legal).toMatchObject({ state: 'approved', basis: 'owner_risk_acceptance' });
+    expect(owner.effectiveStatus).toBe('ACTIVE');
+    const lapsed = evaluateMarket(
+      input({ approved: { ...ap, basis: 'owner_risk_acceptance', reviewExpiresAt: new Date('2026-10-01T00:00:00Z') } }),
+    );
+    expect(lapsed.missing[0]).toContain("owner's risk acceptance lapsed");
+    expect(lapsed.nextStep).toBe('The owner accepts the policy again, or counsel approves it.');
+    expect(evaluateMarket(input({ approved: null })).legal.basis).toBeNull();
   });
 
   it('holds acquisition until the purchase template and the entity registration are in place', () => {

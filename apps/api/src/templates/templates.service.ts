@@ -19,6 +19,7 @@ import {
   toJurisdictionCode,
   type MarketActivity,
   type TemplateKind,
+  OWNER_TEMPLATE_ATTESTATION,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -289,35 +290,13 @@ export class TemplatesService {
       states?: string[];
     },
   ) {
-    const v = await this.version(accountId, versionId);
-    if (v.status !== 'validated') {
-      throw new BadRequestException(
-        v.status === 'draft'
-          ? `This version cannot be approved: ${[...v.unknownFields.map((f) => `unknown field {{${f}}}`), ...v.missingRequired.map((f) => `missing {{${f}}}`)].join(', ')}.`
-          : `This version is ${v.status}.`,
-      );
-    }
     if (!input.attest)
       throw new BadRequestException('Confirm that counsel approved this text.');
-    const states = input.states ? this.states(input.states) : v.states;
-    if (!states.length)
-      throw new BadRequestException(
-        'Name the jurisdictions counsel approved it for.',
-      );
-    const { doc, buffer } = await this.catalog.loadFile(
+    const { v, states } = await this.approvable(
       accountId,
-      v.documentId,
+      versionId,
+      input.states,
     );
-    if (doc.tags.includes(STARTER_TAG)) {
-      throw new BadRequestException(
-        "A starter scaffold is not legal text. Upload counsel's version as a new version and approve that.",
-      );
-    }
-    if (sha256(buffer) !== v.sha256) {
-      throw new BadRequestException(
-        'The file changed after it was uploaded. Upload it again as a new version.',
-      );
-    }
     const approval = await this.prisma.document.findFirst({
       where: { id: input.approvalDocumentId, accountId, status: 'active' },
       select: { id: true },
@@ -342,6 +321,7 @@ export class TemplatesService {
         data: {
           status: 'approved',
           states,
+          approvalBasis: 'counsel',
           counselName: input.counselName,
           counselFirm: input.counselFirm ?? null,
           approvalDocumentId: input.approvalDocumentId,
@@ -365,9 +345,120 @@ export class TemplatesService {
         version: v.version,
         versionId: v.id,
         states,
+        basis: 'counsel',
         counselName: input.counselName,
         counselFirm: input.counselFirm ?? null,
         approvalDocumentId: input.approvalDocumentId,
+        sha256: v.sha256,
+      },
+    });
+    return updated;
+  }
+
+  /**
+   * What either basis of approval needs from the version itself: every
+   * merge field known and required ones present, named jurisdictions, real
+   * text rather than a starter scaffold, and the file unchanged since upload.
+   */
+  private async approvable(
+    accountId: string,
+    versionId: string,
+    statesInput?: string[],
+  ) {
+    const v = await this.version(accountId, versionId);
+    if (v.status !== 'validated') {
+      throw new BadRequestException(
+        v.status === 'draft'
+          ? `This version cannot be approved: ${[...v.unknownFields.map((f) => `unknown field {{${f}}}`), ...v.missingRequired.map((f) => `missing {{${f}}}`)].join(', ')}.`
+          : `This version is ${v.status}.`,
+      );
+    }
+    const states = statesInput ? this.states(statesInput) : v.states;
+    if (!states.length)
+      throw new BadRequestException('Name the jurisdictions it is for.');
+    const { doc, buffer } = await this.catalog.loadFile(
+      accountId,
+      v.documentId,
+    );
+    if (doc.tags.includes(STARTER_TAG)) {
+      throw new BadRequestException(
+        'A starter scaffold is not legal text. Upload the real agreement as a new version and approve that.',
+      );
+    }
+    if (sha256(buffer) !== v.sha256) {
+      throw new BadRequestException(
+        'The file changed after it was uploaded. Upload it again as a new version.',
+      );
+    }
+    return { v, states };
+  }
+
+  /**
+   * The owner accepts a template for named jurisdictions (docs/markets.md
+   * s6): used exactly like a counsel-approved one, but recorded, shown and
+   * audited as the owner's acceptance, never as counsel's approval.
+   */
+  async acceptRisk(
+    accountId: string,
+    versionId: string,
+    userId: string,
+    input: {
+      acceptedByName: string;
+      reason: string;
+      attest: boolean;
+      states?: string[];
+    },
+  ) {
+    if (!input.attest)
+      throw new BadRequestException('Confirm the risk-acceptance statement.');
+    const { v, states } = await this.approvable(
+      accountId,
+      versionId,
+      input.states,
+    );
+    const now = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.documentTemplateVersion.updateMany({
+        where: {
+          templateId: v.templateId,
+          status: 'approved',
+          id: { not: v.id },
+        },
+        data: { status: 'retired', retiredAt: now },
+      });
+      return tx.documentTemplateVersion.update({
+        where: { id: v.id },
+        data: {
+          status: 'approved',
+          states,
+          approvalBasis: 'owner_risk_acceptance',
+          counselName: null,
+          counselFirm: null,
+          approvalDocumentId: null,
+          acceptedByName: input.acceptedByName,
+          acceptanceReason: input.reason,
+          attestation: OWNER_TEMPLATE_ATTESTATION,
+          approvedBy: userId,
+          approvedAt: now,
+        },
+      });
+    });
+    await this.catalog.markChanged(
+      accountId,
+      Array.from(new Set([...states, ...v.states])),
+    );
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'template.version.accept_risk',
+      resource: `template:${v.templateId}`,
+      details: {
+        version: v.version,
+        versionId: v.id,
+        states,
+        basis: 'owner_risk_acceptance',
+        acceptedByName: input.acceptedByName,
+        reason: input.reason,
         sha256: v.sha256,
       },
     });
@@ -566,7 +657,7 @@ export class TemplatesService {
       {
         category,
         title,
-        description: `Generated from ${version.name} v${v.version} (approved ${v.approvedAt?.toISOString().slice(0, 10)}). A person reviews it before it is sent.`,
+        description: `Generated from ${version.name} v${v.version} (${v.approvalBasis === 'owner_risk_acceptance' ? 'owner-accepted, not counsel-approved' : 'counsel-approved'}, ${v.approvedAt?.toISOString().slice(0, 10)}). A person reviews it before it is sent.`,
         dealId: deal.id,
         leadId: deal.leadId ?? undefined,
         buyerId: input.buyerId ?? undefined,

@@ -29,6 +29,8 @@ export interface ApplicableTemplate {
   /** Applies to this jurisdiction by name, rather than through "ALL". */
   specific: boolean;
   approvedAt: Date | null;
+  /** counsel | owner_risk_acceptance once approved. */
+  approvalBasis: string | null;
 }
 
 async function readAll(stream: Readable): Promise<Buffer> {
@@ -92,6 +94,7 @@ export class TemplateCatalogService {
         format: v.format as TemplateFormat,
         specific: v.states.includes(state),
         approvedAt: v.approvedAt,
+        approvalBasis: v.approvalBasis,
       });
     }
     return out;

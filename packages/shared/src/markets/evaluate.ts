@@ -4,6 +4,7 @@ import {
   ACTIVITY_LABEL,
   APPROVAL_REQUIRED_QUESTIONS,
   MARKETING_CHANNELS,
+  type ApprovalBasis,
   MARKET_ACTIVITIES,
   STATUS_ACTIVITIES,
   TEMPLATE_KIND_LABEL,
@@ -27,7 +28,8 @@ import {
  * Where a market stands and what it may do (docs/markets.md s3). Pure: the
  * api loads the records and this decides. Three things are kept apart:
  *
- * - legal: what counsel approved, as an immutable policy version;
+ * - legal: the approved policy, as an immutable version, approved by
+ *   counsel or accepted by the owner (the basis is always reported);
  * - readiness: what Halo has in place to operate there (templates,
  *   authorizations, an operator, a passing self-test);
  * - activation: what a person asked for.
@@ -45,7 +47,7 @@ export interface MarketAuthorizationInput {
 
 export interface MarketTemplateInput {
   kind: TemplateKind;
-  /** validated: uploaded and every merge field is known; approved: counsel approved it. */
+  /** validated: uploaded and every merge field is known; approved: counsel approved it or the owner accepted it. */
   status: 'draft' | 'validated' | 'approved';
 }
 
@@ -62,6 +64,7 @@ export interface MarketInput {
     classification: MarketClassification;
     approvedAt: Date;
     reviewExpiresAt: Date | null;
+    basis: ApprovalBasis;
   } | null;
   authorizations: MarketAuthorizationInput[];
   /** Template versions that apply to this jurisdiction, newest per kind and status. */
@@ -95,6 +98,8 @@ export interface MarketEvaluation {
     version: number | null;
     approvedAt: Date | null;
     reviewExpiresAt: Date | null;
+    /** Counsel's approval or the owner's risk acceptance; null with no approved version. */
+    basis: ApprovalBasis | null;
     classification: MarketClassification;
     /** Questions an approval must answer that the draft leaves unknown. */
     unansweredForApproval: MarketQuestion[];
@@ -158,7 +163,7 @@ function templateCheck(kind: TemplateKind, input: MarketInput, why: string): Mar
     met,
     detail: met
       ? `An approved ${TEMPLATE_KIND_LABEL[kind].toLowerCase()} template applies here.`
-      : `No counsel-approved ${TEMPLATE_KIND_LABEL[kind].toLowerCase()} template applies here (${why}).`,
+      : `No approved ${TEMPLATE_KIND_LABEL[kind].toLowerCase()} template applies here (${why}).`,
   };
 }
 
@@ -181,7 +186,7 @@ function acquisitionChecks(c: MarketPolicyContent, classification: MarketClassif
       met: classification !== 'E' && classification !== 'unclassified',
       detail:
         classification === 'E'
-          ? 'Counsel classified the market as not currently authorized.'
+          ? 'The approved policy classifies the market as not currently authorized.'
           : classification === 'unclassified'
             ? 'The approved policy has no classification.'
             : `Classified ${classification}.`,
@@ -354,10 +359,12 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
     maxStatus = input.draftInReview || expired ? 'PENDING_LEGAL_REVIEW' : 'RESEARCH_ONLY';
     missing.push(
       expired
-        ? `The legal review lapsed on ${ap!.reviewExpiresAt!.toISOString().slice(0, 10)}; counsel must approve the policy again.`
+        ? ap!.basis === 'owner_risk_acceptance'
+          ? `The owner's risk acceptance lapsed on ${ap!.reviewExpiresAt!.toISOString().slice(0, 10)}; accept the policy again or have counsel approve it.`
+          : `The legal review lapsed on ${ap!.reviewExpiresAt!.toISOString().slice(0, 10)}; counsel must approve the policy again.`
         : input.draftInReview
           ? 'Counsel has not yet approved the policy.'
-          : 'No policy has been submitted for legal review.',
+          : 'No policy has been approved by counsel or accepted by the owner.',
     );
   } else {
     const c = ap.content;
@@ -366,7 +373,7 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
     active = activeChecks(c, input);
     if (ap.classification === 'E') {
       maxStatus = 'RESEARCH_ONLY';
-      missing.push('Counsel classified this market as not currently authorized. Research continues; see the activation steps.');
+      missing.push('The approved policy classifies this market as not currently authorized. Research continues; see the activation steps.');
     } else if (acquisition.some((x) => !x.met)) {
       maxStatus = 'PENDING_REQUIREMENTS';
       missing.push(...acquisition.filter((x) => !x.met).map((x) => x.detail));
@@ -422,10 +429,11 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
   let nextStep: string | null = null;
   if (req === 'BLOCKED' || req === 'RESTRICTED') nextStep = null;
   else if (legalState === 'none' || legalState === 'draft') nextStep = unansweredForApproval.length
-    ? `Answer ${unansweredForApproval.length} open legal question(s), then submit the policy for review.`
-    : 'Submit the policy for legal review.';
+    ? `Answer ${unansweredForApproval.length} open legal question(s), then submit the policy to counsel or accept it as the owner.`
+    : 'Submit the policy to counsel, or accept it as the owner.';
   else if (legalState === 'in_review') nextStep = 'Counsel reviews and approves the policy.';
-  else if (legalState === 'expired') nextStep = 'Counsel renews the legal review.';
+  else if (legalState === 'expired')
+    nextStep = ap?.basis === 'owner_risk_acceptance' ? 'The owner accepts the policy again, or counsel approves it.' : 'Counsel renews the legal review.';
   else if (missing.length) nextStep = missing[0];
   else if (ladderRank(effectiveStatus) < ladderRank(maxStatus)) {
     const next = ACTIVATION_LADDER[Math.max(ladderRank(effectiveStatus) + 1, ladderRank('APPROVED_FOR_ACQUISITION'))];
@@ -442,6 +450,7 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
       version: ap?.version ?? null,
       approvedAt: ap?.approvedAt ?? null,
       reviewExpiresAt: ap?.reviewExpiresAt ?? null,
+      basis: ap?.basis ?? null,
       classification: ap?.classification ?? 'unclassified',
       unansweredForApproval,
     },

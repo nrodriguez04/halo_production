@@ -129,6 +129,34 @@ export const CLASSIFICATION_LABEL: Record<MarketClassification, string> = {
   E: 'E: not currently authorized',
 };
 
+// ------------------------------------------------------------ approval
+
+/**
+ * What an approved policy or template rests on (docs/markets.md s3.1).
+ * Counsel's approval, or the owner's acceptance of the legal and business
+ * risk on the strength of the research. The two are never shown as each
+ * other: an owner's acceptance is not legal advice and not an attorney's
+ * approval, and every surface that shows an approval names its basis.
+ */
+export const APPROVAL_BASES = ['counsel', 'owner_risk_acceptance'] as const;
+export type ApprovalBasis = (typeof APPROVAL_BASES)[number];
+
+export const APPROVAL_BASIS_LABEL: Record<ApprovalBasis, string> = {
+  counsel: 'Counsel-approved',
+  owner_risk_acceptance: 'Owner-accepted, not counsel-approved',
+};
+
+/** An owner's acceptance lapses sooner than counsel's approval. */
+export const OWNER_ACCEPTANCE_MAX_MONTHS = 6;
+
+/** The statement an owner signs to accept a market policy. */
+export const OWNER_ACCEPTANCE_ATTESTATION =
+  'I am not acting as legal counsel, and this is not an attorney\'s approval or legal advice. I reviewed this policy, the research and sources cited and the answers recorded, and I accept the legal and business risk of operating in this jurisdiction within the uses this policy permits.';
+
+/** The statement an owner signs to accept a document template. */
+export const OWNER_TEMPLATE_ATTESTATION =
+  'I am not acting as legal counsel, and this is not an attorney\'s approval. I reviewed this exact text, chose it for the jurisdictions listed, and accept the legal and business risk of using it there.';
+
 // ------------------------------------------------------------ questions
 
 /** The questions research and counsel answer for every jurisdiction. */

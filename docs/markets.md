@@ -1,9 +1,9 @@
 # Markets
 
-Hālo is built to operate in every US jurisdiction: the 50 states and DC. It operates in each one only as far as counsel has approved and a person has decided. This document describes how that works:
+Hālo is built to operate in every US jurisdiction: the 50 states and DC. It operates in each one only as far as an approved policy allows and a person has decided. A policy is approved by counsel, or accepted by the owner on the strength of the research; the two are never shown as each other. This document describes how that works:
 - the market record;
 - the research behind each draft policy;
-- counsel's approval;
+- counsel's approval and the owner's risk acceptance;
 - the activation ladder;
 - the gates that enforce it;
 - document templates;
@@ -19,7 +19,8 @@ Code:
 - **Every jurisdiction has a market.** The 51 rows exist for every tenant. None is enabled by default.
 - **Unknown never means allowed.** An unanswered question, an unreviewed policy, a missing template or an unverified licence each stop the activity they bear on.
 - **Research is a lead, not a conclusion.** Bundled research only ever fills a *draft*. Nothing a draft says permits anything.
-- **The gates rely on counsel's approved version, never on the draft.** A draft can change while the approved version stays in force.
+- **The gates rely on the approved version, never on the draft.** A draft can change while the approved version stays in force.
+- **An approval always names its basis.** Counsel's approval and the owner's risk acceptance (s3.1) open the same gates. Every surface that shows an approval says which it is, and an owner's acceptance is never called counsel's, legal or attorney approval.
 - **Nothing promotes itself.** A person chooses each rung of the ladder. Halo refuses a rung the approved policy and the requirements on file do not support. When something lapses, the market drops automatically.
 - **No region is special-cased in code.** Differences between states live in policy content: answers, structures, channels, disclosures, deadlines and requirements. The one exception predates this work: Texas's built-in equitable-interest notice (docs/documents-and-compliance.md), which the Texas policy also lists.
 
@@ -38,15 +39,15 @@ A market can be research-covered without being technically ready, and technicall
 ## 3. The activation ladder and the gates
 
 `evaluateMarket` (`packages/shared/src/markets/evaluate.ts`) decides from the records. It separates three things:
-- **legal:** what counsel approved (an immutable version);
+- **legal:** the approved policy (an immutable version), approved by counsel or accepted by the owner;
 - **readiness:** templates, authorizations, an operator, a self-test;
 - **activation:** what a person asked for.
 
 | Status | What it allows | What it needs |
 |---|---|---|
 | `RESEARCH_ONLY` | research, sourcing, underwriting | nothing |
-| `PENDING_LEGAL_REVIEW` | the same | a draft submitted to counsel, or a lapsed approval |
-| `PENDING_REQUIREMENTS` | the same | an approved policy; requirements outstanding (or all met and waiting for a person) |
+| `PENDING_LEGAL_REVIEW` | the same | a draft submitted to counsel, or a lapsed approval or acceptance |
+| `PENDING_REQUIREMENTS` | the same | an approved or owner-accepted policy; requirements outstanding (or all met and waiting for a person) |
 | `APPROVED_FOR_ACQUISITION` | + contacting sellers, signing purchase agreements, closing | classification A–D; an approved purchase-agreement template; approved seller-disclosure templates; authorizations that apply to seller activity |
 | `APPROVED_FOR_DISPOSITION` | + marketing to buyers, assigning, double closing | a permitted structure with its template and authorizations; a permitted channel; approved buyer-disclosure templates; authorizations that apply to marketing |
 | `ACTIVE` | + agents acting without a person starting each step | an operator responsible for the market; a self-test passed within 30 days and not stale |
@@ -57,6 +58,26 @@ A market can be research-covered without being technically ready, and technicall
 - **Below the first approval rung, the pending statuses show progress.**
 - **Setting `RESTRICTED`, `BLOCKED` or anything below disposition pauses the market's live campaigns.**
 - **A classification-E policy keeps the market at research only.**
+
+### 3.1 Owner risk acceptance
+
+The owner may accept a policy instead of counsel approving it (decided 2026-10-23). Hālo still records exactly what it is: the owner's acceptance of the legal and business risk, on the strength of the research, not legal advice and not an attorney's approval.
+
+| Rule | Why |
+|---|---|
+| Only an account owner or admin (`Tenant Admin`, `Owner`, `Admin`, `Platform Admin`) can accept. A permission is not enough. | The people who own the risk decide it. |
+| Every question an approval needs is answered, and every one of those answers cites at least one source. | Research backs the decision; unknown still never permits. |
+| Class E needs counsel. | Research found no documented route. |
+| Conditional answers, structures and channels state their conditions; required disclosures and cancellation windows are encoded. | The same checks as counsel's approval. |
+| The owner signs with their full name, gives a reason, and confirms `OWNER_ACCEPTANCE_ATTESTATION`. | A record of who decided, why, and on what basis. |
+| It lapses after at most 6 months (counsel's: 24). | Research ages, and the law changes. |
+| Templates are accepted the same way (s6), and generated documents name the basis. | Nothing can be signed without an approved template. |
+| Requirements, consent, Do Not Call scrubbing, quiet hours and the Control Plane switches apply whatever the basis. | Some obligations exist whoever approves the policy. |
+
+- **The record:** `MarketPolicyVersion.basis` is `owner_risk_acceptance`, with `acceptedByName` and `acceptanceReason`. Counsel's fields stay empty. The audit entry `market.policy.accept_risk` keeps the research confidence, the open questions, and any required answer resting only on secondary sources.
+- **Routes:** `POST /markets/:state/accept-risk {acceptedByName, reason, attest, reviewExpiresAt?}` and `POST /templates/versions/:id/accept-risk {acceptedByName, reason, attest, states?}`. `GET /markets/:state` returns `ownerAcceptance`, listing what still stops the owner from accepting, or empty when nothing does.
+- **Counsel can still approve.** Counsel's approval supersedes an owner's acceptance as a new version. A draft that is with counsel stays there when the owner accepts it.
+- **When it lapses,** the market drops to pending review, like a lapsed counsel approval.
 
 ### Where each activity is enforced
 
@@ -126,7 +147,7 @@ Templates are counsel's text with `{{field}}` blanks, as `.docx` (filled with do
 
 **The rules:**
 - **Upload creates a version.** The file's hash, its fields, and any unknown or missing required fields are recorded. A clean version is `validated`; anything else stays `draft`.
-- **Approval names counsel and the states.** It requires counsel's name, the approval document, the states, and that the file is unchanged since upload. A starter scaffold cannot be approved. Approving supersedes the template's earlier approved version.
+- **Approval names its basis and the states.** Counsel's approval requires counsel's name and the approval document; the owner's acceptance requires an owner or admin, their full name, a reason and the owner statement (s3.1). Both require the states and that the file is unchanged since upload. A starter scaffold cannot be approved either way. Approving supersedes the template's earlier approved version.
 - **Selection:** a deal uses the newest approved version for its state. One written for the state wins over one approved for `ALL`.
 - **Generation:**
   - fills the template from Hālo's records and refuses when any used field has no value;
@@ -135,7 +156,7 @@ Templates are counsel's text with `{{field}}` blanks, as `.docx` (filled with do
   - records a `DocumentGeneration` holding the values used.
 - **Starter scaffolds** (`POST /templates/starter`) show the merge-field layout with every clause marked `[COUNSEL]`. They apply to no jurisdiction and do not count toward readiness.
 
-Hālo never writes clauses and never marks a template approved by itself.
+Hālo never writes clauses and never marks a template approved by itself. A document generated from an owner-accepted template says so in its description.
 
 ## 7. Self-test
 
@@ -224,8 +245,8 @@ The agent also holds without asking a model when:
 
 ## 12. Not operational yet
 
-- **No market is approved.** Counsel must review each policy. The bundled research is a starting point, and its low-confidence states need the most work.
-- **No template is approved.** Counsel's documents must be uploaded and approved per state. The starter scaffolds are not legal text.
+- **No market is approved or accepted.** Counsel or the owner must decide each policy. On the bundled research, 21 jurisdictions can be accepted by the owner as they stand; 19 have a required question still unknown (most often the seller's cancellation right), and 11 are class E.
+- **No template is approved or accepted.** Real agreements must be uploaded and approved per state. The starter scaffolds are not legal text.
 - **Data access needs a provider key.** Research coverage is 0 until ATTOM, Realie, RentCast or Regrid is configured, or sourcing markets are added.
 - **Word-to-PDF needs Gotenberg** at `PDF_CONVERTER_URL`. It is in `docker-compose.prod.yml` and verified against the same image locally and in CI; without it, Word templates generate `.docx` only.
 - **State holidays and split-state time zones** are approximations (s5).

@@ -38,6 +38,8 @@ export interface MarketRow {
   region: string;
   classification: Classification;
   classificationSource: 'approved' | 'draft';
+  /** What the approved version rests on; null with none. */
+  approvalBasis: ApprovalBasis | null;
   requestedStatus: ActivationStatus;
   effectiveStatus: ActivationStatus;
   maxStatus: ActivationStatus;
@@ -46,14 +48,16 @@ export interface MarketRow {
     version: number | null;
     approvedAt: string | null;
     reviewExpiresAt: string | null;
+    basis: ApprovalBasis | null;
     counselName: string | null;
+    acceptedByName: string | null;
   };
   structures: Array<{ key: string; permission: Permission }>;
   channels: Array<{ key: string; permission: Permission }>;
   requirements: Array<{ key: string; label: string; met: boolean }>;
   disclosures: Array<{ key: string; title: string; audience: 'seller' | 'buyer'; timing: string }>;
   deadlines: Array<{ key: string; label: string; days: number; businessDays: boolean; effect: string }>;
-  templates: Array<{ kind: string; status: 'validated' | 'approved'; name: string; version: number; specific: boolean }>;
+  templates: Array<{ kind: string; status: 'validated' | 'approved'; name: string; version: number; specific: boolean; approvalBasis: ApprovalBasis | null }>;
   sources: { count: number; latestEffectiveDate: string | null; official: number };
   research: { date: string | null; confidence: string | null; importedAt: string | null };
   technical: { ready: boolean; checks: MarketCheck[] };
@@ -174,9 +178,12 @@ export interface MarketDetail extends MarketRow {
     classification: Classification;
     approvedAt: string;
     approvedBy: string;
-    counselName: string;
+    basis: ApprovalBasis;
+    counselName: string | null;
     counselFirm: string | null;
-    memoDocumentId: string;
+    memoDocumentId: string | null;
+    acceptedByName: string | null;
+    acceptanceReason: string | null;
     reviewExpiresAt: string | null;
     supersededAt: string | null;
   }>;
@@ -188,7 +195,24 @@ export interface MarketDetail extends MarketRow {
   };
   questions: Array<{ key: string; label: string; requiredForApproval: boolean }>;
   attestation: string;
+  /** The statement an owner signs to accept the policy. */
+  ownerAttestation: string;
+  /** Why the owner cannot accept the draft now; empty when they can. */
+  ownerAcceptance: string[];
 }
+
+export type ApprovalBasis = 'counsel' | 'owner_risk_acceptance';
+
+/** Never show an owner's acceptance as counsel's approval. */
+export const BASIS_LABEL: Record<ApprovalBasis, string> = {
+  counsel: 'Counsel-approved',
+  owner_risk_acceptance: 'Owner-accepted, not counsel-approved',
+};
+
+export const BASIS_VARIANT: Record<ApprovalBasis, 'success' | 'warning'> = {
+  counsel: 'success',
+  owner_risk_acceptance: 'warning',
+};
 
 export const STATUS_LABEL: Record<ActivationStatus, string> = {
   RESEARCH_ONLY: 'Research only',
