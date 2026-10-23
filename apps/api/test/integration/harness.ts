@@ -235,6 +235,7 @@ export function fixtures(moduleRef: TestingModule) {
       await prisma.message.deleteMany({ where: { accountId } });
       await prisma.consent.deleteMany({ where: { accountId } });
       await prisma.dNCList.deleteMany({ where: { accountId } });
+      await prisma.dncRegistryList.deleteMany({ where: { accountId } });
       await prisma.market.deleteMany({ where: { accountId } });
       await prisma.marketPolicyVersion.deleteMany({ where: { accountId } });
       await prisma.marketAuthorization.deleteMany({ where: { accountId } });

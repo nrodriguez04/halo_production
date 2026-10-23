@@ -83,7 +83,35 @@ It was verified end to end against a local SMTP catcher.
 - **SMS from a buyer:** a text from a number held on exactly one buyer now joins that buyer and the deal Halo last wrote to them about, and the Buyer Responder drafts a reply for approval.
 - **Twilio signature:** verified with the token from the Integrations page as well as env (sending already used it, so a token saved only there used to make every webhook 403).
 
-## 7. Configuration
+## 7. Do Not Call registry
+
+A marketing text to a homeowner is a telephone solicitation. Hālo checks every marketing text against the National Do Not Call Registry data an operator imports, and refuses it when the data says no or says nothing.
+
+**Getting the data.** The account subscribes to the registry for its area codes at telemarketing.donotcall.gov and downloads the files. An operator imports each unzipped file on **Communications → Settings → Do Not Call registry**: one number per line, with the area codes the file covers and the day it was downloaded. A state's own list can be imported the same way; it adds numbers but never covers an area code by itself.
+
+**Coverage.** An area code is covered for 31 days after the download, the Telemarketing Sales Rule's safe-harbor limit. A new download of the same area codes replaces the old one. Data older than 31 days is refused at import because it would cover nothing.
+
+**At send time** (creation, approval and dispatch alike), while scrubbing is required, a marketing text is refused with:
+
+| Code | When |
+|---|---|
+| `DNC_REGISTRY_NOT_CURRENT` | no national data from the last 31 days covers the number's area code |
+| `DNC_REGISTRY_LISTED` | the number is listed and the consent on file is not written (`written`, `form` or `deal_page`) |
+
+- **What is checked:** marketing texts only. Replies to someone who wrote in, deal paperwork and email are not telephone solicitations and are not checked.
+- **What is not counted as written:** `verbal`, `recorded_call`, `existing_relationship` and `other` consents still allow texts to numbers that are not listed. Whether an established business relationship exempts a listed number is a question for counsel; until counsel answers, it does not.
+- **Calls are not covered by the platform.** Hālo does not place calls. Anyone calling a seller from Hālo's lead list must scrub the number first.
+- **The requirement** (`ControlPlane.dncRegistryRequired`) starts on for every tenant: an unknown obligation never permits. Turning it off takes counsel's answer, recorded with a reason on the same card, and is audited.
+
+Routes (`control_plane:write` to change anything):
+- `GET /compliance/dnc-registry`: the requirement, covered area codes and every list with its expiry;
+- `POST /compliance/dnc-registry/import`: multipart `file` with `source` (`national` or a state code), `areaCodes` and `fetchedAt` (YYYY-MM-DD);
+- `DELETE /compliance/dnc-registry/:id`;
+- `POST /compliance/dnc-registry/required {required, reason}`.
+
+Numbers are stored as ten-digit integers in `dnc_registry_numbers`, used only for this check, and deleted with their list.
+
+## 8. Configuration
 
 | Setting | Purpose |
 |---|---|
@@ -94,8 +122,9 @@ It was verified end to end against a local SMTP catcher.
 | `EMAIL_INTERNAL_RECIPIENTS` | who may receive a test send |
 | Control Plane: Email, Marketing email, SMS, Marketing texts | the switches; all off for a new tenant |
 
-## 8. Not operational
+## 9. Not operational
 
+- **No registry data has been imported.** Until it is, no marketing text can go out while scrubbing is required.
 - **No external send has been made.** Turning email on is your decision on the Control Plane, and so is turning marketing email on.
 - **Provider event webhooks** are tested with locally generated keys; they need the real key or secret from SendGrid or Resend.
 - **Resend inbound** is not handled. Inbound email uses SendGrid Inbound Parse.

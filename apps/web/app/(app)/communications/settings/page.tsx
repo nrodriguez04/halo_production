@@ -14,6 +14,7 @@ import { ErrorState, LoadingState } from '@/components/states';
 import { toast } from '@/components/ui/toast';
 import { Field } from '@/components/disposition/agreement-panel';
 import { day, errorText } from '@/lib/disposition';
+import { DncRegistryCard } from '@/components/communications/dnc-registry-card';
 
 interface Check {
   key: string;
@@ -314,6 +315,8 @@ export default function CommunicationsSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <DncRegistryCard />
     </div>
   );
 }

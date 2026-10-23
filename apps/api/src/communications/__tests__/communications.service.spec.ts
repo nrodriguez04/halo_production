@@ -35,6 +35,9 @@ describe('CommunicationsService recipients', () => {
         isDnc: false,
         hasConsent: true,
         consentSource: 'form',
+        writtenConsent: true,
+        dncRegistry: 'clear',
+        dncRegistryRequired: true,
       }),
     };
     const module: TestingModule = await Test.createTestingModule({

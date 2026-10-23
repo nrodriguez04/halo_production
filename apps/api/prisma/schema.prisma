@@ -493,6 +493,10 @@ model ControlPlane {
   revenueRecognition        String   @default("on_funds_received")
   campaignFollowUpDays      Int      @default(3)
   campaignMaxFollowUps      Int      @default(2)
+  /// Marketing texts are scrubbed against the Do Not Call registry data on
+  /// file (docs/communications.md s7). On until a person turns it off with
+  /// counsel's answer: an unknown obligation never permits.
+  dncRegistryRequired       Boolean  @default(true)
   updatedAt                 DateTime @updatedAt
   updatedBy                 String?
 
@@ -538,6 +542,44 @@ model DNCList {
   @@unique([accountId, emailHash])
   @@index([accountId])
   @@map("dnc_list")
+}
+
+// Compliance: Do Not Call registry data (docs/communications.md s7). One
+// row per import of the National Do Not Call Registry, or a state list,
+// for the area codes the account subscribed to; the numbers on it below.
+model DncRegistryList {
+  id          String   @id @default(cuid())
+  accountId   String
+  /// "national", or a state code for a state's own list.
+  source      String
+  /// Three-digit area codes the download covers, listed numbers or not.
+  areaCodes   String[]
+  /// When the data was downloaded from the registry. Coverage lapses 31
+  /// days after it (the Telemarketing Sales Rule safe harbor).
+  fetchedAt   DateTime
+  numberCount Int      @default(0)
+  skipped     Int      @default(0)
+  fileName    String?
+  importedAt  DateTime @default(now())
+  importedBy  String?
+
+  numbers DncRegistryNumber[]
+
+  @@index([accountId, source])
+  @@map("dnc_registry_lists")
+}
+
+/// A ten-digit US number on a registry list. Matched against the
+/// recipient's number at send time; kept only for that purpose.
+model DncRegistryNumber {
+  listId String
+  phone  BigInt
+
+  list DncRegistryList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@id([listId, phone])
+  @@index([phone])
+  @@map("dnc_registry_numbers")
 }
 
 // Compliance: Consent records

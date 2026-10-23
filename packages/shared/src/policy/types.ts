@@ -25,6 +25,16 @@ export interface PolicyContext {
   hasConsent?: boolean;
   consentSource?: string;
   isDnc?: boolean;
+  /**
+   * Do Not Call registry scrubbing (docs/communications.md s7), for texts:
+   * the message's class, whether scrubbing is required, what the registry
+   * data on file says about the recipient, and whether the consent on file
+   * is written (the registry exemption needs a signed or form agreement).
+   */
+  messageClass?: 'marketing' | 'conversational' | 'transactional' | 'internal_test';
+  dncRegistryRequired?: boolean;
+  dncRegistry?: 'listed' | 'clear' | 'not_covered';
+  writtenConsent?: boolean;
   timezone?: string;
   localHour?: number;
   /**
