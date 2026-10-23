@@ -59,6 +59,24 @@ The web image bakes `NEXT_PUBLIC_API_URL`, `DESCOPE_PROJECT_ID`,
 when it is built (compose passes them as build args). After changing any of
 them, rebuild it: `docker compose -f docker-compose.prod.yml build web`.
 
+### Descope in production
+
+Set these in the Descope console before the first login:
+
+| Setting | Value | Why |
+|---|---|---|
+| Custom domain | `auth.<domain>` (a CNAME Descope gives you) | `DESCOPE_BASE_URL`, used by the api and baked into the web bundle |
+| Session management | **Manage in cookies** | the session and refresh tokens never reach page JavaScript |
+| Cookie domain | `<domain>` (the parent) | `app.<domain>` and `api.<domain>` both receive the cookies |
+| Cookie SameSite | Lax | the app and api are the same site |
+| Users | each with a tenant named after the account (`halo-hq`) and a role | without a tenant the api answers 403 and sign-in says why |
+
+How the app uses it:
+- The web sends cookies with every api call (`credentials: 'include'`).
+- The api takes a bearer header when there is one, otherwise the `DS` session cookie (`apps/api/src/auth/session-token.ts`). Set `DESCOPE_SESSION_COOKIE` only if you renamed it.
+- A write authenticated by the cookie alone must come from an origin in `CORS_ORIGINS` (`https://app.<domain>`), so another site cannot borrow the cookie. Reads are allowed either way, since another site cannot read the answers.
+- **Local development keeps "Manage in response body".** Cookies set on the custom domain are invisible to `localhost`, so a local login with cookie management bounces back to sign-in.
+
 First login: open `https://app.<domain>`, sign in with the Descope user you
 made Platform Admin, go to **Admin → Integrations** and enter provider keys
 (they are encrypted at rest with `SECRETS_ENCRYPTION_KEY`; env values are

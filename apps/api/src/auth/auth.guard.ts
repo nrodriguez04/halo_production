@@ -9,6 +9,7 @@ import {
 import { Request } from 'express';
 import { descope } from './descope.client';
 import { devBypassUser, isDevAuthBypassEnabled } from './dev-bypass';
+import { sessionTokenFrom } from './session-token';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -27,14 +28,13 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const authHeader = request.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : null;
-
-    if (!token) {
-      throw new UnauthorizedException('Missing bearer token');
+    // A bearer header, or Descope's session cookie when Descope manages
+    // tokens in cookies (production); see session-token.ts.
+    const found = sessionTokenFrom(request);
+    if ('reason' in found) {
+      throw new UnauthorizedException(found.reason);
     }
+    const token = found.token;
 
     try {
       const session = await (descope as any).validateSession(token);

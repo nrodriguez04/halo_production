@@ -9,6 +9,7 @@ import * as express from 'express';
 import * as compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { allowedOrigins } from './auth/session-token';
 import { validateEnv } from './env';
 import { isDevAuthBypassEnabled, devBypassAccountId } from './auth/dev-bypass';
 import { AlertingExceptionFilter } from './alerts/alerting-exception.filter';
@@ -76,10 +77,8 @@ async function bootstrap() {
   );
 
   // CORS
-  const origins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
+  // The same list decides which origins may use a session cookie.
+  const origins = allowedOrigins();
 
   app.enableCors({
     origin: origins,
