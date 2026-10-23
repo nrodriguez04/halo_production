@@ -29,9 +29,15 @@ export class LeadsService {
     // canonicalPhone / canonicalEmail are the write-side field names on the
     // DTO; the row stores only the protected columns.
     const { canonicalPhone, canonicalEmail, ...rest } = data;
+    // Where a lead came from feeds the conversion funnel; one entered by
+    // hand or through the API is "manual" unless the caller names a source.
+    const tags = rest.tags ?? [];
     const lead = await this.prisma.lead.create({
       data: {
         ...rest,
+        tags: tags.some((t) => t.startsWith('source:'))
+          ? tags
+          : [...tags, 'source:manual'],
         ...this.pii.protect({ phone: canonicalPhone, email: canonicalEmail }),
       },
       include: {
@@ -280,7 +286,7 @@ export class LeadsService {
         canonicalOwner: r.row.owner,
         ...this.pii.protect({ phone: r.row.phone, email: r.row.email }),
         status: 'new',
-        tags: [],
+        tags: ['source:csv_import'],
       });
     }
 
