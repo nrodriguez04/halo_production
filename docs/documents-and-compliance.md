@@ -38,7 +38,7 @@ only when operating there; the **Operating state** box defaults to TX.
 | --- | --- |
 | Purchase and sale agreement (assignable) | The seller contract; must allow assignment |
 | Assignment of contract | Transfers the position to the cash buyer for the fee |
-| Equitable interest disclosure (TX) | Texas requires written notice to buyers that you hold only a contractual interest; tell sellers you intend to assign. Tex. Prop. Code 5.086, Tex. Occ. Code 1101.0045 |
+| Equitable interest disclosure (TX) | Texas requires written notice to buyers that you hold only a contractual interest, and (since 2024) written notice to the owner that you intend to assign. Tex. Prop. Code 5.0205, Tex. Occ. Code 1101.0045 |
 | Seller's disclosure notice | Property condition statement; Texas prescribes the form (Tex. Prop. Code 5.008) |
 | Earnest money receipt and title instructions | Deposit proof and the instructions title closes on |
 | Buyer non-disclosure / non-circumvention | Signed before a buyer sees the address |
@@ -56,7 +56,7 @@ supply; Halo stores and tracks it.
 ## Texas equitable-interest gate
 
 In Texas a wholesaler markets only an equitable interest and must give every
-prospective buyer written notice of it (Tex. Prop. Code 5.086, Tex. Occ. Code
+prospective buyer written notice of it (Tex. Prop. Code 5.0205, Tex. Occ. Code
 1101.0045). For a deal whose property is in Texas, nothing buyer-facing goes
 out until the notice is on file: an active document attached to the deal (or
 its lead) with the checklist item **Equitable interest disclosure (Texas)**.

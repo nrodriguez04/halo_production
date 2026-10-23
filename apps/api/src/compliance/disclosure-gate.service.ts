@@ -27,7 +27,7 @@ export function normalizeState(
 
 /**
  * Texas lets a wholesaler market only an equitable interest, and requires
- * written notice of that to every prospective buyer (Tex. Prop. Code 5.086,
+ * written notice of that to every prospective buyer (Tex. Prop. Code 5.0205,
  * Tex. Occ. Code 1101.0045). This gate keeps buyer marketing and buyer
  * contracts for a Texas deal from going out until the notice is on file in
  * the documents library, attached to the deal or its lead and tagged with

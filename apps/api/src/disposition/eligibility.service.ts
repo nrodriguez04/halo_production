@@ -24,7 +24,7 @@ export const DISPOSITION_NOT_ELIGIBLE = 'DISPOSITION_NOT_ELIGIBLE';
 
 /** Disclosures Halo requires before buyer marketing whatever the tenant's policy says. */
 const BUILT_IN_BUYER_DISCLOSURES: Record<string, string[]> = {
-  // Tex. Prop. Code 5.086 / Tex. Occ. Code 1101.0045; the existing gate
+  // Tex. Prop. Code 5.0205 / Tex. Occ. Code 1101.0045; the existing gate
   // (DisclosureGateService) enforces the same document at every send.
   TX: ['equitable_interest_disclosure'],
 };
