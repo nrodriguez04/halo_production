@@ -26,6 +26,7 @@ import { UnderwritingCard } from '@/components/disposition/underwriting-card';
 import { TaxSalePanel } from '@/components/disposition/tax-sale-panel';
 import { SellerConsentCard } from '@/components/disposition/seller-consent-card';
 import { ELIGIBILITY_LABEL, ELIGIBILITY_VARIANT, day, errorText, type Workspace } from '@/lib/disposition';
+import { MAPLIBRE_WORKER_URL } from '@/lib/maplibre';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
 const Marker = dynamic(() => import('react-map-gl/maplibre').then((m) => m.Marker), { ssr: false });
@@ -165,6 +166,7 @@ export default function DealDetailPage() {
                 <MapGL
                   initialViewState={{ latitude: deal.property!.latitude!, longitude: deal.property!.longitude!, zoom: 14 }}
                   mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+                  workerUrl={MAPLIBRE_WORKER_URL}
                   style={{ width: '100%', height: '100%' }}
                   interactive={false}
                 >
