@@ -244,6 +244,7 @@ export function fixtures(moduleRef: TestingModule) {
       await prisma.recordedSale.deleteMany({ where: { accountId } });
       await prisma.dataImport.deleteMany({ where: { accountId } });
       await prisma.buyerCandidate.deleteMany({ where: { accountId } });
+      await prisma.marketingSpend.deleteMany({ where: { accountId } });
       await prisma.timelineEvent.deleteMany({ where: { tenantId: accountId } });
       await prisma.auditLog.deleteMany({ where: { accountId } });
       await prisma.controlPlane.deleteMany({ where: { accountId } });

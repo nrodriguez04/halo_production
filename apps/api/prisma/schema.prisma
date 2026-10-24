@@ -1675,6 +1675,30 @@ model ClosingFile {
   @@map("closing_files")
 }
 
+/// Money spent getting leads that no provider call records (docs/data-pipeline.md
+/// s5.1): a mail drop, an ad campaign, a bought list. A person enters it;
+/// the funnel adds it to the cost of the source and the state it names.
+model MarketingSpend {
+  id        String   @id @default(cuid())
+  accountId String
+  /// direct_mail | ads | lists | skip_tracing | cold_calling | texting | software | other
+  category  String
+  amountUsd Float
+  /// The day the money was spent, stored at noon UTC.
+  spentOn   DateTime
+  /// The lead source it bought, spelled as the leads' `source:` tag.
+  source    String?
+  /// The state it targeted, when it targeted one.
+  state     String?
+  vendor    String?
+  note      String?
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([accountId, spentOn])
+  @@map("marketing_spend")
+}
+
 model ClosingMilestone {
   id                 String    @id @default(cuid())
   accountId          String

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -24,6 +25,7 @@ import {
   LeadCreateSchema,
   LeadUpdateSchema,
   CSVImportRowSchema,
+  sourceKey,
 } from '@halo/shared';
 
 const LeadCreateInputSchema = LeadCreateSchema.omit({ status: true });
@@ -148,14 +150,20 @@ export class LeadsController {
     return this.leadsService.remove(id, accountId);
   }
 
+  /** `source` names the campaign or list the rows came from (default csv_import); see the funnel. */
   @Post('import/csv')
   async importCSV(
-    @Body() body: { rows: unknown[] },
+    @Body() body: { rows: unknown[]; source?: unknown },
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
   ) {
     const validatedRows = body.rows.map((row) => CSVImportRowSchema.parse(row));
-    return this.leadsService.importCSV(validatedRows, accountId, userId);
+    if (body.source != null && typeof body.source !== 'string')
+      throw new BadRequestException('source must be text');
+    const source = sourceKey((body.source as string | undefined) ?? '');
+    return this.leadsService.importCSV(validatedRows, accountId, userId, {
+      source: source || undefined,
+    });
   }
 
   /**

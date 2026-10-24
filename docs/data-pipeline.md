@@ -142,9 +142,15 @@ Routes:
 | Closed | its closing file is closed; the realized fee counts |
 
 - **Stages nest.** A lead counts at every stage up to the furthest it reached, so each rate stays between 0 and 1. A close is measured against contracts, because a double close has no assignment.
-- **Costs** are the completed provider charges recorded against each lead. Spend tied to no lead (area pulls, agent runs, tests) is reported separately and not spread across sources.
-- **Sources** come from a lead's `source:` tag. Listing imports already set one; CSV imports now tag `source:csv_import`, and leads entered by hand or through the API `source:manual`. Leads created before 2026-10-23 without a tag are `unattributed`.
-- **Not yet:** campaign spend that is not a provider charge (mail, ads, list purchases) has no record to count, and leads are grouped in memory, which suits up to a few hundred thousand per period.
+- **Costs** are the completed provider charges recorded against each lead, plus **entered spend**. Provider charges tied to no lead (area pulls, agent runs, tests) are reported separately and not spread across sources.
+- **Entered spend** is money no provider call records: a mail drop, an ad campaign, a bought list, calling or texting done outside Hālo, software. Someone with `control_plane:write` (or an admin) enters it in **Spend outside Hālo** on the funnel page (`POST /analytics/funnel/spend`; `GET` lists a period, `DELETE /analytics/funnel/spend/:id` removes one). Every entry and removal goes to the audit log.
+  - An entry names the day it was paid (not later than tomorrow), a category, the amount, and optionally the lead source it bought, the state it targeted, a vendor and a note.
+  - Its cost counts toward the source row and the state row it names, and toward the total either way. An entry is never split or guessed across rows; what names no source or no state is shown as such.
+  - A source with spend and no leads still gets a row, with no cost per lead: a mail drop that brought nothing in is the row most worth seeing.
+  - Spend is matched to the period by the day it was paid, leads by the day they were created. A mail drop's leads arrive over weeks, so judge a channel over a longer period.
+  - Name the source the way the leads carry it (`source:direct_mail_q4` on the leads, `direct_mail_q4` on the spend). A CSV import (`POST /leads/import/csv`) takes an optional `source`, the campaign's or list's name, and its new leads carry it.
+- **Sources** come from a lead's first `source:` tag. Listing imports tag the feed (`source:mls`, `source:realie`...); CSV imports tag the `source` they were given, or `source:csv_import`; leads entered by hand or through the API `source:manual`. Leads created before 2026-10-23 without a tag are `unattributed`. Until 2026-10-24 a listing import tagged its new leads `source:csv_import` first, so those older leads count as CSV imports.
+- **Not yet:** leads are grouped in memory, which suits up to a few hundred thousand per period.
 
 ## 6. Configuration
 

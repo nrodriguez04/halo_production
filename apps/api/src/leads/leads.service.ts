@@ -177,7 +177,18 @@ export class LeadsService {
     });
   }
 
-  async importCSV(rows: CSVImportRow[], accountId: string, _userId: string) {
+  /**
+   * `source` becomes each new lead's `source:` tag, which the funnel reads
+   * (the first one wins): a campaign's own name, so the spend entered for
+   * it lines up, or the listing feed for a listing import.
+   */
+  async importCSV(
+    rows: CSVImportRow[],
+    accountId: string,
+    _userId: string,
+    opts: { source?: string } = {},
+  ) {
+    const sourceTag = `source:${opts.source || 'csv_import'}`;
     const results = {
       created: 0,
       duplicates: 0,
@@ -286,7 +297,7 @@ export class LeadsService {
         canonicalOwner: r.row.owner,
         ...this.pii.protect({ phone: r.row.phone, email: r.row.email }),
         status: 'new',
-        tags: ['source:csv_import'],
+        tags: [sourceTag],
       });
     }
 

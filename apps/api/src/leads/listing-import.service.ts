@@ -96,7 +96,11 @@ export class ListingImportService {
       notes: describe(source, l),
     }));
 
-    const imported = await this.leads.importCSV(rows, accountId, userId);
+    // Tagged with the feed from the start: the funnel reads a lead's first
+    // `source:` tag, and these used to be counted as CSV imports.
+    const imported = await this.leads.importCSV(rows, accountId, userId, {
+      source,
+    });
 
     // importCSV uses createMany (no ids back); find the leads these rows
     // produced or matched by the same key it deduped on, then attach the
