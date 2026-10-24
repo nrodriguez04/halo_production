@@ -19,6 +19,11 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId } from '../auth/decorators';
 import { assertUpload } from '../documents/file-type';
 
+/** An object key from a wildcard route parameter: one string, or the path segments. */
+export function objectKey(segments: string | string[]): string {
+  return Array.isArray(segments) ? segments.join('/') : segments;
+}
+
 @Controller('storage')
 @UseGuards(AuthGuard)
 export class StorageController {
@@ -78,12 +83,14 @@ export class StorageController {
     return { files };
   }
 
-  @Get('download/:key(*)')
+  // Express 5 names a wildcard (*key) and hands it over as path segments.
+  @Get('download/*key')
   async download(
     @CurrentAccountId() accountId: string,
-    @Param('key') key: string,
+    @Param('key') segments: string | string[],
     @Res() res: Response,
   ) {
+    const key = objectKey(segments);
     if (!key.startsWith(`${accountId}/`)) {
       throw new NotFoundException('File not found');
     }
@@ -104,11 +111,12 @@ export class StorageController {
     }
   }
 
-  @Delete(':key(*)')
+  @Delete('*key')
   async deleteFile(
     @CurrentAccountId() accountId: string,
-    @Param('key') key: string,
+    @Param('key') segments: string | string[],
   ) {
+    const key = objectKey(segments);
     if (!key.startsWith(`${accountId}/`)) {
       throw new NotFoundException('File not found');
     }
