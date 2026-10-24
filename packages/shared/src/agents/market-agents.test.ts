@@ -285,3 +285,25 @@ describe('applyMarketProposal', () => {
     expect(d.sources).toHaveLength(1);
   });
 });
+
+describe('parseMarketExpansionOutput: labels where keys belong', () => {
+  const reply = (over: Record<string, unknown>) =>
+    JSON.stringify({ recommendation: 'propose', rationale: 'SYNTHETIC', ...over });
+
+  it('maps an exact question, requirement or activity label to its key', () => {
+    const out = parseMarketExpansionOutput(
+      reply({
+        answers: [{ question: 'Does the seller have a statutory right to cancel?', answer: 'unknown', note: 'n' }],
+        requirements: [{ kind: 'Foreign entity registration', label: 'SOS', applies_to: ['Signing purchase agreements'] }],
+      }),
+    );
+    expect(out?.answers[0].question).toBe('seller_cancellation_right');
+    expect(out?.requirements[0]).toMatchObject({ kind: 'entity_registration', applies_to: ['seller_contracting'] });
+  });
+
+  it('still refuses anything that is neither a key nor an exact label', () => {
+    expect(
+      parseMarketExpansionOutput(reply({ answers: [{ question: 'Can the seller cancel?', answer: 'unknown', note: 'n' }] })),
+    ).toBeNull();
+  });
+});

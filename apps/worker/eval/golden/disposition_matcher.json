@@ -1063,20 +1063,16 @@
           }
         ]
       },
-      "reply": {
-        "shortlist": [],
-        "blast": null,
-        "rationale": "No candidate buys in Birmingham or Alabama; the Memphis and Texas buyers' stated locations do not include this market."
-      },
       "expect": {
-        "decidedBy": "model",
+        "decidedBy": "rule",
         "recommendation": "hold",
         "shortlist": {
           "max": 0
         },
         "noActions": [
           "queue_buyer_blast"
-        ]
+        ],
+        "hardRule": "no_buyer_in_area"
       }
     },
     {

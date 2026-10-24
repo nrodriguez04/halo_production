@@ -586,7 +586,10 @@
         "brief": {
           "keys": []
         }
-      }
+      },
+      "modes": [
+        "offline"
+      ]
     },
     {
       "id": "clearance-claim-refused",

@@ -736,12 +736,21 @@ function expectationChecks(
         : [];
     if (e.brief.keys) {
       const want = e.brief.keys;
+      // A recorded reply is fixed, so it must explain exactly these. A live
+      // model may go on to explain further ranked candidates after them;
+      // Halo already drops any key that is not a candidate, so only the
+      // order and presence of the expected ones are its to get right.
+      const leads = want.every((k, i) => keys[i] === k);
+      const ok =
+        mode === 'live' && want.length > 0
+          ? leads
+          : leads && want.length === keys.length;
       out.push(
         check(
           'decision',
           'brief explains',
-          want.length === keys.length && want.every((k, i) => keys[i] === k),
-          `expected ${want.join(', ') || 'none'}, got ${keys.join(', ') || 'none'}`,
+          ok,
+          `expected ${want.join(', ') || 'none'}${mode === 'live' && want.length > 0 ? ' first' : ''}, got ${keys.join(', ') || 'none'}`,
         ),
       );
     }
