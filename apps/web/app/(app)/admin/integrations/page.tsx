@@ -8,12 +8,20 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/page-header';
 import { LoadingState } from '@/components/states';
 import { useReducedMotion, staggerDelay } from '@/lib/motion';
-import { RefreshCw, Eye, EyeOff, Check, X, Loader2, ShieldCheck, Plug } from 'lucide-react';
+import { RefreshCw, Eye, EyeOff, Check, X, Loader2, ShieldCheck, Plug, ExternalLink } from 'lucide-react';
 
 interface StoredSecret {
   id: string;
@@ -209,6 +217,24 @@ const INTEGRATIONS: IntegrationDef[] = [
 
 type ConnStatus = 'idle' | 'testing' | 'connected' | 'error';
 
+interface TestResult {
+  connected?: boolean;
+  error?: string;
+  /** DocuSign: the page where the API user grants the one-time consent. */
+  consentUrl?: string;
+}
+
+/** Only ever link to DocuSign's own sign-in hosts. */
+function safeConsentUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && /(^|\.)docusign\.(com|net)$/.test(u.hostname) ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function IntegrationsPage() {
   const queryClient = useQueryClient();
   const reduced = useReducedMotion();
@@ -219,6 +245,9 @@ export default function IntegrationsPage() {
   const [showValues, setShowValues] = useState<Record<string, boolean>>({});
   const [connStatus, setConnStatus] = useState<Record<string, ConnStatus>>({});
   const [connError, setConnError] = useState<Record<string, string>>({});
+  /** The failed test shown in a dialog: its whole message, and a consent link when there is one. */
+  const [failure, setFailure] = useState<{ provider: string; name: string; message: string; consentUrl: string | null } | null>(null);
+  const providerName = (provider: string) => INTEGRATIONS.find((i) => i.provider === provider)?.name ?? provider;
 
   const invalidateSecrets = () =>
     queryClient.invalidateQueries({ queryKey: ['/integration-secrets'] });
@@ -256,9 +285,9 @@ export default function IntegrationsPage() {
     },
   );
 
-  const testMutation = useApiMutation<string, { connected?: boolean; error?: string }>(
+  const testMutation = useApiMutation<string, TestResult>(
     (provider) =>
-      apiJson<{ connected?: boolean; error?: string }>(
+      apiJson<TestResult>(
         `/integration-secrets/${provider}/test`,
         { method: 'POST' },
       ),
@@ -270,16 +299,16 @@ export default function IntegrationsPage() {
       onSuccess: (data, provider) => {
         const ok = !!data.connected;
         setConnStatus((p) => ({ ...p, [provider]: ok ? 'connected' : 'error' }));
-        if (ok) toast.success(`${provider} connected`);
+        if (ok) toast.success(`${providerName(provider)} connected`);
         else if (data.error) {
           setConnError((p) => ({ ...p, [provider]: data.error! }));
-          toast.error(`${provider} connectivity failed`, { description: data.error });
+          setFailure({ provider, name: providerName(provider), message: data.error, consentUrl: safeConsentUrl(data.consentUrl) });
         }
       },
       onError: (err, provider) => {
         setConnStatus((p) => ({ ...p, [provider]: 'error' }));
         setConnError((p) => ({ ...p, [provider]: err?.message || 'Request failed' }));
-        toast.error(`${provider} request failed`, { description: err?.message });
+        setFailure({ provider, name: providerName(provider), message: err?.message || 'Request failed', consentUrl: null });
       },
     },
   );
@@ -493,13 +522,22 @@ export default function IntegrationsPage() {
                 {connError[integration.provider] && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="max-w-[200px] truncate text-caption text-destructive">
+                      <button
+                        type="button"
+                        className="max-w-[200px] truncate text-left text-caption text-destructive underline-offset-2 hover:underline"
+                        onClick={() =>
+                          setFailure({
+                            provider: integration.provider,
+                            name: integration.name,
+                            message: connError[integration.provider],
+                            consentUrl: failure?.provider === integration.provider ? failure.consentUrl : null,
+                          })
+                        }
+                      >
                         {connError[integration.provider]}
-                      </span>
+                      </button>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-sm">
-                      {connError[integration.provider]}
-                    </TooltipContent>
+                    <TooltipContent className="max-w-sm">Show the whole message</TooltipContent>
                   </Tooltip>
                 )}
               </div>
@@ -546,6 +584,39 @@ export default function IntegrationsPage() {
           identification.
         </AlertDescription>
       </Alert>
+
+      <Dialog open={!!failure} onOpenChange={(o) => !o && setFailure(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{failure?.consentUrl ? `${failure?.name} needs your consent` : `${failure?.name} connection failed`}</DialogTitle>
+            <DialogDescription className="break-words">{failure?.message}</DialogDescription>
+          </DialogHeader>
+          {failure?.consentUrl && (
+            <ol className="list-decimal space-y-1 pl-5 text-body text-muted-foreground">
+              <li>Open the consent page and sign in to DocuSign as the API user (the one whose User ID you saved).</li>
+              <li>Click Accept. DocuSign then shows a page saying consent was granted.</li>
+              <li>Come back here and test again.</li>
+            </ol>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setFailure(null)}>
+              Close
+            </Button>
+            {failure?.consentUrl && (
+              <Button variant="outline" onClick={() => failure && testMutation.mutate(failure.provider)}>
+                Test again
+              </Button>
+            )}
+            {failure?.consentUrl && (
+              <Button asChild>
+                <a href={failure.consentUrl} target="_blank" rel="noopener noreferrer">
+                  Grant consent in DocuSign <ExternalLink size={14} className="ml-1" aria-hidden />
+                </a>
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
