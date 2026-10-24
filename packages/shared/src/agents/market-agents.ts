@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import {
+  ACTIVITY_LABEL,
   ANSWERS,
   APPROVAL_REQUIRED_QUESTIONS,
   AUTHORIZATION_KINDS,
+  AUTHORIZATION_LABEL,
   MARKET_ACTIVITIES,
   MARKET_CLASSIFICATIONS,
   MARKET_QUESTIONS,
+  QUESTION_LABEL,
   type Answer,
   type AuthorizationKind,
   type MarketActivity,
@@ -102,6 +105,24 @@ export interface MarketBrief {
 
 export const MARKET_EXPANSION_PROMPT_VERSION = 'market_expansion.v1';
 
+const comparable = (s: string) =>
+  s.trim().toLowerCase().replace(/[?.!]+$/, '').replace(/\s+/g, ' ');
+
+/**
+ * An enum that also takes a value's exact label. The context gives the
+ * model each question as {key, label}, and the live eval showed it writing
+ * the label ("Does the seller have a statutory right to cancel?") where the
+ * key belongs, which rejected the whole reply. Only an exact label (case,
+ * spacing and a closing "?" aside) maps; anything else still fails.
+ */
+function keyOrLabel<K extends string>(keys: readonly [K, ...K[]], labels: Record<K, string>) {
+  const byLabel = new Map(keys.map((k) => [comparable(labels[k]), k] as const));
+  return z.preprocess(
+    (v) => (typeof v === 'string' && !keys.includes(v as K) ? (byLabel.get(comparable(v)) ?? v) : v),
+    z.enum(keys),
+  );
+}
+
 export const MarketExpansionOutputSchema = z.object({
   recommendation: z.enum(['propose', 'not_now']),
   classification: z.enum(MARKET_CLASSIFICATIONS).nullable().default(null),
@@ -109,7 +130,7 @@ export const MarketExpansionOutputSchema = z.object({
   answers: z
     .array(
       z.object({
-        question: z.enum(MARKET_QUESTIONS),
+        question: keyOrLabel(MARKET_QUESTIONS, QUESTION_LABEL),
         answer: z.enum(ANSWERS),
         note: z.string().min(1).max(1500),
         source_ids: z.array(z.string().max(32)).max(10).default([]),
@@ -121,9 +142,12 @@ export const MarketExpansionOutputSchema = z.object({
   requirements: z
     .array(
       z.object({
-        kind: z.enum(AUTHORIZATION_KINDS),
+        kind: keyOrLabel(AUTHORIZATION_KINDS, AUTHORIZATION_LABEL),
         label: z.string().min(1).max(200),
-        applies_to: z.array(z.enum(MARKET_ACTIVITIES)).min(1).max(MARKET_ACTIVITIES.length),
+        applies_to: z
+          .array(keyOrLabel(MARKET_ACTIVITIES, ACTIVITY_LABEL))
+          .min(1)
+          .max(MARKET_ACTIVITIES.length),
         source_ids: z.array(z.string().max(32)).max(10).default([]),
       }),
     )

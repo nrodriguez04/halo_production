@@ -5,6 +5,7 @@
   "disposition_matcher.v1": "sha256:0645f9f0c63bf1591eb90fbf29f8bb6db84ba92680da5acb2dab8dc064892c5e",
   "disposition_matcher.v2": "sha256:f65ea9c8cf20c16c36ed8f33045ba42d46daf950b3f33b98483243e447ef5add",
   "lead_analyst.v2": "sha256:eea3e92e2eb5a30ba616808efc568bf9b24926c1ae2232988cbf37b7b871bb1b",
+  "lead_analyst.v3": "sha256:fa6492261b7f11290ceb4e5a6ab96b3dd279b39bdb17a4ef13769c2480208e2b",
   "market_expansion.v1": "sha256:33d550526e5798ea42ea21d593fe1812139d895cb6390036c0d2e8bb5fe41916",
   "market_intelligence.v1": "sha256:0245391332b54404d35e85439a4f7d2f4f947862f243f6c13c1ba6a77e98d9dd",
   "outreach_drafter.v1": "sha256:a59648ec52dfe7b293aa6eab5d9857115fc1d0dcdc3d66bbd0b1ffd634f94b69"

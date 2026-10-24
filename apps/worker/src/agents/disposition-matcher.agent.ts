@@ -16,7 +16,10 @@ import {
 } from '@halo/shared';
 import { estimateAiCostUsd } from '../ai-model';
 import { chatCompletion } from '../internal-api.client';
-import type { DispositionBuyer, DispositionContext } from './disposition-context';
+import type {
+  DispositionBuyer,
+  DispositionContext,
+} from './disposition-context';
 import { AgentOutputError, type LeadAnalystResult } from './lead-analyst.agent';
 
 const MAX_CONTEXT_CHARS = 14000;
@@ -42,7 +45,10 @@ export interface ScoredBuyer {
   excluded?: string;
 }
 
-const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
+const norm = (v: unknown) =>
+  String(v ?? '')
+    .trim()
+    .toLowerCase();
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.map(norm).filter(Boolean) : [];
 
@@ -72,6 +78,7 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
     const prefs = buyer.preferences ?? {};
 
     const locations = strings(prefs.locations);
+    let outsideLocations = false;
     if (locations.length === 0) {
       score += 10;
       notes.push('no location preference');
@@ -82,6 +89,7 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
       score += 20;
       notes.push('state match');
     } else {
+      outsideLocations = true;
       notes.push('outside stated locations');
     }
 
@@ -115,12 +123,21 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
     score += Math.round(engagement);
     if (buyer.history.replies > 0) {
       score += 10;
-      notes.push(`${buyer.history.replies} past repl${buyer.history.replies === 1 ? 'y' : 'ies'}`);
+      notes.push(
+        `${buyer.history.replies} past repl${buyer.history.replies === 1 ? 'y' : 'ies'}`,
+      );
     } else if (buyer.history.sent > 0) {
       notes.push(`${buyer.history.sent} message(s) sent, no reply`);
     }
 
-    const excluded = buyer.hasEmail ? undefined : 'no email on file';
+    // A buyer who said where they buy is never sent a deal elsewhere: the
+    // live eval had the model blast an Alabama deal to buyers who buy only
+    // in Tennessee and Texas. Buyers with no stated locations stay eligible.
+    const excluded = !buyer.hasEmail
+      ? 'no email on file'
+      : outsideLocations
+        ? "outside the buyer's stated locations"
+        : undefined;
     return { buyer, score: Math.min(100, score), notes, excluded };
   });
 
@@ -262,6 +279,19 @@ export class DispositionMatcherAgent {
     const candidates = scored
       .filter((c) => !c.excluded)
       .slice(0, matcherCandidates());
+    if (candidates.length === 0) {
+      const where = [ctx.property?.city, ctx.property?.state]
+        .filter(Boolean)
+        .join(', ');
+      return {
+        decision: ruleDecision(
+          'no_buyer_in_area',
+          `No contactable buyer's stated locations cover ${where || 'this property'}`,
+          ctx.buyers.length,
+        ),
+        costUsd: 0,
+      };
+    }
     const model = resolveAgentModel(
       AGENT_TIER.disposition_matcher,
       this.opts.models,

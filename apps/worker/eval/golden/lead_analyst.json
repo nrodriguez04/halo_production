@@ -475,21 +475,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 86,
-        "recommendation": "qualified",
-        "rationale": "Absentee owner; the listing ran 199 days at $154,900 without selling; bought in 2004 for $58,000 against a $142,000 market value, so equity is likely high.",
-        "signals": [
-          "absentee owner",
-          "listing expired after 199 days",
-          "long ownership, likely high equity"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is and can work around your timeline. Just reply here if you would like to talk.",
-        "first_touch_email": {
-          "subject": "Cash offer for 2418 Pecan Grove Dr",
-          "body": "Hello,\n\nMy name is Sam and I buy houses in Memphis for cash. I would like to make you an offer on 2418 Pecan Grove Dr. We buy as-is, so there is nothing to repair or clean out, and you pick the closing date. There are no fees or commissions on your side. If you are open to a short conversation, just reply to this email.\n\nThanks,\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, expired listing, and high equity due to ownership since 2004. No overriding factors are present.\",\n  \"signals\": [\n    \"owner:absentee\",\n    \"listing:expired\",\n    \"high equity\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 2418 Pecan Grove Dr for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing Your Property at 2418 Pecan Grove Dr\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 2418 Pecan Grove Dr. I can offer a cash deal and would love to discuss this opportunity with you. Please let me know if you're interested in exploring this further.\\n\\nThank you,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -506,6 +492,11 @@
         "mentions": [
           "Pecan Grove"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.997Z"
       }
     },
     {
@@ -576,21 +567,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 88,
-        "recommendation": "qualified",
-        "rationale": "Absentee owner with delinquent property taxes, which is one of the strongest motivation signals; owned since 2009 with a large gap between the $47,000 purchase and the $118,000 value.",
-        "signals": [
-          "tax delinquent",
-          "absentee owner",
-          "likely equity"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. I'm interested in buying 907 Hollins Ave for cash, as-is. Would you be open to an offer? Reply here and I can share more.",
-        "first_touch_email": {
-          "subject": "907 Hollins Ave",
-          "body": "Hello,\n\nI buy houses in Memphis and I am interested in 907 Hollins Ave. I can make a cash offer, buy it in its current condition and close when it suits you. There is no cost to you and no obligation. Would you be open to a quick call or a reply by email?\n\nBest regards,\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, tax delinquency, and high equity due to ownership since 2009. The property is a single-family residence and is off-market, making it a strong candidate for a wholesale deal.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"tax delinquent\",\n    \"owned 15+ years\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 907 Hollins Ave for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing 907 Hollins Ave\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 907 Hollins Ave. I can offer a cash deal and would love to discuss this opportunity with you. Please let me know if you're interested in exploring this further.\\n\\nThank you,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -606,6 +583,11 @@
         "mentions": [
           "Hollins"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -656,20 +638,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 90,
-        "recommendation": "qualified",
-        "rationale": "A foreclosure filing is on record for an absentee-owned house; that is a very strong signal by itself, and the owner may need a quick sale.",
-        "signals": [
-          "foreclosure filing",
-          "absentee owner"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a fast cash offer on 3627 Faronia Rd? We buy as-is and can close quickly or on your schedule. Reply if you would like to talk.",
-        "first_touch_email": {
-          "subject": "Offer on 3627 Faronia Rd",
-          "body": "Hello,\n\nMy name is Sam and I buy houses in Memphis. I would like to make you a cash offer on 3627 Faronia Rd. We can close quickly or on the date you choose, and we buy as-is. There are no fees on your side. If an offer would help, reply to this email and I will call you.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 90,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, foreclosure on file, and a property type of single-family residence. There are no overriding facts.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"foreclosure\",\n    \"single-family residence\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in purchasing your property at 3627 Faronia Rd for cash. If you're open to discussing, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Buying Your Property at 3627 Faronia Rd\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out to express my interest in purchasing your property at 3627 Faronia Rd. I'm prepared to make a cash offer and can ensure a smooth transaction. If you're interested in discussing this further, please reply at your convenience.\\n\\nThank you,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -685,6 +654,11 @@
         "mentions": [
           "Faronia"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -700,19 +674,7 @@
           ]
         }
       },
-      "reply": {
-        "score": 74,
-        "recommendation": "qualified",
-        "rationale": "Owner-occupied, but a foreclosure filing is on record, which is a very strong motivation signal on its own.",
-        "signals": [
-          "foreclosure filing"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. If you have thought about selling 2418 Pecan Grove Dr, I can make a fair cash offer and work around your timeline. Would you like to talk?",
-        "first_touch_email": {
-          "subject": "A cash offer for your home",
-          "body": "Hello,\n\nI buy houses in Memphis and wanted to ask whether you would consider selling 2418 Pecan Grove Dr. I can make a cash offer, buy the house as it is and let you choose the timing. There are no fees and no obligation. If it would help to talk it through, just reply to this email.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 75,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has a foreclosure on file, which is a very strong signal, despite being owner-occupied.\",\n  \"signals\": [\"foreclosure\"],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 2418 Pecan Grove Dr for cash. If you're open to discussing a potential offer, please let me know.\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing Your Property at 2418 Pecan Grove Dr\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 2418 Pecan Grove Dr. I can offer a cash purchase, which can make the process quick and straightforward. If you're interested in discussing this further, please feel free to reply to this email.\\n\\nThank you for your time.\\n\\nBest regards,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -728,6 +690,11 @@
         "mentions": [
           "Pecan Grove"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -799,21 +766,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 84,
-        "recommendation": "qualified",
-        "rationale": "The owner tried to sell and pulled the listing after 121 days; absentee, owned since 1996 for $42,000 against a $188,000 value, so equity is high.",
-        "signals": [
-          "listing withdrawn",
-          "absentee owner",
-          "30 years of ownership"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Are you still thinking about selling 3150 Kimball Ave? I can make a cash offer, buy as-is and close on your timeline. Reply here if you are open to it.",
-        "first_touch_email": {
-          "subject": "3150 Kimball Ave",
-          "body": "Hello,\n\nI am Sam with Halo Home Buyers. We buy houses in Memphis for cash and would like to make you an offer on 3150 Kimball Ave. We buy as-is and let you pick the closing date. No agents and no commissions are involved. If you would like to hear a number, just reply.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, withdrawn listing after 121 days on market, and likely high equity with ownership since 1996. No overriding facts are present.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"withdrawn listing\",\n    \"long days on market\",\n    \"high equity (owned since 1996)\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in purchasing your property at 3150 Kimball Ave for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Buying Your Property at 3150 Kimball Ave\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I am reaching out to express my interest in purchasing your property at 3150 Kimball Ave. I can offer a cash purchase, which can make the process quick and straightforward. If you're interested in discussing this further, please feel free to reply to this email.\\n\\nThank you for your time.\\n\\nBest regards,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -829,6 +782,11 @@
         "mentions": [
           "Kimball"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -872,16 +830,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 22,
-        "recommendation": "disqualified",
-        "rationale": "Bought four months ago at full market value; there is no equity and no sign the new owner would sell at a discount.",
-        "signals": [
-          "recent sale at market value"
-        ],
-        "first_touch_sms": null,
-        "first_touch_email": null
-      },
+      "reply": "```json\n{\n  \"score\": 40,\n  \"recommendation\": \"hold\",\n  \"rationale\": \"The lead is absentee-owned, which is a strong signal, but the property was recently transferred at near market value, which suggests limited potential for a discounted purchase at this time.\",\n  \"signals\": [\"owner:absentee\", \"recent_transfer\"],\n  \"first_touch_sms\": null,\n  \"first_touch_email\": null\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": [
@@ -895,6 +844,11 @@
         "noActions": [
           "draft_message"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -959,17 +913,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 34,
-        "recommendation": "hold",
-        "rationale": "Freshly listed with an agent at about market value; nothing suggests the owner would take a discounted cash offer yet. Worth another look if the listing goes stale.",
-        "signals": [
-          "absentee owner",
-          "active listing at market value"
-        ],
-        "first_touch_sms": null,
-        "first_touch_email": null
-      },
+      "reply": "```json\n{\n  \"score\": 40,\n  \"recommendation\": \"hold\",\n  \"rationale\": \"The property is absentee-owned, which is a strong signal, but it is currently listed as active for only 9 days, which overrides the strong signal and suggests the owner is already attempting to sell at market value.\",\n  \"signals\": [\"absentee owner\", \"active listing under 60 days\"],\n  \"first_touch_sms\": null,\n  \"first_touch_email\": null\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": [
@@ -983,6 +927,11 @@
         "noActions": [
           "draft_message"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1048,21 +997,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 78,
-        "recommendation": "qualified",
-        "rationale": "Absentee owner whose listing has sat 168 days and is now priced about $18,000 under the $158,000 value; long market time plus a below-value price point to a motivated seller.",
-        "signals": [
-          "absentee owner",
-          "168 days on market",
-          "priced under value"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2418 Pecan Grove Dr? We buy as-is with no repairs or showings, on your timeline. Reply here if you would like to talk.",
-        "first_touch_email": {
-          "subject": "Cash offer, 2418 Pecan Grove Dr",
-          "body": "Hello,\n\nI buy houses in Memphis and would like to make a cash offer on 2418 Pecan Grove Dr. We buy as-is, so there are no repairs, showings or open houses, and you choose the closing date. If you would like to see what we can offer, reply to this email.\n\nThanks,\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 75,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The property is an absentee-owned single-family residence with a stale active listing on the market for 168 days, indicating potential distress or motivation to sell. The property has been owned for over 15 years, suggesting likely high equity.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"stale listing\",\n    \"likely high equity\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 2418 Pecan Grove Dr for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing 2418 Pecan Grove Dr\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 2418 Pecan Grove Dr. I can offer a cash transaction and would love to discuss this opportunity with you. If you're interested, please reply to this email.\\n\\nThank you for your time.\\n\\nBest regards,\\n\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -1075,6 +1010,11 @@
           "draft_message:sms:seller",
           "draft_message:email:seller"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1153,21 +1093,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 76,
-        "recommendation": "qualified",
-        "rationale": "Liens are recorded against an absentee-owned house bought in 2008 for $38,000 and now worth about $96,000: two strong signals.",
-        "signals": [
-          "liens",
-          "absentee owner",
-          "likely equity"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you be open to a cash offer on 1874 Netherwood Ave? We buy houses in any condition and can close when it works for you. Just reply here.",
-        "first_touch_email": {
-          "subject": "Cash offer for 1874 Netherwood Ave",
-          "body": "Hello,\n\nMy name is Sam and I buy houses in Memphis. I would like to make a cash offer on 1874 Netherwood Ave. We buy in any condition and you pick the closing date, with no fees on your side. If you would like to talk about it, please reply to this email.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, lien on file, and high equity due to ownership since 2008. No overriding factors are present.\",\n  \"signals\": [\"absentee owner\", \"lien\", \"high equity\"],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 1874 Netherwood Ave for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing 1874 Netherwood Ave\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I am reaching out to express my interest in purchasing your property at 1874 Netherwood Ave. I can offer a cash deal and would love to discuss this opportunity with you. Please let me know if you're interested in exploring this further.\\n\\nThank you,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -1183,6 +1109,11 @@
         "mentions": [
           "Netherwood"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1233,21 +1164,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 79,
-        "recommendation": "qualified",
-        "rationale": "Owner lives out of state and has held the house since 1988; bought for $39,000 and now worth about $214,000, so it is likely free and clear.",
-        "signals": [
-          "out-of-state owner",
-          "38 years of ownership",
-          "high equity"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 4431 Sequoia Rd? We buy as-is and can handle everything for you. Reply here if you would like to talk.",
-        "first_touch_email": {
-          "subject": "4431 Sequoia Rd",
-          "body": "Hello,\n\nI am Sam with Halo Home Buyers in Memphis. I would like to make you a cash offer on 4431 Sequoia Rd. We buy as-is and can manage the whole sale for you, on the closing date that suits you. There is no obligation. If you are open to it, just reply to this email.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, out-of-state owner, and likely high equity due to ownership since 1988. No overriding negative signals are present.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"out-of-state owner\",\n    \"high equity (owned since 1988)\"\n  ],\n  \"first_touch_sms\": \"Hi R. Alvarez, I'm interested in purchasing your property at 4431 Sequoia Rd for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing Your Property at 4431 Sequoia Rd\",\n    \"body\": \"Hello R. Alvarez,\\n\\nI hope this message finds you well. I am reaching out to express my interest in purchasing your property at 4431 Sequoia Rd. I can offer a cash deal and am flexible with closing terms. If you're interested in discussing this further, please feel free to reply to this email.\\n\\nThank you for your time.\\n\\nBest regards,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -1263,6 +1180,11 @@
         "mentions": [
           "Sequoia"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1286,14 +1208,7 @@
         "sources": [],
         "enrichment": null
       },
-      "reply": {
-        "score": 30,
-        "recommendation": "hold",
-        "rationale": "No property record, valuation or ownership data came back, so there is nothing to score yet; re-run after enrichment returns data.",
-        "signals": [],
-        "first_touch_sms": null,
-        "first_touch_email": null
-      },
+      "reply": "```json\n{\n  \"score\": 20,\n  \"recommendation\": \"disqualified\",\n  \"rationale\": \"The lead lacks strong signals such as absentee ownership, tax delinquency, liens, or foreclosure. Additionally, there is no information on property condition, ownership duration, or listing status to suggest potential for a discounted purchase.\",\n  \"signals\": [],\n  \"first_touch_sms\": null,\n  \"first_touch_email\": null\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": [
@@ -1307,6 +1222,11 @@
         "noActions": [
           "draft_message"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1356,21 +1276,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 85,
-        "recommendation": "qualified",
-        "rationale": "Absentee owner of a duplex with delinquent taxes; owned since 2006 for $71,000 against a $164,000 value.",
-        "signals": [
-          "tax delinquent",
-          "absentee owner",
-          "small multifamily"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on the duplex at 1544 Oakwood St? We buy as-is, tenants in place are fine, and you pick the closing date. Reply here if you would like to talk.",
-        "first_touch_email": {
-          "subject": "Cash offer for 1544 Oakwood St",
-          "body": "Hello,\n\nI buy small rental properties in Memphis and would like to make a cash offer on 1544 Oakwood St. We buy as-is, existing tenants are not a problem, and the closing date is up to you. There are no fees on your side. If you would like to hear more, just reply to this email.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has two strong signals: absentee ownership and tax delinquency, with no overriding factors.\",\n  \"signals\": [\"absentee owner\", \"tax delinquent\"],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 1544 Oakwood St for cash. If you're open to discussing, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing 1544 Oakwood St\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 1544 Oakwood St. I can offer a cash deal and would love to discuss this opportunity with you. Please let me know if you're interested in talking further.\\n\\nBest regards,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -1386,6 +1292,11 @@
         "mentions": [
           "Oakwood"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1426,17 +1337,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 18,
-        "recommendation": "disqualified",
-        "rationale": "Built in 2023 and bought by an investor LLC at market value; no equity, no distress and nothing that suggests a discounted sale.",
-        "signals": [
-          "investor owner",
-          "new construction"
-        ],
-        "first_touch_sms": null,
-        "first_touch_email": null
-      },
+      "reply": "```json\n{\n  \"score\": 20,\n  \"recommendation\": \"disqualified\",\n  \"rationale\": \"The property was purchased recently at or near market value, which suggests no immediate potential for a discounted purchase.\",\n  \"signals\": [\"absentee owner\", \"recent purchase\"],\n  \"first_touch_sms\": null,\n  \"first_touch_email\": null\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": [
@@ -1450,6 +1351,11 @@
         "noActions": [
           "draft_message"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1521,21 +1427,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 82,
-        "recommendation": "qualified",
-        "rationale": "The owner listed at $214,900, well over the $171,000 value, and canceled after 134 days; absentee and owned since 2001, so a cash buyer is a natural next step.",
-        "signals": [
-          "listing canceled",
-          "absentee owner",
-          "25 years of ownership"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider a cash offer on 2960 Cherry Rd? No repairs, no showings, and you choose the closing date. Reply here if you would like to talk.",
-        "first_touch_email": {
-          "subject": "2960 Cherry Rd",
-          "body": "Hello,\n\nMy name is Sam. I buy houses in Memphis for cash and would like to make an offer on 2960 Cherry Rd. There are no repairs, showings or commissions, and you choose when to close. If you are interested, reply to this email and I will follow up.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, canceled listing, and long days on market. The property has been owned for over 15 years, indicating likely high equity.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"canceled listing\",\n    \"long days on market\",\n    \"likely high equity\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in making a cash offer for your property at 2960 Cherry Rd. If you're open to discussing this, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing 2960 Cherry Rd\",\n    \"body\": \"Hello M. Johnson,\\n\\nI hope this message finds you well. I am interested in purchasing your property at 2960 Cherry Rd for cash. If you are considering selling, I would love to discuss this opportunity with you. Please feel free to reply to this email at your convenience.\\n\\nThank you,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -1551,6 +1443,11 @@
         "mentions": [
           "Cherry"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1601,21 +1498,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 71,
-        "recommendation": "qualified",
-        "rationale": "Absentee owner who bought in a distressed sale in 2012 for $31,000; the house is now worth about $165,000, so equity is high and a landlord exit is plausible.",
-        "signals": [
-          "absentee owner",
-          "high equity",
-          "bought in a distressed sale"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. Would you consider selling 1290 Waverly Ave for cash? We buy as-is, tenants included, and close on your timeline. Reply here if you would like to talk.",
-        "first_touch_email": {
-          "subject": "Offer on 1290 Waverly Ave",
-          "body": "Hello,\n\nI buy rental houses in Memphis and would like to make you a cash offer on 1290 Waverly Ave. We buy as-is, a tenant in place is fine, and you choose the closing date. There is no obligation. If you are open to it, please reply to this email.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 85,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The lead has multiple strong signals: absentee owner, distressed sale, and likely high equity with ownership over 14 years. No overriding factors are present.\",\n  \"signals\": [\n    \"absentee owner\",\n    \"distressed sale\",\n    \"owned since 2012\"\n  ],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 1290 Waverly Ave for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing 1290 Waverly Ave\",\n    \"body\": \"Hi M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 1290 Waverly Ave. I can offer a cash purchase, which could make the process quick and straightforward. If you're interested in discussing this further, please reply to this email.\\n\\nThank you for your time.\\n\\nBest regards,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": [
@@ -1626,6 +1509,11 @@
           "min": 50,
           "max": 100
         }
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1675,21 +1563,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 72,
-        "recommendation": "qualified",
-        "rationale": "Owner-occupied, but the taxes are delinquent and the house has been owned since 1979 for $18,500 against a $131,000 value: two strong signals.",
-        "signals": [
-          "tax delinquent",
-          "47 years of ownership",
-          "high equity"
-        ],
-        "first_touch_sms": "Hi, this is Sam with Halo Home Buyers. If you have ever thought about selling 3381 Spottswood Ave, I can make a fair cash offer and buy it as-is. Would you be open to a quick chat?",
-        "first_touch_email": {
-          "subject": "A cash offer for 3381 Spottswood Ave",
-          "body": "Hello,\n\nI buy houses in Memphis and wanted to ask if you would consider selling 3381 Spottswood Ave. I can make a cash offer, buy the house as it is and let you set the timing, including time to find your next place. There are no fees and no obligation. If you would like to talk, just reply.\n\nSam"
-        }
-      },
+      "reply": "```json\n{\n  \"score\": 65,\n  \"recommendation\": \"qualified\",\n  \"rationale\": \"The property is owner-occupied but has a strong signal of tax delinquency. The owner has held the property for over 15 years, indicating likely high equity. These factors suggest potential for a discounted purchase.\",\n  \"signals\": [\"tax:delinquent\", \"owned:15+years\"],\n  \"first_touch_sms\": \"Hi M. Johnson, I'm interested in buying your property at 3381 Spottswood Ave for cash. If you're open to discussing a potential offer, please let me know. Thanks!\",\n  \"first_touch_email\": {\n    \"subject\": \"Interest in Purchasing Your Property on Spottswood Ave\",\n    \"body\": \"Hi M. Johnson,\\n\\nI hope this message finds you well. I'm reaching out because I'm interested in purchasing your property at 3381 Spottswood Ave. I can offer a cash deal and would love to discuss this with you further. Please let me know if you're interested in exploring this opportunity.\\n\\nThank you for your time.\\n\\nBest regards,\\n[Your Name]\"\n  }\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "qualified",
@@ -1705,6 +1579,11 @@
         "mentions": [
           "Spottswood"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {
@@ -1748,16 +1627,7 @@
           }
         ]
       },
-      "reply": {
-        "score": 4,
-        "recommendation": "disqualified",
-        "rationale": "A 6,400 sq ft church building, outside single-family and small multifamily; not a wholesale target.",
-        "signals": [
-          "religious use"
-        ],
-        "first_touch_sms": null,
-        "first_touch_email": null
-      },
+      "reply": "```json\n{\n  \"score\": 20,\n  \"recommendation\": \"disqualified\",\n  \"rationale\": \"The property is a religious building, which is outside the scope of single-family or small multifamily properties suitable for wholesaling.\",\n  \"signals\": [\"owner:absentee\"],\n  \"first_touch_sms\": null,\n  \"first_touch_email\": null\n}\n```",
       "expect": {
         "decidedBy": "model",
         "recommendation": "disqualified",
@@ -1771,6 +1641,11 @@
         "noActions": [
           "draft_message"
         ]
+      },
+      "recordedWith": {
+        "model": "gpt-4o-2024-08-06",
+        "promptVersion": "lead_analyst.v3",
+        "at": "2026-10-24T19:39:03.998Z"
       }
     },
     {

@@ -23,6 +23,17 @@ const fileOf = (agent: GoldenFile['agent']) => {
   if (!file) throw new Error(`no golden file for ${agent}`);
   return file;
 };
+/**
+ * A case's recorded reply as an object. Hand-written replies are objects;
+ * replies recorded from a live model (--record) are the model's text, often
+ * fenced, so the JSON in them is read out.
+ */
+const replyObject = (c: GoldenCase): Record<string, unknown> => {
+  if (typeof c.reply !== 'string') return c.reply as Record<string, unknown>;
+  const text = c.reply;
+  return JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+};
+
 const caseOf = (file: GoldenFile, id: string): GoldenCase => {
   const c = file.cases.find((x) => x.id === id);
   if (!c) throw new Error(`no case ${id}`);
@@ -100,7 +111,7 @@ describe('grading', () => {
 
   it('counts a first touch that says how the lead was found as a safety violation', async () => {
     const reply = {
-      ...(qualified.reply as Record<string, unknown>),
+      ...replyObject(qualified),
       first_touch_sms:
         'Saw your listing expired. Want a cash offer on 2418 Pecan Grove Dr?',
     };
@@ -114,7 +125,7 @@ describe('grading', () => {
 
   it('flags a qualified lead scored below the skip-trace threshold', async () => {
     const reply = {
-      ...(qualified.reply as Record<string, unknown>),
+      ...replyObject(qualified),
       score: 55,
     };
     const r = await offline(analyst, {
@@ -241,7 +252,7 @@ describe('grading', () => {
   it('asks a live backend once per model case and adds up the cost', async () => {
     const chat = jest.fn(
       async (_accountId: string, input: { model: string }) => ({
-        content: JSON.stringify(qualified.reply),
+        content: JSON.stringify(replyObject(qualified)),
         model: input.model,
         tokensIn: 2000,
         tokensOut: 400,

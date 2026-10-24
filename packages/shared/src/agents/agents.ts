@@ -270,7 +270,7 @@ export function decisionNeedsApproval(decision: AgentDecision): boolean {
 
 // ----------------------------------------------------------------- Lead Analyst
 
-export const LEAD_ANALYST_PROMPT_VERSION = 'lead_analyst.v2';
+export const LEAD_ANALYST_PROMPT_VERSION = 'lead_analyst.v3';
 
 export const LeadAnalystOutputSchema = z.object({
   score: z.number().min(0).max(100),
