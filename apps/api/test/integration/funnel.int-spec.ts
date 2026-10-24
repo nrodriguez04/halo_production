@@ -7,8 +7,11 @@
 import { randomUUID } from 'crypto';
 import type { TestingModule } from '@nestjs/testing';
 import { buildModule, describeDb, fixtures } from './harness';
+import type { SpendInput } from '@halo/shared';
 import { PrismaService } from '../../src/prisma.service';
+import { AuditService } from '../../src/audit/audit.service';
 import { FunnelService } from '../../src/analytics/funnel.service';
+import { MarketingSpendService } from '../../src/analytics/marketing-spend.service';
 
 describeDb('conversion funnel (synthetic, real database)', () => {
   let moduleRef: TestingModule;
@@ -147,5 +150,114 @@ describeDb('conversion funnel (synthetic, real database)', () => {
     ]);
     expect(out.byState.map((r) => r.key)).toEqual(['TX', 'AZ']);
     expect(out.stages[0]).toMatchObject({ key: 'leads', rateBase: null });
+    expect(out.spend).toEqual({
+      totalUsd: 0,
+      withoutSourceUsd: 0,
+      withoutStateUsd: 0,
+    });
+  });
+
+  it('counts entered spend as cost, by the source and state it names, and audits it', async () => {
+    const accountId = await fx.tenant();
+    const audit = moduleRef.get(AuditService);
+    const spendService = new MarketingSpendService(prisma, audit);
+    await prisma.lead.create({
+      data: {
+        accountId,
+        tags: ['source:direct_mail_q4'],
+        canonicalState: 'TX',
+      },
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = (over: Partial<SpendInput>): SpendInput => ({
+      spentOn: today,
+      category: 'direct_mail',
+      amountUsd: 100,
+      source: null,
+      state: null,
+      vendor: null,
+      note: 'SYNTHETIC',
+      ...over,
+    });
+    await spendService.add(
+      accountId,
+      'syn-user',
+      entry({ amountUsd: 900, source: 'direct_mail_q4', state: 'TX' }),
+    );
+    await spendService.add(
+      accountId,
+      'syn-user',
+      entry({
+        category: 'lists',
+        amountUsd: 250,
+        source: 'bought_list',
+        state: 'AZ',
+      }),
+    );
+    const software = await spendService.add(
+      accountId,
+      'syn-user',
+      entry({ category: 'software', amountUsd: 50 }),
+    );
+    await expect(
+      spendService.add(accountId, 'syn-user', entry({ spentOn: '2099-01-01' })),
+    ).rejects.toThrow(/day it was paid/);
+
+    const out = await new FunnelService(prisma).funnel(accountId, {});
+    expect(out.total).toMatchObject({
+      costUsd: 1200,
+      spendUsd: 1200,
+      providerCostUsd: 0,
+    });
+    expect(out.spend).toEqual({
+      totalUsd: 1200,
+      withoutSourceUsd: 50,
+      withoutStateUsd: 50,
+    });
+    expect(
+      out.bySource.map((r) => [
+        r.key,
+        r.counts.leads,
+        r.costUsd,
+        r.costPerLead,
+      ]),
+    ).toEqual([
+      ['direct_mail_q4', 1, 900, 900],
+      ['bought_list', 0, 250, null],
+    ]);
+    expect(out.byState.map((r) => [r.key, r.costUsd])).toEqual([
+      ['TX', 900],
+      ['AZ', 250],
+    ]);
+
+    // Another tenant's entry can be neither seen nor removed.
+    const other = await fx.tenant();
+    expect(
+      await spendService.list(other, {
+        from: new Date(0),
+        to: new Date(Date.now() + 86_400_000),
+      }),
+    ).toEqual([]);
+    await expect(
+      spendService.remove(other, 'syn-user', software.id),
+    ).rejects.toThrow(/No such spend/);
+
+    await spendService.remove(accountId, 'syn-user', software.id);
+    const after = await new FunnelService(prisma).funnel(accountId, {});
+    expect(after.total.costUsd).toBe(1150);
+    const trail = await prisma.auditLog.findMany({
+      where: { accountId, action: { startsWith: 'analytics.spend.' } },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(trail.map((t) => t.action)).toEqual([
+      'analytics.spend.add',
+      'analytics.spend.add',
+      'analytics.spend.add',
+      'analytics.spend.remove',
+    ]);
+    expect(trail[3].details).toMatchObject({
+      category: 'software',
+      amountUsd: 50,
+    });
   });
 });

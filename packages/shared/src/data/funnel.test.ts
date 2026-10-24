@@ -1,4 +1,12 @@
-import { funnelBy, funnelRow, leadSource, type FunnelLead } from './funnel';
+import {
+  SpendInputSchema,
+  allocateSpend,
+  funnelBy,
+  funnelRow,
+  leadSource,
+  sourceKey,
+  type FunnelLead,
+} from './funnel';
 
 /** A SYNTHETIC lead that got nowhere, with overrides. */
 function lead(over: Partial<FunnelLead> = {}): FunnelLead {
@@ -87,5 +95,71 @@ describe('conversion funnel', () => {
   it("reads a lead's source from its tags", () => {
     expect(leadSource(['stale_listing', 'source:mls_expired'])).toBe('mls_expired');
     expect(leadSource(['vacant'])).toBe('unattributed');
+  });
+
+  it('adds entered spend to the cost every unit figure divides', () => {
+    const row = funnelRow(
+      'direct_mail',
+      [lead({ contract: true, closed: true, fee: 10_000 }), lead()],
+      999,
+    );
+    expect(row).toMatchObject({
+      providerCostUsd: 1,
+      spendUsd: 999,
+      costUsd: 1000,
+      costPerLead: 500,
+      costPerContract: 1000,
+      returnOnCost: 10,
+    });
+  });
+
+  it('gives spend that produced no leads a row of its own', () => {
+    const spend = allocateSpend([
+      { source: 'direct_mail', state: 'TX', amountUsd: 1200 },
+      { source: 'county_csv', state: null, amountUsd: 300 },
+      { source: null, state: 'AZ', amountUsd: 50.25 },
+    ]);
+    expect(spend.total).toBe(1550.25);
+    expect(spend.withoutSource).toBe(50.25);
+    expect(spend.withoutState).toBe(300);
+    expect(spend.byState.get('TX')).toBe(1200);
+    const rows = funnelBy([lead({ source: 'county_csv' })], (l) => l.source, spend.bySource);
+    expect(rows.map((r) => [r.key, r.counts.leads, r.costUsd])).toEqual([
+      ['county_csv', 1, 300.5],
+      ['direct_mail', 0, 1200],
+    ]);
+    expect(rows[1].costPerLead).toBeNull();
+    expect(rows[1].returnOnCost).toBe(0);
+  });
+
+  it('checks entered spend and spells its source the way lead tags do', () => {
+    expect(
+      SpendInputSchema.parse({
+        spentOn: '2026-10-20',
+        category: 'direct_mail',
+        amountUsd: 1234.567,
+        source: ' Direct Mail Q4 ',
+        state: 'tx',
+        vendor: '',
+      }),
+    ).toEqual({
+      spentOn: '2026-10-20',
+      category: 'direct_mail',
+      amountUsd: 1234.57,
+      source: 'direct_mail_q4',
+      state: 'TX',
+      vendor: null,
+      note: null,
+    });
+    expect(sourceKey('MLS / expired')).toBe('mls_expired');
+    const bad = (over: Record<string, unknown>) =>
+      SpendInputSchema.safeParse({ spentOn: '2026-10-20', category: 'ads', amountUsd: 10, ...over }).success;
+    expect(bad({ amountUsd: 0 })).toBe(false);
+    expect(bad({ amountUsd: -5 })).toBe(false);
+    expect(bad({ category: 'bribes' })).toBe(false);
+    expect(bad({ state: 'Texas' })).toBe(false);
+    expect(bad({ spentOn: '10/20/2026' })).toBe(false);
+    expect(bad({ accountId: 'someone-else' })).toBe(false);
+    expect(bad({ state: '' })).toBe(true);
   });
 });

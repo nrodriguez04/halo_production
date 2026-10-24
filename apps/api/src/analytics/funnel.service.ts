@@ -4,6 +4,7 @@ import {
   FUNNEL_STAGES,
   FUNNEL_STAGE_DEFINITION,
   FUNNEL_STAGE_LABEL,
+  allocateSpend,
   funnelBy,
   funnelRow,
   leadSource,
@@ -25,8 +26,8 @@ function chunks<T>(list: T[]): T[][] {
 /**
  * Conversion economics (docs/data-pipeline.md s5.1): the leads created in
  * a period, how far each got, what they cost and what they earned, by
- * source and by state. Built from records Hālo already keeps; nothing is
- * estimated.
+ * source and by state. Built from records Hālo already keeps, and the
+ * spend people entered for the same period; nothing is estimated.
  */
 @Injectable()
 export class FunnelService {
@@ -166,6 +167,15 @@ export class FunnelService {
       _sum: { actualCostUsd: true, estimatedCostUsd: true },
     });
 
+    // Spent in the period, not on the period's leads: a mail drop's leads
+    // arrive over weeks, so a longer period lines the two up better.
+    const spend = allocateSpend(
+      await this.prisma.marketingSpend.findMany({
+        where: { accountId, spentOn: { gte: from, lt: to } },
+        select: { source: true, state: true, amountUsd: true },
+      }),
+    );
+
     const records: FunnelLead[] = leads.map((l) => {
       const deals = dealsByLead.get(l.id) ?? [];
       const reachable =
@@ -196,9 +206,15 @@ export class FunnelService {
         definition: FUNNEL_STAGE_DEFINITION[s],
         rateBase: s === 'leads' ? null : FUNNEL_RATE_BASE[s],
       })),
-      total: funnelRow('all', records),
-      bySource: funnelBy(records, (l) => l.source),
-      byState: funnelBy(records, (l) => l.state ?? 'unknown'),
+      total: funnelRow('all', records, spend.total),
+      bySource: funnelBy(records, (l) => l.source, spend.bySource),
+      byState: funnelBy(records, (l) => l.state ?? 'unknown', spend.byState),
+      /** Entered spend in the period; the part that names no source or state is only in the total. */
+      spend: {
+        totalUsd: spend.total,
+        withoutSourceUsd: spend.withoutSource,
+        withoutStateUsd: spend.withoutState,
+      },
       /** Provider spend in the period that no lead carries (area pulls, agents, tests). */
       unattributedCostUsd:
         Math.round(

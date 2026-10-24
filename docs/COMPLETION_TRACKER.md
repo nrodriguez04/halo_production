@@ -47,7 +47,7 @@ Gaps the audit found and where they stand:
 | 2 | A documented path to activation per state | done (research activation steps, ladder checks, next step) | done | — |
 | 3 | Market intelligence engine (metro, county and ZIP ranking; metros from the Census 2023 CBSA delineation) | done | with imported or pulled sales (ATTOM area pull live-verified 2026-10-23) | property data for coverage |
 | 3 | Recommend markets to activate next | done | done | — |
-| 3 | Conversion funnel: leads, reachable owners, contacts, conversations, offers, contracts, assignments, closings, realized fees and provider cost, by source and state (decided 2026-10-23) | done (unit and real-Postgres tests; docs/data-pipeline.md s5.1) | with leads in the database | spend that is not a provider charge has no record yet |
+| 3 | Conversion funnel: leads, reachable owners, contacts, conversations, offers, contracts, assignments, closings, realized fees and cost (provider charges plus entered spend: mail, ads, lists), by source and state (decided 2026-10-23; spend 2026-10-24) | done (unit and real-Postgres tests; docs/data-pipeline.md s5.1) | with leads in the database | — |
 | 4 | Lifecycle: discover → enrich → underwrite | done | with a provider key | data provider keys |
 | 4 | Lifecycle: negotiate → contract → verify → market → offers → assign → close → fee | done | in approved markets only | counsel, DocuSign, title company |
 | 4 | Texas end-to-end lifecycle test | done (synthetic, real Postgres) | not until TX is approved or accepted | the TX policy and templates, approved by counsel or accepted by the owner |

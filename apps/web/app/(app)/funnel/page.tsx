@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
+import { SpendCard } from '@/components/funnel/spend-card';
 import { errorText, money } from '@/lib/disposition';
 
 type Stage = 'leads' | 'reachable' | 'contacted' | 'conversations' | 'offers' | 'contracts' | 'assignments' | 'closed';
@@ -19,6 +20,8 @@ interface Row {
   leadToClose: number | null;
   realizedFees: number;
   costUsd: number;
+  providerCostUsd: number;
+  spendUsd: number;
   costPerLead: number | null;
   costPerContract: number | null;
   costPerClose: number | null;
@@ -34,6 +37,7 @@ interface Funnel {
   bySource: Row[];
   byState: Row[];
   unattributedCostUsd: number;
+  spend: { totalUsd: number; withoutSourceUsd: number; withoutStateUsd: number };
 }
 
 const PERIODS = [30, 90, 180, 365] as const;
@@ -55,6 +59,10 @@ function Kpi({ label, value, detail }: { label: string; value: string; detail?: 
       {detail && <p className="text-caption text-muted-foreground">{detail}</p>}
     </div>
   );
+}
+
+function costTitle(r: Row): string {
+  return `Provider charges ${usd(r.providerCostUsd)}, entered spend ${usd(r.spendUsd)}`;
 }
 
 function Breakdown({ title, description, rows }: { title: string; description: string; rows: Row[] }) {
@@ -95,7 +103,9 @@ function Breakdown({ title, description, rows }: { title: string; description: s
                 ))}
                 <TableCell className="text-right font-mono text-caption">{pct(r.leadToClose)}</TableCell>
                 <TableCell className="text-right font-mono text-caption">{money(r.realizedFees)}</TableCell>
-                <TableCell className="text-right font-mono text-caption">{usd(r.costUsd)}</TableCell>
+                <TableCell className="text-right font-mono text-caption" title={costTitle(r)}>
+                  {usd(r.costUsd)}
+                </TableCell>
                 <TableCell className="text-right font-mono text-caption">{usd(r.costPerContract)}</TableCell>
                 <TableCell className="text-right font-mono text-caption">{r.returnOnCost == null ? '—' : `${r.returnOnCost.toLocaleString('en-US')}×`}</TableCell>
               </TableRow>
@@ -136,7 +146,7 @@ export default function FunnelPage() {
         <LoadingState />
       ) : funnel.isError ? (
         <ErrorState title="Could not load" description={errorText(funnel.error)} onRetry={() => funnel.refetch()} />
-      ) : funnel.data.total.counts.leads === 0 ? (
+      ) : funnel.data.total.counts.leads === 0 && funnel.data.spend.totalUsd === 0 ? (
         <EmptyState icon={Filter} title="No leads in this period" description="Import or source leads, and the funnel fills in as they move." />
       ) : (
         <>
@@ -145,11 +155,15 @@ export default function FunnelPage() {
             <Kpi label="Contracts" value={funnel.data.total.counts.contracts.toLocaleString('en-US')} detail={`${pct(funnel.data.total.rates.contracts)} of offers`} />
             <Kpi label="Closed" value={funnel.data.total.counts.closed.toLocaleString('en-US')} detail={`${pct(funnel.data.total.leadToClose)} of leads`} />
             <Kpi label="Realized fees" value={money(funnel.data.total.realizedFees)} detail={`${usd(funnel.data.total.feesPerLead)} per lead`} />
-            <Kpi label="Provider cost" value={usd(funnel.data.total.costUsd)} detail={`${usd(funnel.data.total.costPerLead)} per lead`} />
+            <Kpi
+              label="Cost"
+              value={usd(funnel.data.total.costUsd)}
+              detail={`${usd(funnel.data.total.costPerLead)} per lead · ${usd(funnel.data.total.providerCostUsd)} providers, ${usd(funnel.data.total.spendUsd)} entered`}
+            />
             <Kpi
               label="Return on cost"
               value={funnel.data.total.returnOnCost == null ? '—' : `${funnel.data.total.returnOnCost.toLocaleString('en-US')}×`}
-              detail={`plus ${usd(funnel.data.unattributedCostUsd)} not tied to a lead`}
+              detail={`plus ${usd(funnel.data.unattributedCostUsd)} of provider charges not tied to a lead`}
             />
           </div>
 
@@ -183,12 +197,17 @@ export default function FunnelPage() {
 
           <Breakdown
             title="By source"
-            description="Where the leads came from: a source tag on each lead (CSV imports, listing imports, leads entered by hand). Older leads without one are unattributed."
+            description={`Where the leads came from: a source tag on each lead (CSV imports, listing imports, leads entered by hand). Older leads without one are unattributed. Cost includes the spend entered for each source${funnel.data.spend.withoutSourceUsd ? `; ${usd(funnel.data.spend.withoutSourceUsd)} names no source and is only in the total` : ''}.`}
             rows={funnel.data.bySource}
           />
-          <Breakdown title="By state" description="Where the property is." rows={funnel.data.byState} />
+          <Breakdown
+            title="By state"
+            description={`Where the property is.${funnel.data.spend.withoutStateUsd ? ` ${usd(funnel.data.spend.withoutStateUsd)} of entered spend names no state and is only in the total.` : ''}`}
+            rows={funnel.data.byState}
+          />
         </>
       )}
+      <SpendCard from={from} to={now.toISOString()} sources={(funnel.data?.bySource ?? []).map((r) => r.key).filter((k) => k !== 'unattributed')} />
     </div>
   );
 }

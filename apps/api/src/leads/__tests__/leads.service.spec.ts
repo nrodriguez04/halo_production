@@ -244,6 +244,26 @@ describe('LeadsService', () => {
       const out = await service.importCSV(rows, 'tenant-1', 'user-1');
       expect(out.created).toBe(3);
       expect(prisma.lead.create).not.toHaveBeenCalled();
+      expect(prisma.lead.createMany.mock.calls[0][0].data[0].tags).toEqual([
+        'source:csv_import',
+      ]);
+    });
+
+    it("tags the new leads with the campaign's source, so its spend lines up in the funnel", async () => {
+      prisma.lead.findMany.mockResolvedValueOnce([]);
+      prisma.lead.createMany = jest.fn().mockResolvedValue({ count: 3 });
+      await service.importCSV(rows, 'tenant-1', 'user-1', {
+        source: 'direct_mail_q4',
+      });
+      expect(
+        prisma.lead.createMany.mock.calls[0][0].data.map(
+          (d: { tags: string[] }) => d.tags,
+        ),
+      ).toEqual([
+        ['source:direct_mail_q4'],
+        ['source:direct_mail_q4'],
+        ['source:direct_mail_q4'],
+      ]);
     });
 
     it('falls back to per-row inserts so one bad row cannot abort the file', async () => {
