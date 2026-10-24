@@ -65,6 +65,17 @@ import { AuthModule } from './auth/auth.module';
             : undefined,
         level: process.env.NODE_ENV !== 'production' ? 'debug' : 'info',
         autoLogging: false,
+        // A line logged while handling a request carries that request. Keep
+        // only what identifies it: the headers hold session tokens and
+        // cookies, and query strings can hold secrets (the inbound-email
+        // token), so neither may reach the logs.
+        serializers: {
+          req: (req: { id?: unknown; method?: string; url?: string }) => ({
+            id: req.id,
+            method: req.method,
+            path: String(req.url ?? '').split('?')[0],
+          }),
+        },
       },
     }),
     AuditModule,
