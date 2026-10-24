@@ -144,9 +144,9 @@ export class IntegrationSecretsService {
     provider: string,
     accountId?: string,
     userId?: string,
-  ): Promise<{ connected: boolean; error?: string }> {
+  ): Promise<{ connected: boolean; error?: string; consentUrl?: string }> {
     const startedAt = Date.now();
-    let result: { connected: boolean; error?: string };
+    let result: { connected: boolean; error?: string; consentUrl?: string };
     try {
       switch (provider) {
         case 'twilio':
@@ -299,6 +299,8 @@ export class IntegrationSecretsService {
   private async testDocuSign(): Promise<{
     connected: boolean;
     error?: string;
+    /** Where the API user grants the one-time consent, when that is what is missing. */
+    consentUrl?: string;
     details?: Record<string, unknown>;
   }> {
     const [integrationKey, userId, accountId, privateKey, env, baseUrl] =
@@ -342,7 +344,8 @@ export class IntegrationSecretsService {
       if (err instanceof DocuSignAuthError && err.consentUrl) {
         return {
           connected: false,
-          error: `${err.message}. Open this URL as the API user, accept, then test again: ${err.consentUrl}`,
+          error: `${err.message}. Open the consent page as the API user, accept, then test again.`,
+          consentUrl: err.consentUrl,
         };
       }
       return { connected: false, error: (err as Error).message };
