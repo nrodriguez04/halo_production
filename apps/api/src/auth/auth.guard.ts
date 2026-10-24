@@ -9,7 +9,7 @@ import {
 import { Request } from 'express';
 import { descope } from './descope.client';
 import { devBypassUser, isDevAuthBypassEnabled } from './dev-bypass';
-import { sessionTokenFrom } from './session-token';
+import { sessionTokensFrom } from './session-token';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -28,16 +28,32 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    // A bearer header, or Descope's session cookie when Descope manages
-    // tokens in cookies (production); see session-token.ts.
-    const found = sessionTokenFrom(request);
-    if ('reason' in found) {
+    // A bearer header, then Descope's session cookie when Descope manages
+    // tokens in cookies (production); see session-token.ts. The first one
+    // Descope accepts wins, so a stale header cannot hide a current cookie.
+    const found = sessionTokensFrom(request);
+    if (!found.tokens.length) {
       throw new UnauthorizedException(found.reason);
     }
-    const token = found.token;
 
     try {
-      const session = await (descope as any).validateSession(token);
+      let session: any = null;
+      const refused: string[] = [];
+      for (const candidate of found.tokens) {
+        try {
+          session = await (descope as any).validateSession(candidate.token);
+          break;
+        } catch (err) {
+          refused.push(
+            `${candidate.via}: ${String((err as Error)?.message ?? err).slice(0, 120)}`,
+          );
+        }
+      }
+      if (!session) {
+        // Why, never the token itself: expired, bad signature, wrong project.
+        this.logger.warn(`Session refused (${refused.join('; ')})`);
+        throw new UnauthorizedException('Invalid session token');
+      }
       const claims = this.getClaims(session);
 
       const userId =

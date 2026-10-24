@@ -8,6 +8,8 @@
 // load. Caching the import promise turns it into a one-shot bootstrap.
 type DescopeClientModule = {
   getSessionToken?: () => string | undefined | Promise<string | undefined>;
+  /** Renews the session with the refresh token; the SDK then stores the new session token. */
+  refresh?: () => unknown;
 };
 
 let descopeModulePromise: Promise<DescopeClientModule> | null = null;
@@ -26,12 +28,51 @@ function getDescopeModule() {
   return descopeModulePromise;
 }
 
-async function getJwt(): Promise<string | undefined> {
+/** Seconds until a JWT's `exp`, or null when it cannot be read. */
+export function secondsLeft(jwt: string, now = Date.now()): number | null {
+  try {
+    const part = jwt.split('.')[1];
+    if (!part) return null;
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '='));
+    const exp = (JSON.parse(json) as { exp?: unknown }).exp;
+    return typeof exp === 'number' ? exp - now / 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+// Descope session tokens last minutes and the SDK renews them on a timer,
+// which a browser throttles in a background tab: the first request after
+// returning to the tab carried an expired token, the api refused it
+// ("Invalid session token") and the page was sent to sign-in though the
+// person was still signed in. A token that is about to expire is renewed
+// before the call instead, once for every call waiting on it.
+const RENEW_WITHIN_SECONDS = 30;
+let renewing: Promise<void> | null = null;
+
+async function renewSession(mod: DescopeClientModule): Promise<void> {
+  if (!mod.refresh) return;
+  renewing ??= Promise.resolve()
+    .then(() => mod.refresh!())
+    .then(() => undefined, () => undefined)
+    .finally(() => {
+      renewing = null;
+    });
+  await renewing;
+}
+
+async function getJwt(opts: { renew?: boolean } = {}): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
   try {
     const mod = await getDescopeModule();
     if (!mod?.getSessionToken) return undefined;
-    return await Promise.resolve(mod.getSessionToken());
+    let token = await Promise.resolve(mod.getSessionToken());
+    const left = token ? secondsLeft(token) : null;
+    if (opts.renew || (left !== null && left < RENEW_WITHIN_SECONDS)) {
+      await renewSession(mod);
+      token = await Promise.resolve(mod.getSessionToken());
+    }
+    return token;
   } catch {
     return undefined;
   }
@@ -99,19 +140,23 @@ export function takeSignInReason(): string | null {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
-  const jwt = await getJwt();
+  const send = (jwt: string | undefined) =>
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+      // When Descope manages tokens in cookies (production), the session
+      // cookie is the credential and the page may never see the token.
+      credentials: 'include',
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init.headers || {}),
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+      },
+    });
 
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
-    // When Descope manages tokens in cookies (production), the session
-    // cookie is the credential and the page may never see the token.
-    credentials: 'include',
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers || {}),
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-    },
-  });
+  let res = await send(await getJwt());
+  // A refused session is renewed and the call tried once more before the
+  // person is sent to sign-in: the token may simply have expired.
+  if (res.status === 401) res = await send(await getJwt({ renew: true }));
 
   if (res.status === 401 || (res.status === 403 && (await refusedForTenant(res)))) await toSignIn(res);
 
@@ -143,13 +188,15 @@ export async function apiJson<T = unknown>(
  * the multipart boundary is right.
  */
 export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
-  const jwt = await getJwt();
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
-    method: 'POST',
-    body: form,
-    credentials: 'include',
-    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
-  });
+  const send = (jwt: string | undefined) =>
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+      method: 'POST',
+      body: form,
+      credentials: 'include',
+      headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
+    });
+  let res = await send(await getJwt());
+  if (res.status === 401) res = await send(await getJwt({ renew: true }));
   if (res.status === 401 || (res.status === 403 && (await refusedForTenant(res)))) await toSignIn(res);
   if (!res.ok) {
     let body: unknown;
