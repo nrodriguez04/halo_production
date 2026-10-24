@@ -124,9 +124,14 @@ describeDb('conversion funnel (synthetic, real database)', () => {
       });
     await spend(closed.id, 0.2);
     await spend(talked.id, 0.1);
-    await spend(null, 1.0);
+    const unlinked = await spend(null, 1.0);
 
-    const out = await new FunnelService(prisma).funnel(accountId, {});
+    // Use fixture timestamps rather than the API's default `now` cutoff.
+    // Postgres creates these timestamps and its clock may differ slightly
+    // from the CI runner's clock, excluding the last inserted cost event.
+    const from = new Date(silent.createdAt.getTime() - 60_000);
+    const to = new Date(unlinked.createdAt.getTime() + 60_000);
+    const out = await new FunnelService(prisma).funnel(accountId, { from, to });
     expect(out.total.counts).toEqual({
       leads: 4,
       reachable: 2,
