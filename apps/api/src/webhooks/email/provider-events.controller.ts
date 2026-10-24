@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Headers,
   HttpCode,
+  Logger,
   Post,
   Req,
   ServiceUnavailableException,
@@ -28,6 +29,10 @@ import {
 @SkipThrottle()
 @Controller('webhooks/email')
 export class ProviderEventsController {
+  // One line per delivery, counts only: whether the provider's webhook is
+  // reaching Hålo and being accepted is otherwise invisible.
+  private readonly logger = new Logger(ProviderEventsController.name);
+
   constructor(
     private events: ProviderEventsService,
     private secrets: IntegrationSecretsService,
@@ -56,9 +61,16 @@ export class ProviderEventsController {
       !timestamp ||
       !verifySendGridSignature(key, signature, timestamp, raw)
     ) {
+      this.logger.warn(
+        `SendGrid events refused: ${signature ? 'signature did not verify' : 'unsigned'}`,
+      );
       throw new ForbiddenException('Invalid signature');
     }
-    return this.events.record(sendgridEvents(body));
+    const out = await this.events.record(sendgridEvents(body));
+    this.logger.log(
+      `SendGrid events accepted: ${out.received} received, ${out.stored} stored, ${out.unmatched} unmatched`,
+    );
+    return out;
   }
 
   @Post('resend-events')
@@ -86,9 +98,16 @@ export class ProviderEventsController {
       !signature ||
       !verifySvixSignature(secret, id, timestamp, raw, signature)
     ) {
+      this.logger.warn(
+        `Resend events refused: ${signature ? 'signature did not verify' : 'unsigned'}`,
+      );
       throw new ForbiddenException('Invalid signature');
     }
     const event = resendEvent(body, id);
-    return this.events.record(event ? [event] : []);
+    const out = await this.events.record(event ? [event] : []);
+    this.logger.log(
+      `Resend events accepted: ${out.received} received, ${out.stored} stored, ${out.unmatched} unmatched`,
+    );
+    return out;
   }
 }
