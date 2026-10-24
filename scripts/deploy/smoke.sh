@@ -26,12 +26,19 @@ if "${COMPOSE[@]}" exec -T api wget -q -O- http://localhost:3001/api/health/live
 else
   fail "api liveness (container)"
 fi
-ready="$("${COMPOSE[@]}" exec -T api wget -q -O- http://localhost:3001/api/health/ready 2>/dev/null || true)"
-# /health/ready returns one entry per dependency ({database:{status},redis:{status},...}).
-if [ -n "$ready" ] && ! printf '%s' "$ready" | grep -q '"status":"error"' && printf '%s' "$ready" | grep -q '"status":"ok"'; then
-  pass "api readiness (every dependency check ok)"
+# /health/live reports the database and Redis; /health/ready needs a signed-in
+# session (it shows Control Plane settings and spend), so here it must refuse.
+live="$("${COMPOSE[@]}" exec -T api wget -q -O- http://localhost:3001/api/health/live 2>/dev/null || true)"
+if printf '%s' "$live" | grep -q '"database":{"status":"ok"}' && printf '%s' "$live" | grep -q '"redis":{"status":"ok"}'; then
+  pass "api dependencies (database and redis ok)"
 else
-  fail "api readiness: ${ready:-no response}"
+  fail "api dependencies: ${live:-no response}"
+fi
+ready_code="$("${COMPOSE[@]}" exec -T api sh -c 'wget -q -S -O /dev/null http://localhost:3001/api/health/ready 2>&1 | grep -m1 HTTP/ | awk "{print \$2}"' 2>/dev/null || true)"
+if [ "$ready_code" = "401" ]; then
+  pass "api readiness requires a session (401)"
+else
+  fail "api readiness answered ${ready_code:-nothing} without a session (expected 401)"
 fi
 if "${COMPOSE[@]}" exec -T worker wget -q -O- http://localhost:3003/ >/dev/null 2>&1; then
   pass "worker health port"
