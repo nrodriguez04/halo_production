@@ -18,16 +18,17 @@ ENV_FILE="${ENV_FILE:-.env}"
 STATE_FILE="${HEALTHWATCH_STATE:-/var/tmp/halo-healthwatch.state}"
 
 problems=()
-if ! "${COMPOSE[@]}" exec -T api wget -q -O- http://localhost:3001/api/health/live >/dev/null 2>&1; then
+# /health/live reports the database and Redis. /health/ready needs a signed-in
+# session, so an anonymous call to it would always look like a failure.
+live="$("${COMPOSE[@]}" exec -T api wget -q -O- http://localhost:3001/api/health/live 2>/dev/null || true)"
+if [ -z "$live" ]; then
   problems+=("api is not answering")
-else
-  ready="$("${COMPOSE[@]}" exec -T api wget -q -O- http://localhost:3001/api/health/ready 2>/dev/null || true)"
-  if [ -z "$ready" ] || printf '%s' "$ready" | grep -q '"status":"error"'; then
-    problems+=("api readiness failing: $(printf '%s' "$ready" | head -c 300)")
-  fi
+elif ! printf '%s' "$live" | grep -q '"database":{"status":"ok"}' || ! printf '%s' "$live" | grep -q '"redis":{"status":"ok"}'; then
+  problems+=("api dependencies failing: $(printf '%s' "$live" | head -c 300)")
 fi
 "${COMPOSE[@]}" exec -T worker wget -q -O- http://localhost:3003/ >/dev/null 2>&1 || problems+=("worker is not answering")
-"${COMPOSE[@]}" exec -T web wget -q -O- http://localhost:3000/ >/dev/null 2>&1 || problems+=("web is not answering")
+# 127.0.0.1, not localhost: in the Alpine image localhost resolves to ::1 first.
+"${COMPOSE[@]}" exec -T web wget -q -O- http://127.0.0.1:3000/ >/dev/null 2>&1 || problems+=("web is not answering")
 
 if [ "${#problems[@]}" -eq 0 ]; then current="ok"; else current="down"; fi
 previous="$(cat "$STATE_FILE" 2>/dev/null || echo ok)"
