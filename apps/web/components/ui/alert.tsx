@@ -9,7 +9,7 @@ const alertVariants = cva(
   cn(
     'relative w-full rounded-md border px-4 py-3 text-body',
     '[&>svg]:absolute [&>svg]:left-4 [&>svg]:top-3.5 [&>svg]:h-4 [&>svg]:w-4 [&>svg+div]:translate-y-[-3px]',
-    '[&:has(svg)]:pl-11',
+    'has-[svg]:pl-11',
   ),
   {
     variants: {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, RequestMethod } from '@nestjs/common';
 import { PrismaModule } from './prisma.module';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD } from '@nestjs/core';
@@ -77,6 +77,9 @@ import { AuthModule } from './auth/auth.module';
           }),
         },
       },
+      // Every route, in the named-wildcard syntax Express 5 requires; the
+      // module's default ('*') draws a legacy-route warning on each boot.
+      forRoutes: [{ path: '{*path}', method: RequestMethod.ALL }],
     }),
     AuditModule,
     RedisModule,

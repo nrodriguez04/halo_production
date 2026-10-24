@@ -102,6 +102,13 @@ async function bootstrap() {
       verify: keepRawBody,
     }),
   );
+  // Express 4 gave a request with no body `{}`; Express 5 leaves it
+  // undefined. Handlers that parse an all-optional body (a POST with no
+  // payload) relied on the old value.
+  app.use((req: any, _res: unknown, next: () => void) => {
+    if (req.body === undefined) req.body = {};
+    next();
+  });
 
   app.use((req: any, _res: any, next: any) => {
     if (req.body && typeof req.body === 'object') {

@@ -42,7 +42,7 @@ export function PageHeader({ title, description, actions, eyebrow, className }: 
           <div className="text-body text-muted-foreground max-w-2xl">{description}</div>
         )}
       </div>
-      {actions && <div className="flex flex-shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

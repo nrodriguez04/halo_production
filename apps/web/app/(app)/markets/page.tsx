@@ -170,7 +170,7 @@ export default function MarketsPage() {
                   key={s}
                   type="button"
                   onClick={() => setStatus(status === s ? '' : s)}
-                  className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Badge variant={status === s ? 'default' : STATUS_VARIANT[s]}>
                     {STATUS_LABEL[s]}: {matrix.data.kpis.byStatus[s]}

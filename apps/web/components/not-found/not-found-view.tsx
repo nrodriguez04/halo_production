@@ -35,7 +35,7 @@ export function NotFoundView() {
           <Link
             href={isAuthenticated ? '/dashboard' : '/'}
             aria-label="Hålo home"
-            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="rounded-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Logo height={28} priority />
           </Link>
@@ -43,7 +43,7 @@ export function NotFoundView() {
 
         <section className="text-center">
           <p
-            className="bg-gradient-to-b from-primary to-primary/30 bg-clip-text font-mono text-[7rem] font-bold leading-none tracking-tighter text-transparent sm:text-[9rem]"
+            className="bg-linear-to-b from-primary to-primary/30 bg-clip-text font-mono text-[7rem] font-bold leading-none tracking-tighter text-transparent sm:text-[9rem]"
             aria-hidden
           >
             404
@@ -65,7 +65,7 @@ export function NotFoundView() {
                   <li key={r.path} className="w-full sm:w-56">
                     <Link
                       href={r.path}
-                      className="group flex h-full items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="group flex h-full items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-secondary/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-body font-medium text-foreground">{r.label}</span>

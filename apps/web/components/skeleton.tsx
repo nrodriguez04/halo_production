@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 // Falls back to a static muted block when prefers-reduced-motion is on
 // because globals.css zeroes the shimmer animation duration.
 const SHIMMER_BG =
-  'bg-gradient-to-r from-muted/50 via-muted/80 to-muted/50 bg-[length:200%_100%]';
+  'bg-linear-to-r from-muted/50 via-muted/80 to-muted/50 bg-size-[200%_100%]';
 
 export function Skeleton({ className }: { className?: string }) {
   return (

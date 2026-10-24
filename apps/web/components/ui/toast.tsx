@@ -16,7 +16,7 @@ export function Toaster() {
       toastOptions={{
         classNames: {
           toast:
-            'group rounded-md border border-border bg-card text-card-foreground shadow-overlay backdrop-blur-sm',
+            'group rounded-md border border-border bg-card text-card-foreground shadow-overlay backdrop-blur-xs',
           title: 'text-body font-medium text-foreground',
           description: 'text-caption text-muted-foreground',
           actionButton:
@@ -25,10 +25,10 @@ export function Toaster() {
             'rounded-md bg-secondary px-2 py-1 text-caption font-medium text-secondary-foreground',
           closeButton:
             'rounded-md border border-border bg-card text-muted-foreground hover:text-foreground',
-          success: 'border-emerald-500/30 [&_[data-icon]]:text-emerald-400',
-          error: 'border-destructive/40 [&_[data-icon]]:text-destructive',
-          warning: 'border-amber-500/30 [&_[data-icon]]:text-amber-400',
-          info: 'border-blue-500/30 [&_[data-icon]]:text-blue-400',
+          success: 'border-emerald-500/30 **:data-icon:text-emerald-400',
+          error: 'border-destructive/40 **:data-icon:text-destructive',
+          warning: 'border-amber-500/30 **:data-icon:text-amber-400',
+          info: 'border-blue-500/30 **:data-icon:text-blue-400',
         },
       }}
     />

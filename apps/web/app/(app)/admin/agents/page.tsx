@@ -655,7 +655,7 @@ export default function AgentsPage() {
                   <Input
                     id="assignment-fee"
                     inputMode="numeric"
-                    className="max-w-[12rem]"
+                    className="max-w-48"
                     value={fee}
                     onChange={(e) => setFee(e.target.value)}
                   />

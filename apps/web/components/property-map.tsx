@@ -80,7 +80,7 @@ export default function PropertyMap() {
               placeholder="Filter by city..."
               value={cityFilter}
               onChange={(e) => setCityFilter(e.target.value)}
-              className="h-8 w-40 rounded-md border border-input bg-background px-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-8 w-40 rounded-md border border-input bg-background px-2 text-sm placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <Select
               value={stateFilter}
@@ -133,7 +133,7 @@ export default function PropertyMap() {
                 anchor="bottom"
                 onClose={() => setSelectedProperty(null)}
                 closeButton={false}
-                className="[&_.maplibregl-popup-content]:!bg-card [&_.maplibregl-popup-content]:!text-foreground [&_.maplibregl-popup-content]:!border [&_.maplibregl-popup-content]:!border-border [&_.maplibregl-popup-content]:!rounded-lg [&_.maplibregl-popup-content]:!shadow-xl [&_.maplibregl-popup-content]:!p-3 [&_.maplibregl-popup-tip]:!border-t-card"
+                className="[&_.maplibregl-popup-content]:bg-card! [&_.maplibregl-popup-content]:text-foreground! [&_.maplibregl-popup-content]:border! [&_.maplibregl-popup-content]:border-border! [&_.maplibregl-popup-content]:rounded-lg! [&_.maplibregl-popup-content]:shadow-xl! [&_.maplibregl-popup-content]:p-3! [&_.maplibregl-popup-tip]:border-t-card!"
               >
                 <div className="space-y-1 min-w-[180px]">
                   <p className="font-medium text-sm">{selectedProperty.address}</p>

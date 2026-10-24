@@ -44,7 +44,7 @@ export default function LandingPage() {
           <Link
             href="/"
             aria-label="Hålo home"
-            className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="flex items-center gap-2 rounded-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Logo height={30} priority />
           </Link>
@@ -54,7 +54,7 @@ export default function LandingPage() {
         </header>
 
         <section className="py-24 text-center">
-          <div className="mx-auto inline-flex animate-fade-up items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1 text-caption font-medium text-muted-foreground backdrop-blur-sm">
+          <div className="mx-auto inline-flex animate-fade-up items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1 text-caption font-medium text-muted-foreground backdrop-blur-xs">
             <Sparkles size={12} className="text-primary" aria-hidden />
             Internal Use Only
           </div>
@@ -64,7 +64,7 @@ export default function LandingPage() {
             style={{ animationDelay: '60ms' }}
           >
             Internal AI Wholesaling
-            <span className="mt-1 block bg-gradient-to-r from-primary to-emerald-300 bg-clip-text text-transparent">
+            <span className="mt-1 block bg-linear-to-r from-primary to-emerald-300 bg-clip-text text-transparent">
               Platform
             </span>
           </h1>
