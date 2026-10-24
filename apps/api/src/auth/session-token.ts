@@ -68,14 +68,8 @@ export type SessionToken =
   | { token: string; via: 'header' | 'cookie' }
   | { token: null; reason: string };
 
-export function sessionTokenFrom(
-  request: Request,
-  origins: string[] = allowedOrigins(),
-): SessionToken {
-  const header = request.headers.authorization;
-  if (header?.startsWith('Bearer ') && header.length > 7) {
-    return { token: header.slice(7), via: 'header' };
-  }
+/** The Descope session cookie, if the request may use it (see the module comment). */
+function cookieToken(request: Request, origins: string[]): SessionToken {
   const cookie = readCookie(request.headers.cookie, sessionCookieName());
   if (!cookie) return { token: null, reason: 'Missing session token' };
   if (!SAFE_METHODS.has(request.method.toUpperCase())) {
@@ -89,4 +83,43 @@ export function sessionTokenFrom(
     }
   }
   return { token: cookie, via: 'cookie' };
+}
+
+function bearerToken(request: Request): string | null {
+  const header = request.headers.authorization;
+  return header?.startsWith('Bearer ') && header.length > 7
+    ? header.slice(7)
+    : null;
+}
+
+/** The token a request authenticates with: the bearer header, else the session cookie. */
+export function sessionTokenFrom(
+  request: Request,
+  origins: string[] = allowedOrigins(),
+): SessionToken {
+  const bearer = bearerToken(request);
+  return bearer
+    ? { token: bearer, via: 'header' }
+    : cookieToken(request, origins);
+}
+
+/**
+ * Every session token the request carries, the header first. A browser can
+ * hold a stale bearer token from before Descope managed tokens in cookies
+ * while its cookie is current, so the guard tries each in turn.
+ */
+export function sessionTokensFrom(
+  request: Request,
+  origins: string[] = allowedOrigins(),
+): {
+  tokens: Array<{ token: string; via: 'header' | 'cookie' }>;
+  reason: string;
+} {
+  const tokens: Array<{ token: string; via: 'header' | 'cookie' }> = [];
+  const bearer = bearerToken(request);
+  if (bearer) tokens.push({ token: bearer, via: 'header' });
+  const cookie = cookieToken(request, origins);
+  if ('via' in cookie && cookie.token !== bearer) tokens.push(cookie);
+  const reason = tokens.length ? '' : 'reason' in cookie ? cookie.reason : '';
+  return { tokens, reason: reason || 'Missing session token' };
 }
