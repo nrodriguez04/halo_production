@@ -286,13 +286,32 @@ describe('DispositionMatcherAgent.run', () => {
         rationale: 'Nobody buys in Memphis at this price.',
       }),
     );
-    const res = await agent().run(ctx(), 'acct', 'run-1');
+    // Sarah has not replied before, so no rule puts her on the list.
+    const quiet = { ...sarah, history: { sent: 3, replies: 0, lastReplyAt: null } };
+    const res = await agent().run(ctx({ buyers: [quiet, lisa, open, noEmail] }), 'acct', 'run-1');
     expect(res.decision.recommendation).toBe('hold');
     expect(res.decision.actions.map((a) => a.type)).toEqual([
       'rank_buyers',
       'append_note',
     ]);
     expect(res.decision.summary).toBe('hold: no buyer fits (2 considered)');
+  });
+
+  it('puts a buyer who buys here, at this price, and replied before at the top, even when the model left them out', async () => {
+    chat.mockResolvedValue(
+      reply({
+        shortlist: [{ buyer_id: 'b-open', fit: 'possible', reason: 'Buys anywhere.' }],
+      }),
+    );
+    const res = await agent().run(ctx(), 'acct', 'run-1');
+    const rank = res.decision.actions.find((a) => a.type === 'rank_buyers');
+    expect(rank && rank.type === 'rank_buyers' && rank.shortlist.map((b) => [b.rank, b.buyerId, b.fit])).toEqual([
+      [1, 'b-sarah', 'strong'],
+      [2, 'b-open', 'possible'],
+    ]);
+    expect(rank && rank.type === 'rank_buyers' && rank.shortlist[0].reason).toMatch(/added by Halo's rules/);
+    const blast = res.decision.actions.find((a) => a.type === 'queue_buyer_blast');
+    expect(blast && blast.type === 'queue_buyer_blast' && blast.buyerIds).toEqual(['b-sarah', 'b-open']);
   });
 
   it('honours the tenant mid-tier override', async () => {

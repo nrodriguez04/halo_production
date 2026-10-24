@@ -1,4 +1,5 @@
 const mockCreate = jest.fn();
+const mockResponsesCreate = jest.fn();
 
 jest.mock('openai', () => {
   class APIError extends Error {
@@ -9,6 +10,7 @@ jest.mock('openai', () => {
   class RateLimitError extends APIError {}
   const OpenAI = jest.fn().mockImplementation(() => ({
     chat: { completions: { create: mockCreate } },
+    responses: { create: mockResponsesCreate },
   }));
   Object.assign(OpenAI, {
     APIError,
@@ -121,5 +123,89 @@ describe('OpenAIService', () => {
     await expect(service.chatCompletion(input, ctx)).rejects.toMatchObject({
       reason: 'REJECTED_CREDENTIALS',
     });
+  });
+
+  it('researches through the Responses API web search, returning the pages each search found, priced per search', async () => {
+    mockResponsesCreate.mockResolvedValueOnce({
+      model: 'gpt-4o-2024-08-06',
+      output_text: 'Texas requires a written disclosure (Prop. Code 5.0205).',
+      usage: { input_tokens: 900, output_tokens: 150 },
+      output: [
+        {
+          type: 'web_search_call',
+          id: 'ws_1',
+          status: 'completed',
+          action: {
+            type: 'search',
+            sources: [
+              {
+                type: 'url',
+                url: 'https://statutes.capitol.texas.gov/PR/5.0205?utm_source=openai',
+              },
+              { type: 'url', url: 'https://example.com/blog' },
+            ],
+          },
+        },
+        {
+          type: 'message',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Texas requires a written disclosure.',
+              annotations: [
+                {
+                  type: 'url_citation',
+                  url: 'https://example.com/blog',
+                  title: 'Blog',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const out = await service.webResearch(
+      {
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: 'You research.' },
+          { role: 'user', content: 'Texas?' },
+        ],
+        maxTokens: 2500,
+        maxSearches: 4,
+      },
+      ctx,
+    );
+    const req = mockResponsesCreate.mock.calls[0][0];
+    expect(req).toMatchObject({
+      model: 'gpt-4o',
+      instructions: 'You research.',
+      input: [{ role: 'user', content: 'Texas?' }],
+      tools: [{ type: 'web_search_preview', search_context_size: 'medium' }],
+      include: ['web_search_call.action.sources'],
+      max_output_tokens: 2500,
+    });
+    expect(out).toEqual({
+      content: 'Texas requires a written disclosure (Prop. Code 5.0205).',
+      tokensIn: 900,
+      tokensOut: 150,
+      model: 'gpt-4o-2024-08-06',
+      searches: 1,
+      sources: [
+        {
+          url: 'https://statutes.capitol.texas.gov/PR/5.0205?utm_source=openai',
+          title: null,
+        },
+        { url: 'https://example.com/blog', title: null },
+      ],
+    });
+    const intent = costControl.checkAndCall.mock.calls[0][0];
+    expect(intent.action).toBe('web_research.gpt-4o');
+    expect(intent.payload.searches).toBe(4);
+    // 900 in and 150 out at gpt-4o rates, plus one search at $0.025.
+    expect(intent.computeActualCostUsd(out)).toBeCloseTo(
+      0.9 * 0.0025 + 0.15 * 0.01 + 0.025,
+      6,
+    );
   });
 });

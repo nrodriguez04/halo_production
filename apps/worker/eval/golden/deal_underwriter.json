@@ -243,7 +243,7 @@
     },
     {
       "id": "no-data-hold",
-      "title": "No value, no sale history, no listing: hold with low confidence",
+      "title": "No value, no sale history, no listing: hold by rule, nothing to value from",
       "base": "deal",
       "context": {
         "property": {
@@ -258,27 +258,15 @@
         },
         "sources": []
       },
-      "reply": {
-        "arv": null,
-        "repair_estimate": null,
-        "mao": null,
-        "offer_low": null,
-        "offer_high": null,
-        "confidence": 0.15,
-        "recommendation": "hold",
-        "rationale": "No valuation, sale history or listing data for this property, so ARV cannot be estimated responsibly. Pull a property record or comparable sales, then re-run.",
-        "comps_summary": null
-      },
       "expect": {
-        "decidedBy": "model",
+        "decidedBy": "rule",
+        "hardRule": "no_value_data",
         "recommendation": "hold",
-        "confidence": {
-          "min": 0,
-          "max": 0.4
-        },
         "actions": [
-          "set_deal_economics",
           "append_note"
+        ],
+        "noActions": [
+          "set_deal_economics"
         ]
       }
     },

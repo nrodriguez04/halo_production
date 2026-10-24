@@ -111,7 +111,7 @@ CI now builds all three images on every push (`docker-images`) and runs the inte
 
 ## 6. Known limitations
 
-- **Market Expansion has no web research.** It reasons only over the bundled research and the sources already cited.
+- **Market Expansion's web research answers little on its own.** Only a government page can settle a question, and the searches mostly return secondary pages and statute mirrors, so most of what they find becomes counsel questions rather than answers. That is by design: counsel confirms the law.
 - **Market intelligence has no metro (CBSA) level.** Aggregation is in memory, which is fine to a few hundred thousand sales per tenant.
 - **Resend inbound email is not handled.** Inbound uses SendGrid Inbound Parse.
 - **State holidays and split-state time zones are approximations** in deadline counting (markets.md s5).

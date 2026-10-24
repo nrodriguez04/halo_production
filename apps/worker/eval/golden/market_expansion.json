@@ -1426,6 +1426,9 @@
         "risks": [],
         "rationale": "The research's class A rests on secondary sources; the felony exposure argues for the cautious class until counsel answers."
       },
+      "modes": [
+        "offline"
+      ],
       "expect": {
         "decidedBy": "model",
         "recommendation": "propose",
@@ -1534,6 +1537,9 @@
         ],
         "rationale": "The research adds nothing the draft does not already say, and there is no data showing opportunity."
       },
+      "modes": [
+        "offline"
+      ],
       "expect": {
         "decidedBy": "model",
         "recommendation": "not_now",

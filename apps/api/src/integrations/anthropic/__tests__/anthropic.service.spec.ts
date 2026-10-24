@@ -204,6 +204,158 @@ describe('AnthropicService', () => {
     expect(out?.stopReason).toBe('refusal');
   });
 
+  describe('webResearch', () => {
+    const input = {
+      model: 'claude-sonnet-5-5',
+      messages: [
+        { role: 'system' as const, content: 'You research.' },
+        { role: 'user' as const, content: 'Wyoming disclosures?' },
+      ],
+      maxSearches: 3,
+      allowedDomains: ['wyo.gov'],
+    };
+
+    it('searches with the server tool, at most maxSearches times, and prices each search', async () => {
+      mockCreate.mockResolvedValue(
+        message({
+          model: 'claude-sonnet-5-5',
+          content: [
+            {
+              type: 'server_tool_use',
+              id: 'su_1',
+              name: 'web_search',
+              input: { query: 'wyoming' },
+            },
+            {
+              type: 'web_search_tool_result',
+              tool_use_id: 'su_1',
+              content: [
+                {
+                  type: 'web_search_result',
+                  url: 'https://realestate.wyo.gov/rules',
+                  title: 'Rules',
+                  page_age: null,
+                  encrypted_content: 'x',
+                },
+                {
+                  type: 'web_search_result',
+                  url: 'https://example.com/blog',
+                  title: 'Blog',
+                  page_age: null,
+                  encrypted_content: 'y',
+                },
+              ],
+            },
+            {
+              type: 'text',
+              text: 'The commission rules say nothing on wholesaling.',
+              citations: [
+                {
+                  type: 'web_search_result_location',
+                  url: 'https://realestate.wyo.gov/rules',
+                  title: 'Rules',
+                  cited_text: 'c',
+                  encrypted_index: 'e',
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 9000,
+            output_tokens: 400,
+            server_tool_use: { web_search_requests: 2, web_fetch_requests: 0 },
+          },
+        }),
+      );
+      const out = await service.webResearch(input, ctx);
+      const req = mockCreate.mock.calls[0][0];
+      expect(req.tools).toEqual([
+        {
+          type: 'web_search_20250305',
+          name: 'web_search',
+          max_uses: 3,
+          allowed_domains: ['wyo.gov'],
+        },
+      ]);
+      expect(req.system).toBe('You research.');
+      expect(out).toMatchObject({
+        content: 'The commission rules say nothing on wholesaling.',
+        searches: 2,
+        sources: [
+          { url: 'https://realestate.wyo.gov/rules', title: 'Rules' },
+          { url: 'https://example.com/blog', title: 'Blog' },
+        ],
+      });
+      const intent = costControl.checkAndCall.mock.calls[0][0];
+      expect(intent.action).toBe('web_research.claude-sonnet-5-5');
+      expect(intent.payload.searches).toBe(3);
+      // Tokens at the model's rate, plus $0.01 a search.
+      expect(intent.computeActualCostUsd(out)).toBeCloseTo(
+        priceFromTokens('claude-sonnet-5-5', 9000, 400) + 0.02,
+        6,
+      );
+    });
+
+    it('resumes a paused research turn and keeps what both turns found', async () => {
+      mockCreate
+        .mockResolvedValueOnce(
+          message({
+            content: [
+              {
+                type: 'web_search_tool_result',
+                tool_use_id: 's',
+                content: [
+                  {
+                    type: 'web_search_result',
+                    url: 'https://a.gov/x',
+                    title: 'A',
+                    page_age: null,
+                    encrypted_content: 'x',
+                  },
+                ],
+              },
+            ],
+            stop_reason: 'pause_turn',
+            usage: {
+              input_tokens: 100,
+              output_tokens: 10,
+              server_tool_use: {
+                web_search_requests: 1,
+                web_fetch_requests: 0,
+              },
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          message({ content: [{ type: 'text', text: 'Done.' }] }),
+        );
+      const out = await service.webResearch(input, ctx);
+      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(mockCreate.mock.calls[1][0].messages).toHaveLength(2);
+      expect(out).toMatchObject({
+        content: 'Done.',
+        searches: 1,
+        tokensIn: 220,
+        sources: [{ url: 'https://a.gov/x' }],
+      });
+    });
+
+    it('reports an empty credit balance as the provider being unavailable', async () => {
+      mockCreate.mockRejectedValue(
+        Object.assign(
+          new Error(
+            'Your credit balance is too low to access the Anthropic API.',
+          ),
+          { status: 400 },
+        ),
+      );
+      await expect(service.webResearch(input, ctx)).rejects.toMatchObject({
+        provider: 'anthropic',
+        reason: 'UPSTREAM_ERROR',
+      });
+    });
+  });
+
   it('maps bad credentials to 503 REJECTED_CREDENTIALS', async () => {
     mockCreate.mockRejectedValue(
       new (Anthropic.AuthenticationError as unknown as new (

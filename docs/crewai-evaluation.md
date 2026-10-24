@@ -51,7 +51,7 @@ An agent moves to CrewAI only if all four hold:
 
 ## What would change the answer
 
-- **A search-capable model route.** The internal chat route would accept a tool such as web search, cost-controlled like any other call. That would let Market Expansion research, rather than only read. A CrewAI researcher-and-reviewer crew could then be compared, on a research golden set, with a single TypeScript agent given the same tool.
+- **A search-capable model route.** Built 2026-10-24 as `POST /internal/ai/web-research` (docs/agent-design.md s3.7), cost-controlled like any other call: Market Expansion now researches, rather than only reads. A CrewAI researcher-and-reviewer crew could then be compared, on a research golden set, with a single TypeScript agent given the same tool.
 - **A measured gap in negotiation drafts.** Reviewed runs (the replays) would show people rewriting the Outreach Drafter's negotiation replies more often than the rest.
 
 Until then, a second runtime adds operational weight with no measured gain.

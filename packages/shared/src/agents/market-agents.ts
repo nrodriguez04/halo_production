@@ -103,7 +103,7 @@ export interface MarketBrief {
 
 // ---------------------------------------------------------- Market Expansion
 
-export const MARKET_EXPANSION_PROMPT_VERSION = 'market_expansion.v1';
+export const MARKET_EXPANSION_PROMPT_VERSION = 'market_expansion.v2';
 
 const comparable = (s: string) =>
   s.trim().toLowerCase().replace(/[?.!]+$/, '').replace(/\s+/g, ' ');
@@ -122,6 +122,20 @@ function keyOrLabel<K extends string>(keys: readonly [K, ...K[]], labels: Record
     z.enum(keys),
   );
 }
+
+/**
+ * What the model says about a web page it cited, by the id Halo gave the
+ * page. The URL and title come from the search itself, never from here.
+ */
+const WebSourceSchema = z.object({
+  id: z.string().trim().regex(/^w\d{1,2}$/),
+  citation: z.string().trim().max(300).default(''),
+  type: z
+    .enum(['statute', 'regulation', 'regulator_guidance', 'case', 'bill', 'secondary'])
+    .catch('secondary'),
+  summary: z.string().trim().max(1000).default(''),
+});
+export type MarketWebSource = z.infer<typeof WebSourceSchema>;
 
 export const MarketExpansionOutputSchema = z.object({
   recommendation: z.enum(['propose', 'not_now']),
@@ -156,8 +170,91 @@ export const MarketExpansionOutputSchema = z.object({
   activation_steps: z.array(z.string().min(1).max(500)).max(15).default([]),
   risks: z.array(z.string().min(1).max(500)).max(10).default([]),
   rationale: z.string().min(1).max(3000),
+  /**
+   * Pages a web-research run relied on. A malformed entry is dropped rather
+   * than failing the reply; what cited it then loses that source.
+   */
+  web_sources: z
+    .array(z.unknown())
+    .default([])
+    .transform((items) =>
+      items.slice(0, 12).flatMap((i) => {
+        const r = WebSourceSchema.safeParse(i);
+        return r.success ? [r.data] : [];
+      }),
+    ),
 });
 export type MarketExpansionOutput = z.infer<typeof MarketExpansionOutputSchema>;
+
+/** A page a provider's web search returned, as the api reports it. */
+export interface WebSearchResult {
+  url: string;
+  title: string | null;
+}
+
+/** A returned page under the id the model cites it by. */
+export interface WebPage extends WebSearchResult {
+  id: string;
+}
+
+/** Most pages one run hands the model: enough for a state, short enough to read. */
+export const MAX_WEB_PAGES = 15;
+
+/** The pages a search returned, each once, numbered w1, w2 ... in the order returned. */
+export function numberWebPages(results: readonly WebSearchResult[], max = MAX_WEB_PAGES): WebPage[] {
+  const seen = new Set<string>();
+  const pages: WebPage[] = [];
+  for (const r of results) {
+    const key = comparableUrl(r.url);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    pages.push({ id: `w${pages.length + 1}`, url: withoutTracking(r.url), title: r.title });
+    if (pages.length >= max) break;
+  }
+  return pages;
+}
+
+/**
+ * Host without www, path without a trailing slash, and the query without
+ * tracking parameters: how two spellings of one page compare. OpenAI's
+ * search tags every page it returns with utm_source=openai.
+ */
+export function comparableUrl(u: string): string | null {
+  try {
+    const x = new URL(u);
+    if (x.protocol !== 'https:' && x.protocol !== 'http:') return null;
+    for (const k of [...x.searchParams.keys()]) {
+      if (/^utm_/i.test(k)) x.searchParams.delete(k);
+    }
+    const host = x.hostname.toLowerCase().replace(/^www\./, '');
+    return `${host}${x.pathname.replace(/\/+$/, '')}${x.search}`;
+  } catch {
+    return null;
+  }
+}
+
+/** The URL with its utm_ tracking parameters removed. */
+function withoutTracking(u: string): string {
+  try {
+    const x = new URL(u);
+    for (const k of [...x.searchParams.keys()]) {
+      if (/^utm_/i.test(k)) x.searchParams.delete(k);
+    }
+    return x.toString();
+  } catch {
+    return u;
+  }
+}
+
+/** A government host: federal and state .gov, the states' .us domains, .mil. */
+export function isOfficialSourceUrl(u: string): boolean {
+  try {
+    const host = new URL(u).hostname.toLowerCase();
+    return /\.(gov|us|mil)$/.test(host);
+  } catch {
+    return false;
+  }
+}
 
 export function parseMarketExpansionOutput(text: string): MarketExpansionOutput | null {
   const raw = firstJsonObject(text);
@@ -196,6 +293,93 @@ export interface MarketDraftProposal {
 /** Classes that would let Halo contract without a license or registration. */
 const PERMISSIVE_CLASSES: readonly MarketClassification[] = ['A', 'B'];
 
+/** What a counsel question about each policy question mentions. */
+const QUESTION_TOPIC: Record<MarketQuestion, RegExp> = {
+  principal_assignment_without_license: /\bprincipal\b[^?]*\bassign|\bassign[^?]*\blicen[cs]/i,
+  wholesaler_registration_required: /wholesal\w*[^?]*regist|regist\w*[^?]*wholesal/i,
+  license_required_for_activity: /licen[cs]/i,
+  disclosures_required: /disclos|\bnotice/i,
+  public_marketing_permitted: /advertis|public\w*[^?]*market|market\w*[^?]*public/i,
+  direct_investor_outreach_permitted: /investor/i,
+  assignment_restrictions: /\bassign/i,
+  double_closing_permitted: /double[- ]?clos/i,
+  seller_cancellation_right: /cancel|rescind|rescission/i,
+  local_restrictions: /\b(city|cities|county|counties|local|municipal\w*|ordinances?)\b/i,
+  out_of_state_entity_requirements: /foreign|out[- ]of[- ]state|certificate of authority|entity[^?]*regist|regist\w*[^?]*entity/i,
+};
+
+/**
+ * The web pages a reply may cite: only the pages the provider's search
+ * returned, by the id Halo gave each one. The URL and title come from the
+ * search, so a page the model made up, or remembered rather than found,
+ * cannot become a source. What the model adds (type, citation, summary)
+ * is kept as its reading, and each page is marked found on the web and not
+ * verified.
+ */
+function webSourcesOf(
+  out: MarketExpansionOutput,
+  ctx: { webPages?: readonly WebPage[]; today?: string },
+  draftIds: ReadonlySet<string>,
+  research: ReadonlyMap<string, PolicySource>,
+  adjustments: string[],
+): Map<string, PolicySource> {
+  const web = new Map<string, PolicySource>();
+  if (!ctx.webPages) {
+    if (out.web_sources.length) adjustments.push('web sources dropped: web research was off for this run');
+    return web;
+  }
+  const pages = new Map(ctx.webPages.map((p) => [p.id, p]));
+  const read = new Map(out.web_sources.map((w) => [w.id, w]));
+  for (const id of read.keys()) {
+    if (!pages.has(id)) adjustments.push(`web source ${id}: not one of the pages the search returned; dropped`);
+  }
+  const today = ctx.today ?? new Date().toISOString().slice(0, 10);
+  for (const page of ctx.webPages) {
+    if (draftIds.has(page.id) || research.has(page.id)) continue;
+    const w = read.get(page.id);
+    // A page may say a state is "legal for wholesaling"; Halo does not
+    // repeat that as a summary a person might read as clearance.
+    const claim = w ? legalClearanceClaim(w.summary) : null;
+    if (claim) adjustments.push(`web source ${page.id}: its summary said "${claim}"; summary left out`);
+    const summary = claim ? '' : (w?.summary ?? '');
+    const host = hostOf(page.url);
+    web.set(page.id, {
+      id: page.id,
+      citation: (w?.citation || page.title || host || page.url).slice(0, 300),
+      title: (page.title ?? '').slice(0, 300),
+      url: page.url,
+      type: w?.type ?? 'secondary',
+      effectiveDate: null,
+      summary: `${summary ? `${summary} ` : ''}(Found by web search on ${today}${host ? ` at ${host}` : ''}; not verified.)`,
+    });
+  }
+  return web;
+}
+
+function hostOf(u: string): string {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Every question a proposal leaves unknown gets a counsel question unless
+ * one already asks about it: an unknown nobody asked is a gap nobody owns.
+ * The live eval had proposals that left approval questions unknown with no
+ * question for counsel at all.
+ */
+export function counselQuestionsForUnknowns(
+  state: string,
+  unknown: readonly MarketQuestion[],
+  asked: readonly string[],
+): string[] {
+  return unknown
+    .filter((q) => !asked.some((text) => QUESTION_TOPIC[q].test(text)))
+    .map((q) => `For ${state}: ${QUESTION_LABEL[q]} The research does not settle it.`);
+}
+
 const slug = (s: string) =>
   s
     .toLowerCase()
@@ -208,10 +392,14 @@ const slug = (s: string) =>
  * person. Enforced here, in code, whatever the model wrote:
  * - only questions the draft leaves unknown are answered;
  * - a source the context does not hold is dropped;
+ * - a web page is a source only when the provider's search returned it,
+ *   and on its own only a government page can settle a question: an
+ *   answer resting on other web pages alone stays unknown;
  * - an answer with no source left becomes unknown: an unsourced "no
  *   registration needed" is exactly the guess the policy rules forbid;
  * - a permissive class (A or B) is not proposed while any question an
- *   approval needs would still be unknown.
+ *   approval needs would still be unknown;
+ * - every question left unknown gets a counsel question.
  */
 export function sanitizeMarketProposal(
   out: MarketExpansionOutput,
@@ -219,12 +407,17 @@ export function sanitizeMarketProposal(
     state: string;
     draft: Pick<MarketPolicyContent, 'answers' | 'requirements' | 'openQuestions' | 'activationSteps' | 'sources'>;
     researchSources: PolicySource[];
+    /** The pages the run's web search returned, numbered; absent when web research was off. */
+    webPages?: readonly WebPage[];
+    /** YYYY-MM-DD, for the note on a web source. Defaults to today. */
+    today?: string;
   },
 ): { proposal: MarketDraftProposal; adjustments: string[] } {
   const adjustments: string[] = [];
   const draftIds = new Set(ctx.draft.sources.map((s) => s.id));
   const research = new Map(ctx.researchSources.map((s) => [s.id, s]));
-  const known = (id: string) => draftIds.has(id) || research.has(id);
+  const web = webSourcesOf(out, ctx, draftIds, research, adjustments);
+  const known = (id: string) => draftIds.has(id) || research.has(id) || web.has(id);
   const cited = new Set<string>();
   const keep = (ids: string[], where: string) => {
     const ok = ids.filter(known);
@@ -249,6 +442,13 @@ export function sanitizeMarketProposal(
       adjustments.push(`${a.question}: "${answer}" had no source; kept as unknown`);
       answer = 'unknown';
       note = `${note} (No source was cited, so this stays unknown.)`;
+    } else if (
+      answer !== 'unknown' &&
+      sourceIds.every((id) => web.has(id) && !isOfficialSourceUrl(web.get(id)?.url ?? ''))
+    ) {
+      adjustments.push(`${a.question}: "${answer}" rested only on non-government web pages; kept as unknown`);
+      answer = 'unknown';
+      note = `${note} (Only non-government web pages support this, so it stays unknown until counsel or an official source confirms it.)`;
     }
     answers.push({ question: a.question, answer, note, sourceIds });
   }
@@ -264,6 +464,20 @@ export function sanitizeMarketProposal(
       `The research suggests class ${classification}, but ${stillUnknown.join(', ')} ${stillUnknown.length === 1 ? 'is' : 'are'} unknown; the class cannot be set until counsel answers ${stillUnknown.length === 1 ? 'it' : 'them'}.`,
     );
     classification = null;
+  }
+
+  const leftUnknown = MARKET_QUESTIONS.filter(
+    (q) => ctx.draft.answers[q]?.answer === 'unknown' && after(q) === 'unknown',
+  );
+  const missingQuestions = counselQuestionsForUnknowns(ctx.state, leftUnknown, [
+    ...ctx.draft.openQuestions,
+    ...counselQuestions,
+  ]);
+  if (missingQuestions.length) {
+    adjustments.push(
+      `${missingQuestions.length} counsel question${missingQuestions.length === 1 ? '' : 's'} added for questions left unknown`,
+    );
+    counselQuestions.push(...missingQuestions);
   }
 
   const takenKeys = new Set(ctx.draft.requirements.map((r) => r.key));
@@ -300,7 +514,7 @@ export function sanitizeMarketProposal(
 
   const sources = Array.from(cited)
     .filter((id) => !draftIds.has(id))
-    .map((id) => research.get(id) as PolicySource);
+    .map((id) => (research.get(id) ?? web.get(id)) as PolicySource);
 
   return {
     proposal: {

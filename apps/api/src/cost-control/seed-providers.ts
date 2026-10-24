@@ -9,6 +9,34 @@ import { PrismaClient } from '@prisma/client';
 // Idempotent: re-runs are safe via upsert. Budget bucket spend is NOT reset
 // on re-seed - operators can adjust caps without losing accumulated spend.
 
+/**
+ * A web-research call (integrations/web-research.types.ts): the model's
+ * tokens at its chat rate, plus each search. `per_search` mirrors
+ * WEB_SEARCH_USD.
+ */
+function webResearchPricing(
+  models: Record<string, { input: number; output: number }>,
+  perSearch: number,
+) {
+  return Object.entries(models).flatMap(([model, rate]) => [
+    {
+      action: `web_research.${model}`,
+      unitCostUsd: rate.input,
+      unit: 'per_1k_input_tokens',
+    },
+    {
+      action: `web_research.${model}`,
+      unitCostUsd: rate.output,
+      unit: 'per_1k_output_tokens',
+    },
+    {
+      action: `web_research.${model}`,
+      unitCostUsd: perSearch,
+      unit: 'per_search',
+    },
+  ]);
+}
+
 const PROVIDERS = [
   // Property data
   {
@@ -137,6 +165,13 @@ const PROVIDERS = [
         unitCostUsd: 0.03,
         unit: 'per_1k_output_tokens',
       },
+      ...webResearchPricing(
+        {
+          'gpt-4o': { input: 0.0025, output: 0.01 },
+          'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
+        },
+        0.025,
+      ),
     ],
   },
 
@@ -198,6 +233,16 @@ const PROVIDERS = [
         unitCostUsd: 0.05,
         unit: 'per_1k_output_tokens',
       },
+      ...webResearchPricing(
+        {
+          'claude-opus-5-5': { input: 0.004, output: 0.02 },
+          'claude-sonnet-5-5': { input: 0.002, output: 0.01 },
+          'claude-haiku-4-5': { input: 0.001, output: 0.005 },
+          'claude-opus-5': { input: 0.005, output: 0.025 },
+          'claude-fable-5-1': { input: 0.01, output: 0.05 },
+        },
+        0.01,
+      ),
     ],
   },
 

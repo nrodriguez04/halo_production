@@ -40,6 +40,11 @@ export interface PromptTemplates {
   market_expansion: {
     system: string;
     user: string;
+    /** With web research on: the same task, with the search's findings (web_findings) in the context. */
+    user_web: string;
+    /** The search step of a web-research run: a plain report on the unknown questions. */
+    research_system: string;
+    research_user: string;
   };
 }
 

@@ -43,6 +43,7 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
 - **Reads:** lead, property, source records (ATTOM/geocode), skip-trace result flags, prior timeline.
 - **Produces:** a `score` (0–100) with a one-paragraph rationale and a recommended next state: `qualified`, `disqualified`, or `hold`. For `qualified`, a draft first-touch SMS and email via the existing `/agent/deals/:id/draft-*` path semantics (so they land in the approval queue).
 - **Autonomy:** may set `score` and append a timeline note on its own. May transition `enriched → disqualified` on its own **only** when a hard rule fires (owner-occupied with no equity signal, property type out of scope, DNC hit). Every `qualified` recommendation is a draft for a person.
+- **Signal check (code):** a `qualified` needs two strong signals the record itself shows, each counted once (absentee owner; tax delinquent; lien; foreclosure; a listing that ended unsold; long days on market; a distressed sale; vacant; owned 15 years or more), or one very strong one (an expired listing, a foreclosure, a tax-delinquent absentee owner). Otherwise it becomes a hold, scored 55 at most, with its drafts dropped (`strongSignals` in `lead-analyst.agent.ts`).
 - **Model tier:** mid (classification + short rationale).
 
 ### 3.2 Deal Underwriter
@@ -50,6 +51,8 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
 - **Reads:** deal, property, comps (RentCast/ATTOM), prior underwriting results, manual edits (respecting the stale-write guard already in the processor).
 - **Produces:** ARV, repair estimate, MAO, confidence, rationale, and a recommended offer range. MAO = ARV x 0.70 - repairs - the assignment fee (the deal's own, else the tenant's default on the Agents page, $10,000 out of the box). Writes `underwriting_results`; writes deal economics **only** if the deal has not been edited since the run started (the guard from #85).
 - **Autonomy:** full, for numbers. Never contacts anyone.
+- **Numbers checked in code:** the MAO recorded is the formula's, rounded down to $100, whatever the model's arithmetic gave; the offer range is capped at it; an offer with no MAO is a hold, with a MAO of zero or less a pass, and below 0.4 confidence a hold. Every correction is written into the rationale.
+- **Holds without a model:** no property with a street address and ZIP (`no_property`); nothing on file says what the property is worth, no value, assessment, sale or listing price and no numbers a person entered (`no_value_data`).
 - **Model tier:** strong (numeric reasoning over documents).
 
 ### 3.3 Outreach Drafter
@@ -65,6 +68,7 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
 - **Produces:** a ranked buyer shortlist with reasons and a buyer-blast draft (existing `marketing` queue) for approval.
 - **Price:** buyers are asked the **buyer price**: a price a person set on the deal, else the contract price, the offer made to the seller or the MAO plus the assignment fee, else 70% of ARV less repairs (`buyerAskingPrice` in `packages/shared/src/utils/buyer-price.ts`). The seller-side figures never reach a buyer: advertising them would give the fee away.
 - **Autonomy:** ranking only. The blast is approved by a person; sends go through the same boundary.
+- **Proven buyers lead (code):** a buyer whose stated locations name the deal's city or ZIP, whose price range holds the buyer price and who has replied before is always on the shortlist, first, even when the model left them out.
 - **Model tier:** mid.
 
 ### 3.5 Buyer Responder
@@ -89,7 +93,8 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
   - the questions the draft leaves unknown;
   - the bundled research: findings, sources normalized as an import would store them, pending bills, open questions;
   - the authorizations on file;
-  - the state's best counties.
+  - the state's best counties;
+  - with web research on, `web_findings`: what the run's web search found (below).
 - **Produces:** a proposal for the draft:
   - sourced answers to unknown questions;
   - counsel questions;
@@ -98,9 +103,16 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
   - activation steps;
   - risks.
 - **Autonomy:** none. `propose_market_draft` is gated: a person (`deals:approve`) accepts it into the editable draft, marked as unverified, and counsel still reviews and approves the policy. No action exists that submits, approves, activates or changes a status. The rules in docs/markets.md s11 run in code, before the proposal is shown and again when it is applied.
-- **Holds without a model:** a market a person blocked or restricted; a draft in counsel review; an active market; no research; a draft with nothing unknown.
-- **Model tier:** strong. Prompt `market_expansion.v1`.
-- **Not yet: web research.** The agent works only from what it is given.
+- **Counsel questions for every unknown (code):** each question a proposal leaves unknown gets a counsel question unless the draft or the proposal already asks about it.
+- **Holds without a model:** a market a person blocked or restricted; a draft in counsel review; an active market; no research (unless web research is on); a draft with nothing unknown.
+- **Model tier:** strong. Prompt `market_expansion.v2`.
+- **Web research** (a person's choice per run: "Search the web" when asking for a proposal; `webResearch: true` on `POST /agent/runs`):
+  1. A search step (`research_system`, `research_user`) asks the model to search the web for the unknown questions, official sources first, and write a plain report. It goes through `POST /internal/ai/web-research`, which runs OpenAI's `web_search_preview` (Responses API) or Anthropic's server-side web search, and returns the report with every page the searches returned. At most `AGENT_RESEARCH_MAX_SEARCHES` searches (default 5; Anthropic enforces it, OpenAI's preview tool decides for itself and the budget preflight assumes the maximum).
+  2. Halo numbers the returned pages `w1`, `w2` ... (at most 15, each once, tracking parameters removed). The proposal step (`user_web`) gets the report and the numbered pages as `web_findings` and cites pages by number only. The model never supplies a URL, so a page no search returned cannot become a source.
+  3. The sanitizer records each cited page with the URL and title the search gave, the model's reading of it (type, citation, one-line summary), and the note "Found by web search on <date> at <host>; not verified." Only a government page (.gov, a state's .us site, .mil) can settle a question on its own: an answer resting only on other pages (blogs, law firms, statute mirrors such as Justia) stays unknown, with a counsel question. A page summary that reads as clearance to operate is left out.
+  4. Cost: the search step's tokens and each search (OpenAI $0.025, Anthropic $0.01, under `web_research.<model>` with a `per_search` rule), plus the proposal step, all through cost control. About $0.05 a run on gpt-4o in the 2026-10-24 tests.
+  5. Search results are untrusted text. Nothing in them is acted on: the proposal is gated like any other, and the replay keeps the report and pages for review.
+  - Why two steps: a reply that is only JSON carries no citations, and the live test had gpt-4o cite pages as `turn0search0` instead of listing them. A plain report gets the provider's own citations.
 
 Not in the first release: anything that negotiates price autonomously, anything that signs or sends contracts, anything that calls.
 

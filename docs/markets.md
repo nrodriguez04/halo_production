@@ -241,7 +241,7 @@ The agent also holds without asking a model when:
 - there is no research;
 - the draft has no unknowns.
 
-**Not yet: web research.** The agent works from the bundled research and the sources already cited. It does not search the web or read statutes it was not given. Fresh research needs a search-capable model route, which is not built.
+**Web research.** A person asking for a proposal can let the agent search the web as well (on by default on the Expansion tab). The search step finds pages, official sources first; the proposal cites them by a number Halo gave each page, so a page no search returned is never recorded. A web page goes into the draft marked found on the web and not verified, and only a government page can answer a question on its own: anything resting on other pages stays unknown, with a counsel question. See docs/agent-design.md s3.7.
 
 ## 12. Not operational yet
 

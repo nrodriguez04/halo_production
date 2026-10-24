@@ -116,10 +116,73 @@ export function decisionFromHardRule(rule: HardRuleResult): AgentDecision {
   };
 }
 
+const LONG_OWNERSHIP_YEARS = 15;
+const YEAR_MS = 365.25 * 86_400_000;
+const LISTING_ENDED = ['listing:expired', 'listing:withdrawn', 'listing:canceled'];
+
+/**
+ * The strong signals the record itself shows, each counted once, and
+ * whether one of them is very strong on its own (docs/agent-design.md
+ * s3.1). The prompt asks for two strong signals, or one very strong one,
+ * before a lead is qualified; the live eval had the model qualify an
+ * absentee owner with nothing else on file, so the count is also checked
+ * here.
+ */
+export function strongSignals(
+  ctx: LeadAnalystContext,
+  now = Date.now(),
+): { signals: string[]; veryStrong: boolean } {
+  const tags = new Set(ctx.lead.tags);
+  const summaries = ctx.sources.map((s) => s.summary);
+  const signals: string[] = [];
+  const absentee =
+    tags.has('owner:absentee') ||
+    tags.has('owner:out_of_state') ||
+    summaries.some((s) => s.ownerOccupied === false);
+  if (absentee) signals.push('absentee owner');
+  if (tags.has('tax:delinquent')) signals.push('tax delinquent');
+  if (tags.has('lien')) signals.push('lien');
+  if (tags.has('foreclosure')) signals.push('foreclosure');
+  if (LISTING_ENDED.some((t) => tags.has(t))) signals.push('listing ended unsold');
+  if (tags.has('stale_listing')) signals.push('long days on market');
+  if (tags.has('distressed_sale')) signals.push('distressed sale');
+  if (tags.has('vacant')) signals.push('vacant');
+  const owned = summaries
+    .map((s) => Date.parse(String(s.lastSaleDate ?? '')))
+    .filter((t) => Number.isFinite(t));
+  if (owned.some((t) => now - t >= LONG_OWNERSHIP_YEARS * YEAR_MS)) {
+    signals.push(`owned ${LONG_OWNERSHIP_YEARS}+ years`);
+  }
+  const veryStrong =
+    tags.has('listing:expired') ||
+    tags.has('foreclosure') ||
+    (tags.has('tax:delinquent') && absentee);
+  return { signals, veryStrong };
+}
+
+/** The most a lead held back by the signal count can score. */
+const HELD_SCORE_CAP = 55;
+
 export function decisionFromOutput(
-  out: LeadAnalystOutput,
+  reply: LeadAnalystOutput,
   model: string,
+  ctx?: LeadAnalystContext,
 ): AgentDecision {
+  let out = reply;
+  if (out.recommendation === 'qualified' && ctx) {
+    const { signals, veryStrong } = strongSignals(ctx);
+    if (signals.length < 2 && !veryStrong) {
+      const onFile = signals.length ? signals.join(', ') : 'none';
+      out = {
+        ...out,
+        recommendation: 'hold',
+        score: Math.min(out.score, HELD_SCORE_CAP),
+        first_touch_sms: null,
+        first_touch_email: null,
+        rationale: `${out.rationale}\n\nHeld by Halo's rules: the record shows ${signals.length === 1 ? 'one strong signal' : 'no strong signal'} (${onFile}); qualifying takes two, or one very strong one (an expired listing, a foreclosure, a tax-delinquent absentee owner).`,
+      };
+    }
+  }
   const score = Math.round(Math.min(100, Math.max(0, out.score)));
   const actions: AgentAction[] = [
     { type: 'set_lead_score', score },
@@ -176,6 +239,8 @@ export interface LeadAnalystResult {
   decision: AgentDecision;
   costUsd: number;
   raw?: string;
+  /** What the model saw, when that is more than the loaded context (web findings). */
+  seen?: object;
 }
 
 /**
@@ -231,7 +296,7 @@ export class LeadAnalystAgent {
       );
     }
     return {
-      decision: decisionFromOutput(out, completion.model),
+      decision: decisionFromOutput(out, completion.model, ctx),
       costUsd,
       raw: completion.content,
     };

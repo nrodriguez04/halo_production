@@ -4,6 +4,13 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
+import {
+  WEB_SEARCH_USD,
+  uniqueSources,
+  type WebResearchInput,
+  type WebResearchResult,
+  type WebResearchSource,
+} from '../web-research.types';
 
 // Cost-aware Anthropic adapter, the Claude counterpart of OpenAIService. The
 // internal AI route picks the adapter from the model name, so worker
@@ -123,6 +130,139 @@ export class AnthropicService {
     return (out.result as AnthropicChatResult | null) ?? null;
   }
 
+  /**
+   * A completion that may search the web with Anthropic's server-side web
+   * search tool, at most `maxSearches` times. Returns every page the
+   * searches returned, so the caller can refuse a source the model names
+   * that no search produced.
+   */
+  async webResearch(
+    input: WebResearchInput,
+    ctx: CostContext,
+  ): Promise<WebResearchResult | null> {
+    await this.client();
+    const out = await this.costControl.checkAndCall<
+      WebResearchInput & {
+        tokensIn: number;
+        tokensOut: number;
+        searches: number;
+      },
+      WebResearchResult
+    >({
+      provider: 'anthropic',
+      action: `web_research.${input.model}`,
+      payload: {
+        ...input,
+        // Search results come back as input tokens on the next turn, so the
+        // estimate allows for them on top of the prompt.
+        tokensIn: estimateTokensIn(input.messages) + input.maxSearches * 3000,
+        tokensOut: input.maxTokens ?? 4096,
+        searches: input.maxSearches,
+      },
+      context: ctx,
+      hints: input.workflow ? { workflow: input.workflow } : undefined,
+      execute: () => this.research(input),
+      computeActualCostUsd: (r) =>
+        priceFromTokens(input.model, r.tokensIn, r.tokensOut) +
+        r.searches * WEB_SEARCH_USD.anthropic,
+    });
+    return (out.result as WebResearchResult | null) ?? null;
+  }
+
+  private async research(input: WebResearchInput): Promise<WebResearchResult> {
+    const client = await this.client();
+    const system = input.messages
+      .filter((m) => m.role === 'system')
+      .map((m) => m.content)
+      .join('\n\n');
+    let messages: Anthropic.Beta.BetaMessageParam[] = input.messages
+      .filter(
+        (m): m is { role: 'user' | 'assistant'; content: string } =>
+          m.role !== 'system',
+      )
+      .map((m) => ({ role: m.role, content: m.content }));
+    const tool: Anthropic.Beta.BetaWebSearchTool20250305 = {
+      type: 'web_search_20250305',
+      name: 'web_search',
+      max_uses: input.maxSearches,
+      ...(input.allowedDomains?.length
+        ? { allowed_domains: input.allowedDomains }
+        : {}),
+    };
+
+    let text = '';
+    let tokensIn = 0;
+    let tokensOut = 0;
+    let searches = 0;
+    let model = input.model;
+    const sources: WebResearchSource[] = [];
+    // A long research turn can pause; it resumes by sending the paused
+    // content back. Three turns is far more than five searches need.
+    for (let turn = 0; turn < 3; turn++) {
+      let response: Anthropic.Beta.BetaMessage;
+      try {
+        response = await client.beta.messages.create({
+          model: input.model,
+          max_tokens: input.maxTokens ?? 4096,
+          ...(system ? { system } : {}),
+          messages,
+          tools: [tool],
+          ...(acceptsSampling(input.model) &&
+          typeof input.temperature === 'number'
+            ? { temperature: input.temperature }
+            : {}),
+        });
+      } catch (err) {
+        throw mapAnthropicError(err);
+      }
+      model = response.model;
+      tokensIn += response.usage.input_tokens;
+      tokensOut += response.usage.output_tokens;
+      searches += response.usage.server_tool_use?.web_search_requests ?? 0;
+      for (const block of response.content) {
+        if (
+          block.type === 'web_search_tool_result' &&
+          Array.isArray(block.content)
+        ) {
+          for (const r of block.content) {
+            sources.push({ url: r.url, title: r.title ?? null });
+          }
+        } else if (block.type === 'text') {
+          text += block.text;
+          for (const c of block.citations ?? []) {
+            if (c.type === 'web_search_result_location') {
+              sources.push({ url: c.url, title: c.title ?? null });
+            }
+          }
+        }
+      }
+      if (response.stop_reason !== 'pause_turn') {
+        if (response.stop_reason === 'refusal') {
+          this.logger.warn(
+            `Anthropic declined a ${input.model} research request`,
+          );
+        }
+        break;
+      }
+      messages = [
+        ...messages,
+        {
+          role: 'assistant',
+          content:
+            response.content as unknown as Anthropic.Beta.BetaContentBlockParam[],
+        },
+      ];
+    }
+    return {
+      content: text,
+      tokensIn,
+      tokensOut,
+      model,
+      searches,
+      sources: uniqueSources(sources),
+    };
+  }
+
   private async complete(
     input: AnthropicChatInput,
   ): Promise<AnthropicChatResult> {
@@ -161,27 +301,7 @@ export class AnthropicService {
           : {}),
       });
     } catch (err) {
-      // 429 covers rate limits and "credit balance is too low".
-      if (err instanceof Anthropic.RateLimitError) {
-        throw new IntegrationUnavailableException(
-          'anthropic',
-          'UPSTREAM_ERROR',
-          (err as Error).message,
-        );
-      }
-      // Bad credentials are a configuration problem, not a transient failure:
-      // surface them as 503 REJECTED_CREDENTIALS like the other adapters.
-      if (
-        err instanceof Anthropic.AuthenticationError ||
-        err instanceof Anthropic.PermissionDeniedError
-      ) {
-        throw new IntegrationUnavailableException(
-          'anthropic',
-          'REJECTED_CREDENTIALS',
-          err.message,
-        );
-      }
-      throw err;
+      throw mapAnthropicError(err);
     }
 
     if (response.stop_reason === 'refusal') {
@@ -206,6 +326,36 @@ export class AnthropicService {
       raw: response,
     };
   }
+}
+
+/**
+ * Rate limits and an empty credit balance (429) are an upstream state; bad
+ * credentials are a configuration problem, not a transient failure: both
+ * surface as 503s that name the provider, like the other adapters.
+ */
+function mapAnthropicError(err: unknown): Error {
+  // An empty credit balance can also come back as a 400.
+  const creditBalance =
+    (err as { status?: number } | null)?.status === 400 &&
+    /credit balance/i.test((err as Error).message ?? '');
+  if (err instanceof Anthropic.RateLimitError || creditBalance) {
+    return new IntegrationUnavailableException(
+      'anthropic',
+      'UPSTREAM_ERROR',
+      (err as Error).message,
+    );
+  }
+  if (
+    err instanceof Anthropic.AuthenticationError ||
+    err instanceof Anthropic.PermissionDeniedError
+  ) {
+    return new IntegrationUnavailableException(
+      'anthropic',
+      'REJECTED_CREDENTIALS',
+      err.message,
+    );
+  }
+  return err as Error;
 }
 
 // ~4 characters per token, the same heuristic the OpenAI adapter uses for

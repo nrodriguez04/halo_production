@@ -43,6 +43,8 @@ export interface ScoredBuyer {
   notes: string[];
   /** Why the buyer cannot receive this blast at all, when they cannot. */
   excluded?: string;
+  /** Buys in this city or ZIP, the price is in their range, and they replied before. */
+  proven?: boolean;
 }
 
 const norm = (v: unknown) =>
@@ -79,11 +81,14 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
 
     const locations = strings(prefs.locations);
     let outsideLocations = false;
+    let localMatch = false;
+    let priceInRange = false;
     if (locations.length === 0) {
       score += 10;
       notes.push('no location preference');
     } else if (locations.some((l) => l === city || l === zip)) {
       score += 40;
+      localMatch = true;
       notes.push('city match');
     } else if (locations.some((l) => l === state)) {
       score += 20;
@@ -110,6 +115,7 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
       const hi = Number.isFinite(max) ? max : Number.POSITIVE_INFINITY;
       if (price >= lo && price <= hi) {
         score += 30;
+        priceInRange = true;
         notes.push('price in range');
       } else if (price >= lo * 0.85 && price <= hi * 1.15) {
         score += 15;
@@ -138,7 +144,9 @@ export function scoreBuyers(ctx: DispositionContext): ScoredBuyer[] {
       : outsideLocations
         ? "outside the buyer's stated locations"
         : undefined;
-    return { buyer, score: Math.min(100, score), notes, excluded };
+    const proven =
+      !excluded && localMatch && priceInRange && buyer.history.replies > 0;
+    return { buyer, score: Math.min(100, score), notes, excluded, proven };
   });
 
   return scored.sort((a, b) => {
@@ -203,21 +211,39 @@ export function decisionFromOutput(
 ): AgentDecision {
   const byId = new Map(candidates.map((c) => [c.buyer.id, c]));
   const seen = new Set<string>();
-  const shortlist: BuyerShortlistEntry[] = [];
+  const picked: Array<Omit<BuyerShortlistEntry, 'rank'>> = [];
   for (const pick of out.shortlist) {
     const c = byId.get(pick.buyer_id);
     if (!c || seen.has(pick.buyer_id)) continue;
     seen.add(pick.buyer_id);
-    shortlist.push({
+    picked.push({
       buyerId: c.buyer.id,
       name: c.buyer.name,
-      rank: shortlist.length + 1,
       fit: pick.fit,
       reason: pick.reason,
       ruleScore: c.score,
     });
-    if (shortlist.length >= shortlistMax()) break;
   }
+  // A buyer who buys here, at this price, and has replied before always
+  // leads the list: the live eval had the model leave one out. The blast
+  // still waits for a person.
+  const isProven = (id: string) => byId.get(id)?.proven === true;
+  const added = candidates
+    .filter((c) => c.proven && !seen.has(c.buyer.id))
+    .map((c) => ({
+      buyerId: c.buyer.id,
+      name: c.buyer.name,
+      fit: 'strong' as const,
+      reason: `Buys here in this price range and replied ${c.buyer.history.replies === 1 ? 'once' : `${c.buyer.history.replies} times`} before (added by Halo's rules)`,
+      ruleScore: c.score,
+    }));
+  const shortlist: BuyerShortlistEntry[] = [
+    ...picked.filter((p) => isProven(p.buyerId)),
+    ...added,
+    ...picked.filter((p) => !isProven(p.buyerId)),
+  ]
+    .slice(0, shortlistMax())
+    .map((p, i) => ({ ...p, rank: i + 1 }));
 
   const actions: AgentAction[] = [
     { type: 'rank_buyers', shortlist, consideredCount },

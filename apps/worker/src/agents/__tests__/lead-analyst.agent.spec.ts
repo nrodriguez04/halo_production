@@ -5,6 +5,7 @@ import {
   LeadAnalystAgent,
   decisionFromHardRule,
   hardRule,
+  strongSignals,
 } from '../lead-analyst.agent';
 
 function ctx(
@@ -106,6 +107,34 @@ describe('hardRule', () => {
   });
 });
 
+describe('strongSignals', () => {
+  const now = Date.parse('2026-10-24T00:00:00Z');
+  const sale = (lastSaleDate: string) => [
+    { provider: 'attom', endpoint: 'x', summary: { lastSaleDate, ownerOccupied: false } },
+  ];
+
+  it('counts each fact once: an absentee owner out of state is one signal', () => {
+    const s = strongSignals(ctx({ sources: sale('2017-05-22') }, { tags: ['owner:absentee', 'owner:out_of_state'] }), now);
+    expect(s).toEqual({ signals: ['absentee owner'], veryStrong: false });
+  });
+
+  it('reads long ownership from the last sale date, at 15 years', () => {
+    expect(strongSignals(ctx({ sources: sale('2011-10-01') }), now).signals).toContain('owned 15+ years');
+    expect(strongSignals(ctx({ sources: sale('2012-02-14') }), now).signals).not.toContain('owned 15+ years');
+  });
+
+  it('treats an expired listing, a foreclosure and a tax-delinquent absentee owner as very strong', () => {
+    expect(strongSignals(ctx({}, { tags: ['listing:expired'] }), now).veryStrong).toBe(true);
+    expect(strongSignals(ctx({}, { tags: ['owner:occupied', 'foreclosure'] }), now).veryStrong).toBe(true);
+    expect(strongSignals(ctx({}, { tags: ['owner:absentee', 'tax:delinquent'] }), now).veryStrong).toBe(true);
+    expect(strongSignals(ctx({}, { tags: ['owner:occupied', 'tax:delinquent'] }), now).veryStrong).toBe(false);
+    expect(strongSignals(ctx({}, { tags: ['listing:withdrawn'] }), now)).toEqual({
+      signals: ['listing ended unsold'],
+      veryStrong: false,
+    });
+  });
+});
+
 describe('decisionFromHardRule', () => {
   it('turns a disqualify into score, note and an ungated transition', () => {
     const d = decisionFromHardRule({
@@ -181,7 +210,7 @@ describe('LeadAnalystAgent.run', () => {
   it('maps a qualified reply to a gated transition plus first-touch drafts', async () => {
     chat.mockResolvedValue(completion(qualifiedReply));
 
-    const res = await agent().run(ctx(), 'acct', 'run-1');
+    const res = await agent().run(ctx({}, { tags: ['owner:absentee', 'lien'] }), 'acct', 'run-1');
 
     expect(res.costUsd).toBeGreaterThan(0);
     expect(res.decision).toMatchObject({
@@ -216,6 +245,17 @@ describe('LeadAnalystAgent.run', () => {
         gated: true,
       },
     ]);
+  });
+
+  it('holds a qualified the record does not support, and drops its drafts', async () => {
+    chat.mockResolvedValue(completion(qualifiedReply));
+
+    const res = await agent().run(ctx(), 'acct', 'run-1');
+
+    expect(res.decision.recommendation).toBe('hold');
+    expect(res.decision.actions.map((a) => a.type)).toEqual(['set_lead_score', 'append_note']);
+    expect(res.decision.actions[0]).toEqual({ type: 'set_lead_score', score: 55 });
+    expect(res.decision.rationale).toContain('one strong signal (absentee owner)');
   });
 
   it('maps a model disqualify to a gated transition, never an immediate one', async () => {

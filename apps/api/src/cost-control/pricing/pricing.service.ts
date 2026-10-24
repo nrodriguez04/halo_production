@@ -12,7 +12,7 @@ interface PricingRule {
   providerKey: string;
   action: string;
   unitCostUsd: number;
-  unit: string; // 'per_call' | 'per_1k_input_tokens' | 'per_1k_output_tokens' | 'per_record' | 'per_segment'
+  unit: string; // 'per_call' | 'per_1k_input_tokens' | 'per_1k_output_tokens' | 'per_record' | 'per_segment' | 'per_search'
   pricePer: number;
 }
 
@@ -98,6 +98,9 @@ function unitsForRule(unit: string, meta: Record<string, unknown>): number {
       return (meta.recordCount as number) ?? 1;
     case 'per_segment':
       return (meta.segmentCount as number) ?? 1;
+    case 'per_search':
+      // A web-research call: the preflight sends the most it may make.
+      return (meta.searches as number) ?? 0;
     default:
       return 1;
   }
