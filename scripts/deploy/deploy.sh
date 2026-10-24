@@ -37,7 +37,9 @@ say "Deploying $(git rev-parse --short HEAD) ($(git log -1 --pretty=%s | cut -c1
 export BUILD_SHA="$(git rev-parse --short=12 HEAD)"
 
 say "Building images"
-"${COMPOSE[@]}" build --pull api web worker
+# migrate has an image of its own (halo-migrate). Left out, it kept the
+# migrations of the first deploy, and a new migration never ran (2026-10-24).
+"${COMPOSE[@]}" build --pull api web worker migrate
 
 say "Starting data services"
 "${COMPOSE[@]}" up -d postgres redis minio
@@ -57,9 +59,16 @@ fi
 
 if [ "$MIGRATE" = "1" ]; then
   say "Running migrations"
-  if ! "${COMPOSE[@]}" run --rm migrate; then
+  migrate_log="$(mktemp)"
+  if ! "${COMPOSE[@]}" run --rm -T migrate < /dev/null 2>&1 | tee "$migrate_log"; then
     die "Migration failed; the previous containers are still running. See docs/deployment-runbook.md section 3."
   fi
+  # The image must hold every migration in this checkout, or one is skipped
+  # without an error.
+  found="$(awk '/^[0-9]+ migrations? found/ {print $1; exit}' "$migrate_log")"
+  expected="$(find apps/api/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  rm -f "$migrate_log"
+  [ "$found" = "$expected" ] || die "The migrate image found ${found:-no} migrations; this checkout has $expected. Rebuild it: docker compose -f docker-compose.prod.yml build migrate"
 else
   say "Skipping migrations (--no-migrate)"
 fi
@@ -78,6 +87,12 @@ done
   "${COMPOSE[@]}" logs --tail=80 api
   die "api did not come up"
 }
+
+say "Waiting for the worker"
+for _ in $(seq 1 45); do
+  [ "$("${COMPOSE[@]}" ps --format '{{.Health}}' worker 2>/dev/null)" = "healthy" ] && break
+  sleep 2
+done
 
 say "Pruning old images"
 docker image prune -f >/dev/null || true
