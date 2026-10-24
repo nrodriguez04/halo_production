@@ -130,8 +130,25 @@ export type Env = z.infer<typeof envSchema>;
 
 let _env: Env;
 
+/**
+ * An empty variable counts as unset. docker-compose.prod.yml passes many
+ * optional settings through as `${NAME:-}`, so an unset one arrives as "",
+ * which an optional enum or URL would otherwise reject and stop the api
+ * from starting (MLS_PROVIDER did on the first production deploy).
+ */
+export function presentEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      (e): e is [string, string] =>
+        typeof e[1] === 'string' && e[1].trim() !== '',
+    ),
+  );
+}
+
 export function validateEnv(): Env {
-  const result = envSchema.safeParse(process.env);
+  const result = envSchema.safeParse(presentEnv());
   if (!result.success) {
     const formatted = result.error.issues
       .map((i) => `  ${i.path.join('.')}: ${i.message}`)
