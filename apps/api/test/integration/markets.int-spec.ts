@@ -589,6 +589,7 @@ describeDb('markets (synthetic fixtures, real database)', () => {
         activation_steps: [],
         risks: [],
         rationale: 'SYNTHETIC',
+        web_sources: [],
       },
       {
         state: 'FL',
