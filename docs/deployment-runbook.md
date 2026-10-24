@@ -49,10 +49,18 @@ with your domain in all three hostnames), then:
 scripts/deploy/deploy.sh             # build images, run migrations, start everything, run the smoke checks
 ```
 
-What `deploy.sh` does, in order: `docker compose pull/build`, starts
-Postgres/Redis/RustFS and waits for health, runs the `migrate` container
-(`prisma migrate deploy`), starts api/web/worker/caddy, waits for the api
-health endpoint, then runs `scripts/deploy/smoke.sh`.
+What `deploy.sh` does, in order: `docker compose pull/build` (api, web,
+worker and migrate), starts Postgres/Redis/RustFS and waits for health, runs
+the `migrate` container (`prisma migrate deploy`), stops if that image does
+not hold every migration in the checkout, starts api/web/worker/caddy, waits
+for the api health endpoint and the worker's health check, then runs
+`scripts/deploy/smoke.sh`.
+
+`migrate` is built from the api's Dockerfile but is an image of its own
+(`halo-migrate`). Until 2026-10-24 the deploy did not rebuild it, so it kept
+the first deploy's migrations and skipped every later one without an error.
+If you run migrations by hand, build it first:
+`docker compose -f docker-compose.prod.yml build migrate`.
 
 The web image bakes `NEXT_PUBLIC_API_URL`, `DESCOPE_PROJECT_ID`,
 `NEXT_PUBLIC_DESCOPE_FLOW_ID` and `DESCOPE_BASE_URL` into the browser bundle
