@@ -34,11 +34,11 @@ const TabsTrigger = React.forwardRef<
       'relative inline-flex items-center justify-center whitespace-nowrap rounded-t-md px-3 py-2 text-body font-medium',
       'text-muted-foreground transition-colors duration-fast ease-out-expo',
       'hover:text-foreground',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+      'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
       'disabled:pointer-events-none disabled:opacity-50',
       'data-[state=active]:text-foreground',
       // Underline indicator -- always rendered, transitions in scaleX.
-      'after:pointer-events-none after:absolute after:bottom-[-1px] after:left-2 after:right-2 after:h-[2px] after:rounded-full',
+      'after:pointer-events-none after:absolute after:-bottom-px after:left-2 after:right-2 after:h-[2px] after:rounded-full',
       'after:bg-primary after:scale-x-0 after:origin-center',
       'after:transition-transform after:duration-base after:ease-out-expo',
       'data-[state=active]:after:scale-x-100',
@@ -57,7 +57,7 @@ const TabsContent = React.forwardRef<
     ref={ref}
     className={cn(
       'mt-4 ring-offset-background',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+      'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
       'data-[state=active]:animate-fade-up',
       className,
     )}

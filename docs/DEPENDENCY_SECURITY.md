@@ -4,7 +4,7 @@ Production dependency audit (`npm audit --omit=dev`), 2026-10-22:
 - **Before:** 52 advisories (3 critical, 32 high, 17 moderate).
 - **After:** 14 (0 critical, 5 high, 9 moderate).
 
-2026-10-24, after Nest 11 (and Express 5): 6 (2 high, 4 moderate), every one in the table below. Two advisories were new since the 22nd: multer 2.4.0, which Nest 11 pins, and zod.
+2026-10-24, after Nest 11 (with Express 5) and Tailwind 4: 2 high, both zod (zod itself and `openai`, which depends on it), in the table below. Two advisories were new since the 22nd: multer 2.4.0, which Nest 11 pins (fixed), and zod.
 
 Every remaining advisory is listed below with the reason it is not exploitable here and what fixes it.
 
@@ -24,6 +24,7 @@ Every remaining advisory is listed below with the reason it is not exploitable h
 | `@nestjs/*` (api, worker) | 10.4.22 → 11.2.8, Express 4 → 5 | SSE event injection (GHSA-36xv-jgw5-4q75) and, through `@nestjs/common`, `file-type` (ZIP bomb, ASF loop) |
 | `multer` (override, now exact) | Nest 11's 2.4.0 → 2.5.0 | DoS through a pending asynchronous fileFilter after request teardown (GHSA-q7qp-rjg7-q26m). Nest 11 pins 2.4.0 exactly; the root override holds 2.5.0, and the api depends on it directly (it imports `diskStorage`). |
 | `body-parser` | override removed | Express 5 brings body-parser 2.4, which has the fixes the 1.20.9 pin was for |
+| `tailwindcss` (web, build only) | 3.4.19 → 4.3.3 | The chokidar, fast-glob, micromatch, braces, postcss-nested and postcss-selector-parser chain (5 high, 3 moderate), none of which ships in an image. `autoprefixer` goes: Tailwind 4 prefixes itself. |
 | In-range (`npm audit fix`) | — | axios (SSRF, prototype pollution), form-data (CRLF injection), proxy-addr (IP spoofing, critical), ws, compression, path-to-regexp, js-cookie and the Descope web SDK chain, nanoid, fast-xml-builder, source-map-js |
 
 **Overrides live in the root `package.json`.** They keep fixes inside the major versions the frameworks expect. Remove an override once the framework that pins the old version ships the fix itself.
@@ -37,7 +38,6 @@ Every remaining advisory is listed below with the reason it is not exploitable h
 
 | Advisories | Severity | Reachable here? | Fix |
 |---|---|---|---|
-| `tailwindcss` 3 → chokidar, fast-glob, micromatch, braces; `postcss-nested`, `postcss-selector-parser`, `tailwindcss-animate` | 5 high, 3 moderate | **No.** Tailwind runs only during `next build`, over the repository's own source. None of it ships in the runtime images, and no request reaches it. | Tailwind 4, a CSS-first configuration rewrite. Do it with a design pass. |
 | `zod` < 4.6.6 (GHSA-mrhx-c7xc-m3w5: memory exhaustion validating an oversized constrained collection), and through it `openai` 4.x | high | **Limited.** Every request body is capped at 512 kB before any schema runs, and the api's collections carry `.max()` bounds, so no request can hold a collection large enough to matter. Agent replies are model output of a few kB. | zod 4: a schema API migration across `packages/shared`, the api and the worker, with `openai` 6. Not done with the framework upgrades. |
 
 **Re-check:** `npm audit --omit=dev`. Before upgrading the frameworks themselves, read the reachability column: a new advisory on these chains may change the answer.
@@ -64,5 +64,13 @@ Specific checks:
   - A boot of the built api registers all 281 routes with no warning (database unreachable on purpose, so it stops at the connection); every unit suite and lint pass.
   - Express 5's query parser is `simple`: nested keys (`a[b]=1`) are no longer objects. The web sends flat parameters only, and a repeated key is still an array.
   - **Not taken: Nest 12.** It is ESM-only (`"type": "module"`); the api, the worker and their Jest setup are CommonJS. Moving is its own migration.
+
+- **Tailwind 4** (2026-10-24), with the official upgrade tool (`@tailwindcss/upgrade`): the theme moved from `tailwind.config.js` into `@theme` in `app/globals.css`, PostCSS uses `@tailwindcss/postcss`, and 42 files had classes renamed (`outline-none` → `outline-hidden`, `flex-shrink-0` → `shrink-0`, `bg-gradient-to-*` → `bg-linear-to-*`, `aria-[invalid=true]:` → `aria-invalid:` and the like).
+  - The tool also renamed the `outline` variant of Button and Badge, a prop value and not a class, to `outline-solid` in 19 places; reverted, and `next build` type-checks it.
+  - Checked by computed style, not by eye: before the upgrade every element's styles (38 properties) were recorded on 11 pages (1,689 elements: the landing and sign-in pages, the dashboard, leads, documents, templates, a market, the funnel, the agents, integrations and communications settings pages), then compared after it. What differs and why it is the same picture: shadows gain transparent layers; colors with an opacity are computed in oklab, and Tailwind's own palette (the blues of an info alert) in oklch, at the same values to within a few RGB points; `rounded-full` is an infinite radius; transforms are the `scale` and `translate` properties; table cells and options lose the browser's 1-2 px default padding. Two differences were real and are fixed in `globals.css`:
+    - Tailwind 4 puts `space-y` on the bottom of every child but the last. A `<label>` is inline and ignores vertical margin, so the gap under every label over an input vanished (a 68 px field became 64). The rules for the `space-y` values the app uses are Tailwind 3's again; prefer flex with gap in new code.
+    - Buttons lost the pointer cursor (Tailwind 4's reset); it is back.
+  - The brand tokens resolve to the app's own values (`--color-primary` is `hsl(142 71% 45%)`, `--radius-lg` `0.5rem`); a theme token named like one of the app's variables (`--text-h1: var(--text-h1)`) takes the app's value, which is declared later.
+  - `next build` passes; the lock carries the Linux (musl) builds of `@tailwindcss/oxide` and `lightningcss` the Alpine image needs.
 
 **One behavior change:** nodemailer 10 reads parentheses in a display name as an RFC 5322 comment. `Halo (Texas) <deals@x>` arrives as `Halo`; quote the name to keep them (`.env.prod.example`).

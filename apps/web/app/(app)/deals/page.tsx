@@ -121,7 +121,7 @@ export default function DealsPage() {
               key={deal.id}
               href={`/deals/${deal.id}`}
               prefetch
-              className="block animate-fade-up rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="block animate-fade-up rounded-lg focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               style={{ animationDelay: staggerDelay(i, reduced, 30) }}
             >
               <Card variant="interactive" className="group">

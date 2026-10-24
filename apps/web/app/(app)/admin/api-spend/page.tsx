@@ -406,7 +406,7 @@ export default function ApiSpendPage() {
                         className={cn(
                           'flex w-full items-center justify-between rounded-md border border-border bg-secondary/40 p-3 text-left',
                           'transition-colors duration-fast hover:bg-secondary/70',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                          'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                         )}
                       >
                         <div className="flex items-center gap-3">

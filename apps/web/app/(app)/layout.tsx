@@ -140,7 +140,7 @@ function NavLink({
       className={cn(
         'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
         'transition-[background-color,color,padding] duration-fast ease-out-expo',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+        'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
         active
           ? 'bg-primary/10 text-primary'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -234,7 +234,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Link
               href="/dashboard"
               aria-label="Hålo dashboard"
-              className="flex items-center gap-2 rounded-md px-1 py-0.5 transition-opacity duration-fast hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              className="flex items-center gap-2 rounded-md px-1 py-0.5 transition-opacity duration-fast hover:opacity-80 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             >
               <Logo height={26} priority />
             </Link>
@@ -246,7 +246,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 className={cn(
                   'rounded-md p-1.5 text-muted-foreground',
                   'transition-colors duration-fast hover:bg-muted hover:text-foreground',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+                  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
                 )}
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 aria-expanded={!collapsed}
@@ -309,7 +309,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   className={cn(
                     'flex w-full items-center justify-center rounded-md p-2 text-muted-foreground',
                     'transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+                    'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
                   )}
                   aria-label="Sign out"
                 >
@@ -324,7 +324,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               className={cn(
                 'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground',
                 'transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+                'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
               )}
             >
               <LogOut size={18} aria-hidden />

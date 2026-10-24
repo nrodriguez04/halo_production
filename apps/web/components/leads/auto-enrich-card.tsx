@@ -136,7 +136,7 @@ export function AutoEnrichCard() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') saveCap();
                   }}
-                  className="max-w-[8rem] font-mono"
+                  className="max-w-32 font-mono"
                 />
                 <Button size="sm" variant="outline" onClick={saveCap} disabled={save.isPending}>
                   Save

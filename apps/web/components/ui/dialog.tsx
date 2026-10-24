@@ -18,7 +18,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/70 backdrop-blur-sm',
+      'fixed inset-0 z-50 bg-black/70 backdrop-blur-xs',
       'data-[state=open]:animate-fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
       className,
     )}
@@ -33,7 +33,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const dialogContentVariants = cva(
   cn(
     'fixed z-50 grid w-full gap-4 border border-border bg-card text-card-foreground shadow-overlay',
-    'focus:outline-none',
+    'focus:outline-hidden',
   ),
   {
     variants: {
@@ -50,7 +50,7 @@ const dialogContentVariants = cva(
         ),
         left: cn(
           'left-0 top-0 h-full max-w-md p-6',
-          'data-[state=open]:animate-slide-from-right [animation-direction:reverse]',
+          'data-[state=open]:animate-slide-from-right direction-reverse',
           'data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left',
         ),
       },
@@ -87,7 +87,7 @@ const DialogContent = React.forwardRef<
             'absolute right-4 top-4 rounded-md p-1 text-muted-foreground opacity-70',
             'transition-[opacity,background-color,color] duration-fast ease-out-expo',
             'hover:bg-muted hover:text-foreground hover:opacity-100',
-            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
+            'focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
             'disabled:pointer-events-none',
           )}
           aria-label="Close"

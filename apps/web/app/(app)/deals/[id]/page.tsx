@@ -359,7 +359,7 @@ export default function DealDetailPage() {
                     <li key={ev.id} className="relative">
                       <span
                         aria-hidden
-                        className="absolute -left-[11px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-primary shadow-glow"
+                        className="absolute left-[-11px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-primary shadow-glow"
                       />
                       <div className="rounded-md border border-border bg-card/60 px-3 py-2.5">
                         <div className="flex items-baseline justify-between gap-3">

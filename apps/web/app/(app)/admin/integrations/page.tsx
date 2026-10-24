@@ -589,7 +589,7 @@ export default function IntegrationsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{failure?.consentUrl ? `${failure?.name} needs your consent` : `${failure?.name} connection failed`}</DialogTitle>
-            <DialogDescription className="break-words">{failure?.message}</DialogDescription>
+            <DialogDescription className="wrap-break-word">{failure?.message}</DialogDescription>
           </DialogHeader>
           {failure?.consentUrl && (
             <ol className="list-decimal space-y-1 pl-5 text-body text-muted-foreground">

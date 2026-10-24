@@ -281,7 +281,7 @@ export function RouteDebugger({ pathname }: { pathname: string }) {
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className="flex items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-2 rounded-md text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Bug size={16} className="text-primary" aria-hidden />
           <CardTitle>Debugger</CardTitle>
@@ -426,7 +426,7 @@ function Row({ label, value, tone }: { label: string; value?: string; tone?: Ton
       <dt className="text-muted-foreground">{label}</dt>
       <dd
         className={cn(
-          'min-w-0 break-words font-mono text-foreground',
+          'min-w-0 wrap-break-word font-mono text-foreground',
           tone === 'ok' && 'text-emerald-400',
           tone === 'warn' && 'text-amber-400',
           tone === 'bad' && 'text-red-400',

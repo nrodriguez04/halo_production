@@ -1,6 +1,233 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@plugin 'tailwindcss-animate';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --text-display: var(--text-display);
+  --text-display--line-height: var(--text-display-lh);
+  --text-display--letter-spacing: -0.02em;
+  --text-h1: var(--text-h1);
+  --text-h1--line-height: var(--text-h1-lh);
+  --text-h1--letter-spacing: -0.015em;
+  --text-h2: var(--text-h2);
+  --text-h2--line-height: var(--text-h2-lh);
+  --text-h2--letter-spacing: -0.01em;
+  --text-h3: var(--text-h3);
+  --text-h3--line-height: var(--text-h3-lh);
+  --text-h3--letter-spacing: -0.005em;
+  --text-body: var(--text-body);
+  --text-body--line-height: var(--text-body-lh);
+  --text-caption: var(--text-caption);
+  --text-caption--line-height: var(--text-caption-lh);
+
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --shadow-3: var(--shadow-3);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-glow: var(--shadow-glow);
+
+  --transition-duration-fast: var(--duration-fast);
+  --transition-duration-base: var(--duration-base);
+  --transition-duration-slow: var(--duration-slow);
+
+  --ease-out-expo: var(--ease-out);
+  --ease-smooth: var(--ease-in-out);
+  --ease-spring: var(--ease-spring);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-shimmer: shimmer var(--duration-shimmer) linear infinite;
+  --animate-fade-in: fade-in var(--duration-base) var(--ease-out) both;
+  --animate-fade-up: fade-up var(--duration-slow) var(--ease-out) both;
+  --animate-slide-down: slide-down var(--duration-base) var(--ease-out) both;
+  --animate-slide-from-right: slide-from-right var(--duration-slow)
+    var(--ease-out) both;
+  --animate-scale-in: scale-in var(--duration-base) var(--ease-spring) both;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-from-right {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      scale: 0.96;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+}
+
+/*
+  Tailwind 3's space-y, kept. Tailwind 4 moved the space to the bottom of
+  every child but the last; an inline child (a <label>, a <span>) ignores
+  vertical margin, so the gap under every label over an input vanished.
+  These rules undo Tailwind 4's margin and put Tailwind 3's back: the top of
+  each visible child after the first. Zero specificity, after the built-in
+  utilities, so a child's own mt-* or mb-* still wins. Only the values the
+  app uses are listed; prefer flex with gap in new code.
+*/
+@layer utilities {
+  :where(
+    .space-y-0 > :not(:last-child),
+    .space-y-0\.5 > :not(:last-child),
+    .space-y-1 > :not(:last-child),
+    .space-y-1\.5 > :not(:last-child),
+    .space-y-2 > :not(:last-child),
+    .space-y-3 > :not(:last-child),
+    .space-y-4 > :not(:last-child),
+    .space-y-5 > :not(:last-child),
+    .space-y-6 > :not(:last-child)
+  ) {
+    margin-bottom: 0;
+  }
+  :where(.space-y-0 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 0);
+  }
+  :where(.space-y-0\.5 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 0.5);
+  }
+  :where(.space-y-1 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 1);
+  }
+  :where(.space-y-1\.5 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 1.5);
+  }
+  :where(.space-y-2 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 2);
+  }
+  :where(.space-y-3 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 3);
+  }
+  :where(.space-y-4 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 4);
+  }
+  :where(.space-y-5 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 5);
+  }
+  :where(.space-y-6 > :not([hidden]) ~ :not([hidden])) {
+    margin-top: calc(var(--spacing) * 6);
+  }
+}
+
+/* Tailwind 3's reset gave buttons a pointer; Tailwind 4's leaves the default arrow. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 @layer base {
   :root {
@@ -33,8 +260,10 @@
 
     /* -------------------------------------------------------------------
      * Type scale (font-size / line-height pairs).
-     * Used by `text-display`, `text-h1`, ... utilities defined in
-     * `tailwind.config.js`.
+     * Used by `text-display`, `text-h1`, ... utilities defined in the
+     * @theme block above. Where a theme token has the same name as one of
+     * these (`--text-display: var(--text-display)`), this layer comes
+     * later, so its value is the one in effect.
      * ----------------------------------------------------------------- */
     --text-display: 2.75rem;        /* 44px */
     --text-display-lh: 1.15;
