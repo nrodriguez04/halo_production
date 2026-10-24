@@ -44,8 +44,14 @@ const QueueAgentRunSchema = z
     /** Defaults to the agent's own entity (AGENT_ENTITY). */
     entityType: z.enum(AGENT_ENTITY_TYPES).optional(),
     entityId: z.string().trim().min(1).max(64),
+    /** Market Expansion only: let the run search the web (each search is priced). */
+    webResearch: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine((d) => !d.webResearch || d.agent === 'market_expansion', {
+    message: 'Only the Market Expansion agent searches the web',
+    path: ['webResearch'],
+  });
 
 /**
  * The entity a manual run is for, checked against what the agent works on.
@@ -237,6 +243,7 @@ export class AgentController {
       trigger: 'manual',
       triggerEventId: `manual:${Date.now()}`,
       actorId: userId ?? null,
+      ...(dto.webResearch ? { options: { webResearch: true } } : {}),
     });
     return { queued };
   }

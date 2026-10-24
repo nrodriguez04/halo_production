@@ -24,6 +24,7 @@ import {
   AgentRunOpenDto,
   AgentDecisionDto,
   MarketAgentContextDto,
+  WebResearchDto,
 } from './dto/internal.dto';
 import { MessageDispatchService } from '../communications/message-dispatch.service';
 import { LeadSkipTraceService } from '../skip-trace/lead-skip-trace.service';
@@ -114,6 +115,34 @@ export class InternalController {
           model: result.model,
         }
       : null;
+  }
+
+  /**
+   * A completion that may search the web, for the Market Expansion agent's
+   * research (docs/agent-design.md s3.7). Same cost control as a chat
+   * completion, with each search priced on top; returns the pages the
+   * searches produced so the worker can refuse any other source.
+   */
+  @Post('ai/web-research')
+  async webResearch(
+    @CurrentAccountId() accountId: string,
+    @Body() dto: WebResearchDto,
+  ) {
+    const request = {
+      model: dto.model,
+      messages: dto.messages,
+      temperature: dto.temperature,
+      maxTokens: dto.maxTokens,
+      workflow: dto.workflow,
+      maxSearches: dto.maxSearches,
+      allowedDomains: dto.allowedDomains,
+    };
+    const ctx = this.context(accountId, dto);
+    return (
+      (aiProviderForModel(dto.model) === 'anthropic'
+        ? await this.anthropic.webResearch(request, ctx)
+        : await this.openai.webResearch(request, ctx)) ?? null
+    );
   }
 
   /**

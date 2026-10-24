@@ -167,6 +167,33 @@ export function chatCompletion(
   });
 }
 
+export interface WebResearchResponse extends ChatCompletionResponse {
+  /** Searches the provider ran. */
+  searches: number;
+  /** The pages those searches returned. */
+  sources: { url: string; title: string | null }[];
+}
+
+/**
+ * A completion that may search the web (the api's ai/web-research): the
+ * same cost control as chatCompletion, each search priced on top.
+ */
+export function webResearch(
+  accountId: string,
+  input: {
+    model: string;
+    messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+    temperature?: number;
+    maxTokens?: number;
+    maxSearches: number;
+    allowedDomains?: string[];
+  } & CostAttribution,
+): Promise<WebResearchResponse> {
+  return postInternal<WebResearchResponse>('ai/web-research', accountId, {
+    ...input,
+  });
+}
+
 export type MessageSendReceipt =
   | {
       channel: 'sms';

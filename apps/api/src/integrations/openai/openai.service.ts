@@ -4,6 +4,13 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
+import {
+  WEB_SEARCH_USD,
+  uniqueSources,
+  type WebResearchInput,
+  type WebResearchResult,
+  type WebResearchSource,
+} from '../web-research.types';
 
 // Cost-aware OpenAI adapter. Both api routes and worker processors call into
 // this single service so every chat completion is recorded in
@@ -107,6 +114,109 @@ export class OpenAIService {
         priceFromTokens(input.model, result.tokensIn, result.tokensOut),
     });
     return (out.result as ChatCompletionResult | null) ?? null;
+  }
+
+  /**
+   * A completion that may search the web, through the Responses API's
+   * web_search_preview tool. The preview tool takes no search limit or
+   * domain list, so the preflight assumes `maxSearches` and the caller
+   * judges the pages; the sources are the URLs the reply cites from its
+   * searches.
+   */
+  async webResearch(
+    input: WebResearchInput,
+    ctx: CostContext,
+  ): Promise<WebResearchResult | null> {
+    const client = await this.client();
+    const out = await this.costControl.checkAndCall<
+      WebResearchInput & {
+        tokensIn: number;
+        tokensOut: number;
+        searches: number;
+      },
+      WebResearchResult
+    >({
+      provider: 'openai',
+      action: `web_research.${input.model}`,
+      payload: {
+        ...input,
+        tokensIn: estimateTokensIn(input.messages),
+        tokensOut: input.maxTokens ?? 1024,
+        searches: input.maxSearches,
+      },
+      context: ctx,
+      hints: input.workflow ? { workflow: input.workflow } : undefined,
+      execute: async () => {
+        const instructions = input.messages
+          .filter((m) => m.role === 'system')
+          .map((m) => m.content)
+          .join('\n\n');
+        try {
+          const r = await client.responses.create({
+            model: input.model,
+            ...(instructions ? { instructions } : {}),
+            input: input.messages
+              .filter((m) => m.role !== 'system')
+              .map((m) => ({
+                role: m.role as 'user' | 'assistant',
+                content: m.content,
+              })),
+            tools: [
+              { type: 'web_search_preview', search_context_size: 'medium' },
+            ],
+            // A JSON reply carries no citations, so ask for each search's
+            // own list of pages (newer than this SDK's types).
+            include: [
+              'web_search_call.action.sources',
+            ] as unknown as OpenAI.Responses.ResponseIncludable[],
+            ...(typeof input.temperature === 'number'
+              ? { temperature: input.temperature }
+              : {}),
+            ...(input.maxTokens ? { max_output_tokens: input.maxTokens } : {}),
+          });
+          const sources: WebResearchSource[] = [];
+          let searches = 0;
+          for (const item of r.output) {
+            if (item.type === 'web_search_call') {
+              searches++;
+              const action = (
+                item as unknown as {
+                  action?: {
+                    sources?: Array<{ url?: string; title?: string }>;
+                  };
+                }
+              ).action;
+              for (const s of action?.sources ?? []) {
+                if (s.url) sources.push({ url: s.url, title: s.title ?? null });
+              }
+            }
+            if (item.type !== 'message') continue;
+            for (const part of item.content) {
+              if (part.type !== 'output_text') continue;
+              for (const a of part.annotations) {
+                if (a.type === 'url_citation') {
+                  sources.push({ url: a.url, title: a.title || null });
+                }
+              }
+            }
+          }
+          return {
+            content: r.output_text ?? '',
+            tokensIn: r.usage?.input_tokens ?? 0,
+            tokensOut: r.usage?.output_tokens ?? 0,
+            model: r.model,
+            searches,
+            sources: uniqueSources(sources),
+          };
+        } catch (err) {
+          throw mapOpenAIError(err);
+        }
+      },
+      computeActualCostUsd: (r) =>
+        priceFromTokens(input.model, r.tokensIn, r.tokensOut) +
+        r.searches * WEB_SEARCH_USD.openai,
+    });
+    return (out.result as WebResearchResult | null) ?? null;
   }
 }
 

@@ -151,15 +151,23 @@ describe('grading', () => {
     );
   });
 
-  it('flags an underwriter offer above its own MAO', async () => {
+  const economics = (r: CaseResult) =>
+    r.decision?.actions.find((a) => a.type === 'set_deal_economics') as
+      | { mao: number | null; offerHigh: number | null }
+      | undefined;
+
+  it('caps an underwriter offer above its own MAO before it is recorded', async () => {
     const underwriter = fileOf('deal_underwriter');
     const c = caseOf(underwriter, 'memphis-ranch');
     const reply = {
-      ...(c.reply as Record<string, unknown>),
+      ...replyObject(c),
       offer_high: 90000,
     };
     const r = await offline(underwriter, { ...c, reply });
-    expect(failures(r).join('\n')).toContain('offer range stays under the MAO');
+    expect(failures(r)).toEqual([]);
+    const e = economics(r);
+    expect(e?.offerHigh).toBe(e?.mao);
+    expect(r.decision?.rationale).toContain('offer range capped at the MAO');
   });
 
   it('flags a buyer blast that invents a figure', async () => {
@@ -200,16 +208,16 @@ describe('grading', () => {
     }
   });
 
-  it('reports an Underwriter MAO that ignores the deal fee as a detail', async () => {
+  it("recomputes an Underwriter MAO that ignores the deal's fee", async () => {
     const underwriter = fileOf('deal_underwriter');
     const c = caseOf(underwriter, 'tenant-fee');
     // MAO computed with the default $10,000 fee instead of the deal's $15,000.
-    const reply = { ...(c.reply as Record<string, unknown>), mao: 78400 };
+    const reply = { ...replyObject(c), mao: 78400 };
     const r = await offline(underwriter, { ...c, reply });
     expect(r.decisionAgrees).toBe(true);
-    expect(failures(r)).toContain(
-      'detail: MAO = ARV x 0.70 - repairs - the deal fee (MAO 78400, formula gives 73400 with a 15000 fee)',
-    );
+    expect(failures(r)).toEqual([]);
+    expect(economics(r)?.mao).toBe(73400);
+    expect(r.decision?.rationale).toContain('MAO $78,400 recomputed as $73,400');
   });
 
   it("flags a buyer reply that shows the seller's price or accepts an offer", async () => {

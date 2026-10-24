@@ -14,9 +14,11 @@ import {
   type MarketExpansionOutput,
   type MarketPolicyContent,
   type PolicySource,
+  type WebPage,
+  numberWebPages,
 } from '@halo/shared';
-import { estimateAiCostUsd } from '../ai-model';
-import { chatCompletion } from '../internal-api.client';
+import { estimateAiCostUsd, webSearchCostUsd } from '../ai-model';
+import { chatCompletion, webResearch } from '../internal-api.client';
 import type { MarketExpansionContext } from './market-context';
 import { AgentOutputError, type LeadAnalystResult } from './lead-analyst.agent';
 
@@ -36,6 +38,7 @@ export interface MarketExpansionHardRule {
  */
 export function hardRule(
   ctx: MarketExpansionContext,
+  opts: { webResearch?: boolean } = {},
 ): MarketExpansionHardRule | null {
   const m = ctx.market;
   if (m.requestedStatus === 'BLOCKED' || m.requestedStatus === 'RESTRICTED') {
@@ -56,10 +59,11 @@ export function hardRule(
       reason: `${m.name} is already active; nothing to propose.`,
     };
   }
-  if (!ctx.research) {
+  // With web research on, the agent finds its own sources.
+  if (!ctx.research && !opts.webResearch) {
     return {
       rule: 'no_research',
-      reason: `No research is on file for ${m.name}; import the bundled research or add sources to the draft first.`,
+      reason: `No research is on file for ${m.name}; import the bundled research, add sources to the draft, or ask for a proposal with web research.`,
     };
   }
   if (ctx.unanswered.length === 0) {
@@ -114,11 +118,13 @@ export function decisionFromOutput(
   out: MarketExpansionOutput,
   model: string,
   ctx: MarketExpansionContext,
+  web?: Pick<WebFindings, 'searches' | 'pages'>,
 ): AgentDecision {
   const { proposal, adjustments } = sanitizeMarketProposal(out, {
     state: ctx.market.state,
     draft: draftOf(ctx),
     researchSources: ctx.research?.sources ?? [],
+    webPages: web?.pages,
   });
   const answered = proposal.answers.filter(
     (a) => a.answer !== 'unknown',
@@ -150,6 +156,12 @@ export function decisionFromOutput(
     `${proposal.requirements.length} requirement${proposal.requirements.length === 1 ? '' : 's'}`,
     `${proposal.activationSteps.length} step${proposal.activationSteps.length === 1 ? '' : 's'}`,
   ];
+  if (web) {
+    const found = proposal.sources.filter((s) => s.summary.includes('Found by web search')).length;
+    parts.push(
+      `${found} web source${found === 1 ? '' : 's'} from ${web.searches} search${web.searches === 1 ? '' : 'es'}`,
+    );
+  }
   return {
     agent: 'market_expansion',
     promptVersion: MARKET_EXPANSION_PROMPT_VERSION,
@@ -176,6 +188,9 @@ export class MarketExpansionAgent {
     private readonly opts: {
       models?: AgentModels | null;
       chat?: typeof chatCompletion;
+      research?: typeof webResearch;
+      /** Search the web as well as reading the bundled research (a person's choice per run). */
+      webResearch?: boolean;
     } = {},
   ) {}
 
@@ -184,16 +199,55 @@ export class MarketExpansionAgent {
     accountId: string,
     runId: string,
   ): Promise<LeadAnalystResult> {
-    const rule = hardRule(ctx);
+    const searching = this.opts.webResearch === true;
+    const rule = hardRule(ctx, { webResearch: searching });
     if (rule) return { decision: holdDecision(rule), costUsd: 0 };
 
     const model = resolveAgentModel(
       AGENT_TIER.market_expansion,
       this.opts.models,
     );
-    const user = prompts.market_expansion.user
+
+    // Web research is two calls. A search step writes a plain report, so
+    // the provider cites its pages itself (a JSON reply carries no
+    // citations); the pages are numbered here, and the proposal step cites
+    // them by number. The model never supplies a URL.
+    let web: WebFindings | undefined;
+    if (searching) {
+      const research = this.opts.research ?? webResearch;
+      const r = await research(accountId, {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: prompts.market_expansion.research_system,
+          },
+          { role: 'user', content: researchPrompt(ctx) },
+        ],
+        temperature: 0.1,
+        maxTokens: 2500,
+        maxSearches: researchMaxSearches(),
+        automationRunId: runId,
+        workflow: agentWorkflow('market_expansion'),
+      });
+      web = {
+        searches: r.searches,
+        pages: numberWebPages(r.sources),
+        report: r.content.slice(0, MAX_REPORT_CHARS),
+        costUsd:
+          estimateAiCostUsd(r.model, r.tokensIn, r.tokensOut) +
+          webSearchCostUsd(r.model, r.searches),
+      };
+    }
+
+    const modelContext = web
+      ? { web_findings: { report: web.report, pages: web.pages }, ...ctx }
+      : ctx;
+    const user = (
+      web ? prompts.market_expansion.user_web : prompts.market_expansion.user
+    )
       .split('{{context}}')
-      .join(JSON.stringify(ctx, null, 1).slice(0, MAX_CONTEXT_CHARS));
+      .join(JSON.stringify(modelContext, null, 1).slice(0, MAX_CONTEXT_CHARS));
     const chat = this.opts.chat ?? chatCompletion;
     const completion = await chat(accountId, {
       model,
@@ -206,11 +260,12 @@ export class MarketExpansionAgent {
       automationRunId: runId,
       workflow: agentWorkflow('market_expansion'),
     });
-    const costUsd = estimateAiCostUsd(
-      completion.model,
-      completion.tokensIn,
-      completion.tokensOut,
-    );
+    const costUsd =
+      estimateAiCostUsd(
+        completion.model,
+        completion.tokensIn,
+        completion.tokensOut,
+      ) + (web?.costUsd ?? 0);
     const out = parseMarketExpansionOutput(completion.content);
     if (!out) {
       throw new AgentOutputError(
@@ -234,9 +289,54 @@ export class MarketExpansionAgent {
       );
     }
     return {
-      decision: decisionFromOutput(out, completion.model, ctx),
+      decision: decisionFromOutput(out, completion.model, ctx, web),
       costUsd,
       raw: completion.content,
+      // The replay keeps what the search found, so the run can be judged later.
+      ...(web ? { seen: modelContext } : {}),
     };
   }
+}
+
+/** What a run's search step found, as the proposal step and the decision see it. */
+export interface WebFindings {
+  searches: number;
+  pages: WebPage[];
+  report: string;
+  costUsd: number;
+}
+
+const MAX_REPORT_CHARS = 8000;
+
+/** The search step's prompt: the unknown questions, and what is already on file. */
+export function researchPrompt(ctx: MarketExpansionContext): string {
+  const questions = ctx.unanswered
+    .map(
+      (q) =>
+        `- ${q.label}${q.requiredForApproval ? ' (needed for approval)' : ''}`,
+    )
+    .join('\n');
+  const known = [
+    ctx.research?.summary,
+    ...(ctx.draft?.openQuestions ?? []).map((q) => `Already asked: ${q}`),
+    ...(ctx.research?.sources ?? []).map((s) => `On file: ${s.citation}`),
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 6000);
+  return prompts.market_expansion.research_user
+    .split('{{state}}')
+    .join(`${ctx.market.name} (${ctx.market.state})`)
+    .split('{{questions}}')
+    .join(questions || '- None listed')
+    .split('{{known}}')
+    .join(known || 'Nothing yet.');
+}
+
+const DEFAULT_MAX_SEARCHES = 5;
+
+/** Searches one web-research run may make (AGENT_RESEARCH_MAX_SEARCHES, 1-10). */
+export function researchMaxSearches(): number {
+  const n = Number(process.env.AGENT_RESEARCH_MAX_SEARCHES);
+  return Number.isInteger(n) && n >= 1 && n <= 10 ? n : DEFAULT_MAX_SEARCHES;
 }

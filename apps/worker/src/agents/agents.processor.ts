@@ -167,7 +167,10 @@ export class AgentsProcessor extends WorkerHost {
     const withContext = async (
       context: object,
       run: Promise<LeadAnalystResult>,
-    ): Promise<AgentRunResult> => ({ ...(await run), context });
+    ): Promise<AgentRunResult> => {
+      const r = await run;
+      return { ...r, context: r.seen ?? context };
+    };
     if (p.agent === 'deal_underwriter') {
       const ctx = await loadDealContext(p.entityId, p.accountId);
       if (!ctx) return null;
@@ -193,7 +196,10 @@ export class AgentsProcessor extends WorkerHost {
     }
     if (p.agent === 'market_expansion') {
       const ctx = await loadMarketExpansionContext(p.entityId, p.accountId);
-      const agent = new MarketExpansionAgent({ models });
+      const agent = new MarketExpansionAgent({
+        models,
+        webResearch: p.options?.webResearch === true,
+      });
       return withContext(ctx, agent.run(ctx, p.accountId, runId));
     }
     if (p.agent === 'outreach_drafter') {

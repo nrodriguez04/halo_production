@@ -5,6 +5,7 @@ import {
   DealUnderwriterAgent,
   decisionFromHardRule,
   hardRule,
+  hasValueData,
 } from '../deal-underwriter.agent';
 
 function ctx(over: Partial<DealUnderwriterContext> = {}): DealUnderwriterContext {
@@ -50,12 +51,13 @@ const completion = (content: string, model = 'gpt-4o') => ({
   tokensOut: 400,
 });
 
+// 250,000 x 0.70 - 35,000 - the 12,500 fee = 127,500.
 const offerReply = JSON.stringify({
   arv: 250000,
   repair_estimate: 35000,
-  mao: 130000,
+  mao: 127500,
   offer_low: 110000,
-  offer_high: 130000,
+  offer_high: 125000,
   confidence: 0.72,
   recommendation: 'offer',
   rationale: 'Assessment and listing data support a 250k ARV; moderate rehab.',
@@ -119,17 +121,17 @@ describe('DealUnderwriterAgent.run', () => {
       hardRule: null,
     });
     expect(res.decision.summary).toBe(
-      'offer $110,000-$130,000: ARV $250,000, repairs $35,000, MAO $130,000, confidence 0.72',
+      'offer $110,000-$125,000: ARV $250,000, repairs $35,000, MAO $127,500, confidence 0.72',
     );
     expect(res.decision.actions).toEqual([
       {
         type: 'set_deal_economics',
         arv: 250000,
         repairEstimate: 35000,
-        mao: 130000,
+        mao: 127500,
         confidence: 0.72,
         offerLow: 110000,
-        offerHigh: 130000,
+        offerHigh: 125000,
         rationale: 'Assessment and listing data support a 250k ARV; moderate rehab.',
         compsSummary: 'Two nearby 2025 sales at 245k and 262k.',
         dealUpdatedAt: '2026-10-12T10:00:00.000Z',
@@ -139,6 +141,39 @@ describe('DealUnderwriterAgent.run', () => {
         note: 'Assessment and listing data support a 250k ARV; moderate rehab.',
       },
     ]);
+  });
+
+  it("records the formula's MAO, not the model's arithmetic, and keeps the offers under it", async () => {
+    chat.mockResolvedValue(
+      completion(JSON.stringify({ ...JSON.parse(offerReply), mao: 151000, offer_high: 150000 })),
+    );
+    const res = await agent().run(ctx(), 'acct', 'run-1');
+    expect(res.decision.actions[0]).toMatchObject({ mao: 127500, offerHigh: 127500, offerLow: 110000 });
+    expect(res.decision.rationale).toContain('MAO $151,000 recomputed as $127,500');
+    expect(res.decision.rationale).toContain('offer range capped at the MAO');
+  });
+
+  it('applies the prompt rules in code: no positive MAO is a pass, low confidence a hold', async () => {
+    chat.mockResolvedValue(
+      completion(JSON.stringify({ ...JSON.parse(offerReply), arv: 60000, repair_estimate: 40000 })),
+    );
+    expect((await agent().run(ctx(), 'acct', 'run-1')).decision.recommendation).toBe('pass');
+    chat.mockResolvedValue(completion(JSON.stringify({ ...JSON.parse(offerReply), confidence: 0.3 })));
+    expect((await agent().run(ctx(), 'acct', 'run-1')).decision.recommendation).toBe('hold');
+  });
+
+  it('holds by rule, without a model call, when nothing says what the property is worth', async () => {
+    const bare = ctx({
+      property: { ...ctx().property!, estimatedValue: null, salePrice: null },
+      sources: [{ provider: 'attom', endpoint: 'x', summary: { propertyType: 'SFR', yearBuilt: 1975 } }],
+    });
+    expect(hasValueData(bare)).toBe(false);
+    const res = await agent().run(bare, 'acct', 'run-1');
+    expect(chat).not.toHaveBeenCalled();
+    expect(res.decision).toMatchObject({ hardRule: 'no_value_data', recommendation: 'hold' });
+    // A listing price, or numbers a person entered, are enough to value from.
+    expect(hasValueData({ ...bare, sources: [{ provider: 'mls', endpoint: 'x', summary: { listPrice: 189000 } }] })).toBe(true);
+    expect(hasValueData({ ...bare, deal: { ...bare.deal, arv: 200000 } })).toBe(true);
   });
 
   it('uses the tenant strong-tier override', async () => {

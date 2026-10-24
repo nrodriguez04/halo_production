@@ -51,6 +51,40 @@ describe('seedMissingPricingRules', () => {
     ]);
   });
 
+  it('gives an existing AI provider web-research pricing: tokens plus each search', async () => {
+    const prisma = {
+      integrationProvider: {
+        findUnique: jest.fn(async ({ where }: { where: { key: string } }) =>
+          where.key === 'openai' ? { id: 'p-oa' } : null,
+        ),
+      },
+      providerPricingRule: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { action: 'chat_completion.gpt-4o' },
+            { action: 'chat_completion.gpt-4o-mini' },
+            { action: 'chat_completion.gpt-4-turbo' },
+          ]),
+        createMany: jest.fn().mockResolvedValue({ count: 6 }),
+      },
+    };
+    expect(await seedMissingPricingRules(prisma as any)).toBe(6);
+    const rows = prisma.providerPricingRule.createMany.mock.calls[0][0].data;
+    expect(
+      rows
+        .filter((r: { action: string }) => r.action === 'web_research.gpt-4o')
+        .map((r: { unit: string; unitCostUsd: number }) => [
+          r.unit,
+          r.unitCostUsd,
+        ]),
+    ).toEqual([
+      ['per_1k_input_tokens', 0.0025],
+      ['per_1k_output_tokens', 0.01],
+      ['per_search', 0.025],
+    ]);
+  });
+
   it('writes nothing when every known action already has a rule', async () => {
     const prisma = {
       integrationProvider: {

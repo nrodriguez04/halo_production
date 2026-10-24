@@ -1878,6 +1878,41 @@
           "transition_lead"
         ]
       }
+    },
+    {
+      "id": "qualified-on-one-signal-held",
+      "title": "A qualified the record does not support (one signal, not very strong) is held, its drafts dropped",
+      "base": "absentee",
+      "context": {},
+      "reply": {
+        "score": 78,
+        "recommendation": "qualified",
+        "rationale": "Absentee owner with good equity: a promising lead.",
+        "signals": [
+          "absentee owner",
+          "equity"
+        ],
+        "first_touch_sms": "Hi, would you consider an offer on 2418 Pecan Grove Dr?",
+        "first_touch_email": {
+          "subject": "2418 Pecan Grove Dr",
+          "body": "Would you consider an offer?"
+        }
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "hold",
+        "score": {
+          "min": 25,
+          "max": 55
+        },
+        "noActions": [
+          "draft_message",
+          "transition_lead"
+        ]
+      }
     }
   ]
 }

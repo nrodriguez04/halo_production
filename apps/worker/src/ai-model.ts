@@ -29,6 +29,11 @@ const RATES_PER_1K: Record<string, { input: number; output: number }> = {
   'claude-haiku-4-5': { input: 0.001, output: 0.005 },
 };
 
+/** Per web search, mirroring WEB_SEARCH_USD in apps/api/src/integrations/web-research.types.ts. */
+export function webSearchCostUsd(model: string, searches: number): number {
+  return searches * (/^claude-/.test(model) ? 0.01 : 0.025);
+}
+
 export function estimateAiCostUsd(
   model: string,
   tokensIn: number,

@@ -23,7 +23,20 @@ export interface MarketProposal {
   requirements: Array<{ key: string; kind: string; label: string; appliesTo: string[] }>;
   activationSteps: string[];
   risks: string[];
-  sources: Array<{ id: string; citation: string }>;
+  sources: Array<{ id: string; citation: string; title?: string; url?: string | null; summary?: string }>;
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+/** A source a web-research run found (its summary carries the marker sanitizeMarketProposal adds). */
+function fromWeb(s: { summary?: string }): boolean {
+  return (s.summary ?? '').includes('Found by web search');
 }
 
 interface MarketBriefData {
@@ -81,10 +94,14 @@ function runsKey(agent: string, scope: string) {
 }
 
 /** Queues a market agent; the run appears in the list once the worker opens it. */
-function useQueueMarketAgent(agent: 'market_intelligence' | 'market_expansion', scope: string) {
+function useQueueMarketAgent(agent: 'market_intelligence' | 'market_expansion', scope: string, opts: { webResearch?: boolean } = {}) {
   const qc = useQueryClient();
   return useApiMutation<void, { queued: boolean }>(
-    () => apiJson('/agent/runs', { method: 'POST', body: JSON.stringify({ agent, entityType: 'market', entityId: scope }) }),
+    () =>
+      apiJson('/agent/runs', {
+        method: 'POST',
+        body: JSON.stringify({ agent, entityType: 'market', entityId: scope, ...(opts.webResearch ? { webResearch: true } : {}) }),
+      }),
     {
       onSuccess: (out) => {
         if (out.queued) toast.success('Queued. The agent runs when AI is on for this account.');
@@ -105,7 +122,8 @@ export function ProposalDetails({
   questionLabel?: (key: string) => string;
 }) {
   const label = questionLabel ?? ((k: string) => k.replace(/_/g, ' '));
-  const cited = new Map(p.sources.map((s) => [s.id, s.citation]));
+  const cited = new Map(p.sources.map((s) => [s.id, `${s.citation}, ${fromWeb(s) ? 'found on the web' : 'added from research'}`]));
+  const webSources = p.sources.filter(fromWeb);
   return (
     <div className="space-y-3 text-caption">
       {p.classification && (
@@ -128,7 +146,7 @@ export function ProposalDetails({
                 <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{a.note}</p>
                 {a.sourceIds.length > 0 && (
                   <p className="mt-1 text-muted-foreground">
-                    Sources: {a.sourceIds.map((id) => (cited.has(id) ? `${id} (${cited.get(id)}, added from research)` : id)).join('; ')}
+                    Sources: {a.sourceIds.map((id) => (cited.has(id) ? `${id} (${cited.get(id)})` : id)).join('; ')}
                   </p>
                 )}
               </li>
@@ -168,6 +186,26 @@ export function ProposalDetails({
           </ol>
         </div>
       )}
+      {webSources.length > 0 && (
+        <div className="space-y-1">
+          <p className="font-medium uppercase tracking-wider text-muted-foreground">Found on the web, not verified</p>
+          <ul className="space-y-1">
+            {webSources.map((s) => (
+              <li key={s.id}>
+                <span className="font-mono">{s.id}</span>{' '}
+                {s.url && /^https?:\/\//i.test(s.url) ? (
+                  <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="text-primary underline-offset-2 hover:underline">
+                    {s.title || s.citation}
+                  </a>
+                ) : (
+                  s.title || s.citation
+                )}
+                {s.url && <span className="text-muted-foreground"> · {safeHost(s.url)}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {p.risks.length > 0 && (
         <div className="space-y-1">
           <p className="font-medium uppercase tracking-wider text-muted-foreground">Risks</p>
@@ -197,7 +235,8 @@ export function ExpansionProposals({
   const qc = useQueryClient();
   const key = runsKey('market_expansion', state);
   const runs = useApiQuery<MarketAgentRun[]>(key);
-  const queue = useQueueMarketAgent('market_expansion', state);
+  const [searchWeb, setSearchWeb] = useState(true);
+  const queue = useQueueMarketAgent('market_expansion', state, { webResearch: searchWeb });
   const [reason, setReason] = useState<Record<string, string>>({});
   const refresh = () => {
     qc.invalidateQueries({ queryKey: [key] });
@@ -232,13 +271,21 @@ export function ExpansionProposals({
             </div>
             <CardDescription>
               Reads this draft, the questions it leaves unknown and the bundled research, and proposes sourced answers, questions for
-              counsel, requirements and the steps to activation. Accepting a proposal writes it into the editable draft, marked as not
-              verified. It never submits, approves or activates the market: counsel still reviews the policy.
+              counsel, requirements and the steps to activation. With web search on it also searches the web, starting with official
+              sources; a page counts as a source only when the search returned it, and only a government page can answer a question.
+              Accepting a proposal writes it into the editable draft, marked as not verified. It never submits, approves or activates the
+              market: counsel still reviews the policy.
             </CardDescription>
           </div>
-          <Button size="sm" variant="outline" loading={queue.isPending} onClick={() => queue.mutate()}>
-            <Bot size={14} className="mr-1" aria-hidden /> Ask for a proposal
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button size="sm" variant="outline" loading={queue.isPending} onClick={() => queue.mutate()}>
+              <Bot size={14} className="mr-1" aria-hidden /> Ask for a proposal
+            </Button>
+            <label className="flex items-center gap-1.5 text-caption text-muted-foreground">
+              <input type="checkbox" checked={searchWeb} onChange={(e) => setSearchWeb(e.target.checked)} />
+              Search the web (about $0.05 to $0.15 a run)
+            </label>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

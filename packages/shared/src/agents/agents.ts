@@ -56,6 +56,13 @@ export interface AgentJobPayload {
   actorId?: string | null;
   /** The inbound message that fired an `inbound` trigger. */
   messageId?: string;
+  /** Choices a person made when queueing a manual run. */
+  options?: AgentRunOptions;
+}
+
+export interface AgentRunOptions {
+  /** Market Expansion only: search the web, not just the bundled research (docs/agent-design.md s3.7). */
+  webResearch?: boolean;
 }
 
 /** BullMQ job id: the same (agent, entity, trigger event) is never queued twice. */

@@ -6,6 +6,7 @@ import {
   type AgentName,
 } from '@halo/shared';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsIn,
@@ -61,6 +62,21 @@ export class ChatCompletionDto extends CostAttributionDto {
   @Min(1)
   @Max(32_000)
   maxTokens?: number;
+}
+
+/** A chat completion that may search the web (integrations/web-research.types.ts). */
+export class WebResearchDto extends ChatCompletionDto {
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  maxSearches!: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  allowedDomains?: string[];
 }
 
 /** Address parts for the enrichment lookups; the worker passes leadId in the attribution. */

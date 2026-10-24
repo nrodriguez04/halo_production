@@ -97,25 +97,36 @@ Every run records its prompt version, so a version must always mean the same tex
 
 ## Live results
 
-First live run, 2026-10-24 (OpenAI, default tiers, about $0.46), then again after the fixes below (about $0.45). Runs vary: an agent nobody changed can move several points between runs.
+Three live runs on 2026-10-24 (OpenAI, default tiers, about $0.45 each): before any fix, after the first fixes, and after the second. Runs vary: an agent nobody changed can move several points between runs.
 
-| Agent | Agreement before | After | Safety violations before | After |
-|---|---|---|---|---|
-| Outreach Drafter | 100% | 100% | 0 | 0 |
-| Buyer Responder | 100% | 100% | 0 | 0 |
-| Deal Underwriter | 89% | 78% (unchanged agent) | 0 | 0 |
-| Lead Analyst | 83% (v2) | 94% (v3) | 4 | 2, one case |
-| Disposition Matcher | 57% | 67% | 1 | 0 |
-| Market Expansion | 11% | 78% | 1 | 1 |
-| Market Intelligence | 0% | 100% | 0 | 0 |
+| Agent | Agreement: first | second | third | Safety violations: first | second | third |
+|---|---|---|---|---|---|---|
+| Outreach Drafter | 100% | 100% | 100% | 0 | 0 | 0 |
+| Buyer Responder | 100% | 100% | 100% | 0 | 0 | 0 |
+| Deal Underwriter | 89% | 78% | 88% | 0 | 0 | 0 |
+| Lead Analyst | 83% (v2) | 94% (v3) | 100% | 4 | 2 | 0 |
+| Disposition Matcher | 57% | 67% | 100% | 1 | 0 | 0 |
+| Market Expansion | 11% | 78% | 100% (v2) | 1 | 1 | 0 |
+| Market Intelligence | 0% | 100% | 100% | 0 | 0 | 0 |
 
-What changed:
+First fixes:
 - **Market Expansion** named questions by their label ("Does the seller have a statutory right to cancel?") where the key belongs, so the schema rejected the reply. The parser now maps an exact label to its key, for questions, requirement kinds and activities.
 - **Disposition Matcher** blasted an Alabama deal to buyers who buy only in Tennessee and Texas. A buyer whose stated locations miss the deal is now excluded before the model, and the deal holds by rule when nobody is left.
 - **Lead Analyst v3** defines long ownership (15 years), counts each fact once, lets a recent listing at market value override other signals but not a stale or underpriced one, and says outright not to mention any listing, tax, lien or foreclosure record in a first touch.
 - **Market Intelligence:** live runs may explain further ranked candidates after the expected ones (Halo drops non-candidates anyway); `brief-without-candidates` tests a crafted reply and now runs offline only.
 
-Still open: the Lead Analyst qualifies an absentee owner with no other signal (`absentee-only`); the Matcher's live shortlist does not lead with the Memphis buyer who replied before; Market Expansion proposes too few counsel questions and requirements in some cases, and proposes for Wyoming where the case expects "not now". Every one of these is a gated action a person approves.
+Second fixes, each a rule in code rather than more prompt (docs/agent-design.md s3):
+- **Lead Analyst:** a `qualified` needs two strong signals the record shows, or one very strong one; otherwise it is held and its drafts dropped. It had qualified an absentee owner with nothing else on file.
+- **Deal Underwriter:** the MAO is the formula's (the model's arithmetic was off by up to $24,000), offers are capped at it, the prompt's offer, pass and hold rules apply in code, and a deal with nothing that says what it is worth holds by rule (`no_value_data`; it had offered at 0.6 confidence on no data).
+- **Disposition Matcher:** a buyer who buys in the city or ZIP, at this price, and replied before always leads the shortlist. The model had left one out.
+- **Market Expansion v2:** every question left unknown gets a counsel question; the prompt asks for each requirement the research names. Two cases tested crafted replies on the same input as another case with the opposite expectation (`fl-restrictive-class-proposed`, `wy-not-now`), which no live model can both pass; they now run offline only.
+
+Still open, none of them a safety check:
+- The Buyer Responder's drafts do not always mention proof of funds (`interested-walkthrough`, `offer-at-asking`).
+- The Deal Underwriter offered on a 1916 house whose MAO sits far below its active list price (`old-house-no-spread`); a person still decides.
+- Market Expansion did not turn the Texas franchise tax registration into a requirement in one run (`tx-tax-registration-requirement`).
+
+Web research (docs/agent-design.md s3.7) is not in the golden set: it depends on what the web says that day. It was tested live on Texas, Wyoming and Florida through the real adapters and agent on 2026-10-24: one search per run on gpt-4o, 12 to 24 pages returned, about $0.055 a run. Answers that rested only on blogs or statute mirrors stayed unknown, as designed. The Anthropic route was not exercised live: that account had no credits.
 
 `npx tsx eval/diagnose-replies.ts <agent> [case]` (from `apps/worker`, with `OPENAI_API_KEY`) runs one agent's cases live and prints, for each reply an agent rejects, the schema issues in it, and the rationale of each failing case.
 
