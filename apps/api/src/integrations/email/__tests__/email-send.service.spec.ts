@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { EmailSendService } from '../email-send.service';
+import { EmailSendService, senderOf } from '../email-send.service';
 import { IntegrationCostControlService } from '../../../cost-control/cost-control.service';
 import { IntegrationSecretsService } from '../../../integration-secrets/integration-secrets.service';
 import { IntegrationUnavailableException } from '../../integration-unavailable.exception';
@@ -30,6 +30,7 @@ describe('EmailSendService', () => {
     delete process.env.USE_SENDGRID;
     delete process.env.RESEND_API_KEY;
     delete process.env.SENDGRID_FROM_EMAIL;
+    delete process.env.MESSAGING_BRAND_NAME;
     (global as any).fetch = fetchMock;
     fetchMock.mockReset();
     sendMail.mockClear();
@@ -116,6 +117,63 @@ describe('EmailSendService', () => {
       await service.sendEmail({ ...input, headers }, ctx);
       expect(JSON.parse(fetchMock.mock.calls[0][1].body).headers).toEqual(
         headers,
+      );
+    });
+  });
+
+  describe('sender name', () => {
+    it('reads a configured name, and gives a bare address the brand name', () => {
+      const env = {
+        MESSAGING_BRAND_NAME: 'Halo Acquisitions',
+      } as NodeJS.ProcessEnv;
+      expect(senderOf('deals@halo.example', env)).toEqual({
+        email: 'deals@halo.example',
+        name: 'Halo Acquisitions',
+      });
+      expect(senderOf('"Halo (Texas)" <deals@halo.example>', env)).toEqual({
+        email: 'deals@halo.example',
+        name: 'Halo (Texas)',
+      });
+      expect(senderOf('Halo TX <deals@halo.example>', env)).toEqual({
+        email: 'deals@halo.example',
+        name: 'Halo TX',
+      });
+      expect(senderOf('deals@halo.example', {})).toEqual({
+        email: 'deals@halo.example',
+      });
+    });
+
+    it('sends the name to SendGrid as its own field, and to SMTP and Resend in the header', async () => {
+      process.env.MESSAGING_BRAND_NAME = 'Halo Acquisitions';
+      process.env.USE_SENDGRID = 'true';
+      process.env.SENDGRID_FROM_EMAIL = 'deals@halo.example';
+      secrets.resolve.mockResolvedValue('SG.key');
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 202,
+        headers: { get: () => 'sg-9' },
+      });
+      await service.sendEmail(input, ctx);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).from).toEqual({
+        email: 'deals@halo.example',
+        name: 'Halo Acquisitions',
+      });
+
+      delete process.env.USE_SENDGRID;
+      await service.sendEmail(input, ctx);
+      expect(sendMail.mock.calls[0][0].from).toEqual({
+        name: 'Halo Acquisitions',
+        address: 'halo@example.com',
+      });
+
+      process.env.RESEND_API_KEY = 're_x';
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: 're-9' }),
+      });
+      await service.sendEmail(input, ctx);
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body).from).toBe(
+        '"Halo Acquisitions" <halo@example.com>',
       );
     });
   });
