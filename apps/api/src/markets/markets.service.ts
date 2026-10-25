@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import {
   ACTIVATION_LABEL,
   APPROVAL_REQUIRED_QUESTIONS,
+  NATIONWIDE_ATTESTATION,
   OWNER_ACCEPTANCE_ATTESTATION,
   OWNER_ACCEPTANCE_MAX_MONTHS,
   type ApprovalBasis,
@@ -44,6 +45,7 @@ import {
   type MarketInput,
   type MarketPolicyContent,
   type MarketingChannel,
+  type NationwideOperation,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -138,22 +140,48 @@ export class MarketsService {
     const versionIds = markets
       .map((m) => m.approvedVersionId)
       .filter(Boolean) as string[];
-    const [versions, authorizations, usable, access] = await Promise.all([
-      versionIds.length
-        ? this.prisma.marketPolicyVersion.findMany({
-            where: { id: { in: versionIds }, accountId },
-          })
-        : Promise.resolve([] as VersionRow[]),
-      this.prisma.marketAuthorization.findMany({
-        where: { accountId, ...(states ? { state: { in: states } } : {}) },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.catalog.usable(accountId),
-      this.dataAccess.forAccount(accountId),
-    ]);
+    const [versions, authorizations, usable, access, nationwide] =
+      await Promise.all([
+        versionIds.length
+          ? this.prisma.marketPolicyVersion.findMany({
+              where: { id: { in: versionIds }, accountId },
+            })
+          : Promise.resolve([] as VersionRow[]),
+        this.prisma.marketAuthorization.findMany({
+          where: { accountId, ...(states ? { state: { in: states } } : {}) },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.catalog.usable(accountId),
+        this.dataAccess.forAccount(accountId),
+        this.nationwideOperation(accountId),
+      ]);
     return markets.map((m) =>
-      this.evaluateRow(m, versions, authorizations, usable, access, now),
+      this.evaluateRow(
+        m,
+        versions,
+        authorizations,
+        usable,
+        access,
+        now,
+        nationwide,
+      ),
     );
+  }
+
+  /** The owner's decision to open every jurisdiction, when one stands. */
+  private async nationwideOperation(
+    accountId: string,
+  ): Promise<NationwideOperation | null> {
+    const cp = await this.prisma.controlPlane.findUnique({
+      where: { accountId },
+      select: { nationwideOpenedAt: true, nationwideOpenedByName: true },
+    });
+    return cp?.nationwideOpenedAt
+      ? {
+          since: cp.nationwideOpenedAt,
+          byName: cp.nationwideOpenedByName ?? 'the owner',
+        }
+      : null;
   }
 
   private evaluateRow(
@@ -163,6 +191,7 @@ export class MarketsService {
     usable: Awaited<ReturnType<TemplateCatalogService['usable']>>,
     access: DataAccess,
     now: Date,
+    nationwide: NationwideOperation | null = null,
   ): Loaded {
     let draft: MarketPolicyContent | null = null;
     let draftError: string | null = null;
@@ -219,6 +248,7 @@ export class MarketsService {
           : null,
       dataAccess: access.states.has(m.state),
       researchOnFile,
+      nationwide,
     };
     return {
       market: m,
@@ -252,10 +282,11 @@ export class MarketsService {
 
   /** The Market Activation Matrix: every jurisdiction, and the three coverage measures. */
   async matrix(accountId: string) {
-    const [rows, access, openDeals] = await Promise.all([
+    const [rows, access, openDeals, nationwide] = await Promise.all([
       this.load(accountId),
       this.dataAccess.forAccount(accountId),
       this.openDealsByState(accountId),
+      this.nationwide(accountId),
     ]);
     const kpis = coverageKpis(
       rows.map((r) => ({
@@ -266,6 +297,7 @@ export class MarketsService {
     );
     return {
       kpis,
+      nationwide,
       dataAccess: {
         providers: access.providers,
         externalDataEnabled: access.externalDataEnabled,
@@ -293,6 +325,8 @@ export class MarketsService {
       requestedStatus: e.requestedStatus,
       effectiveStatus: e.effectiveStatus,
       maxStatus: e.maxStatus,
+      /** Open by the owner's nationwide decision rather than this state's own approval. */
+      openNationwide: !!e.nationwide,
       legal: {
         state: e.legal.state,
         version: e.legal.version,
@@ -471,6 +505,110 @@ export class MarketsService {
       if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
     }
     return counts;
+  }
+
+  // ------------------------------------------------------------ nationwide
+
+  /**
+   * The owner's decision to open every jurisdiction at once
+   * (docs/markets.md s12), and the states still closed by a person.
+   */
+  async nationwide(accountId: string) {
+    await this.ensureAll(accountId);
+    const [cp, closed] = await Promise.all([
+      this.prisma.controlPlane.findUnique({
+        where: { accountId },
+        select: {
+          nationwideOpenedAt: true,
+          nationwideOpenedByName: true,
+          nationwideNote: true,
+        },
+      }),
+      this.prisma.market.findMany({
+        where: {
+          accountId,
+          requestedStatus: { in: ['BLOCKED', 'RESTRICTED'] },
+        },
+        select: { state: true, requestedStatus: true },
+        orderBy: { state: 'asc' },
+      }),
+    ]);
+    return {
+      open: !!cp?.nationwideOpenedAt,
+      openedAt: cp?.nationwideOpenedAt ?? null,
+      openedByName: cp?.nationwideOpenedByName ?? null,
+      note: cp?.nationwideNote ?? null,
+      attestation: NATIONWIDE_ATTESTATION,
+      closedStates: closed.map((m) => ({
+        state: m.state,
+        status: m.requestedStatus,
+      })),
+    };
+  }
+
+  /** Opens all 51 jurisdictions on the owner's word; owner or admin only (the controller checks). */
+  async openNationwide(
+    accountId: string,
+    userId: string,
+    input: { openedByName: string; note?: string | null; attest: boolean },
+  ) {
+    if (!input.attest) {
+      throw new BadRequestException(
+        'Confirm the statement to open every state.',
+      );
+    }
+    const now = new Date();
+    const fields = {
+      nationwideOpenedAt: now,
+      nationwideOpenedBy: userId,
+      nationwideOpenedByName: input.openedByName,
+      nationwideNote: input.note?.trim() || null,
+      updatedBy: userId,
+    };
+    await this.prisma.controlPlane.upsert({
+      where: { accountId },
+      create: { accountId, ...fields },
+      update: fields,
+    });
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'markets.nationwide.open',
+      resource: 'markets:ALL',
+      details: {
+        openedByName: input.openedByName,
+        note: fields.nationwideNote,
+        attestation: NATIONWIDE_ATTESTATION,
+      },
+    });
+    return this.nationwide(accountId);
+  }
+
+  /** Returns every state to its own approval and readiness. */
+  async closeNationwide(accountId: string, userId: string, reason: string) {
+    const cp = await this.prisma.controlPlane.findUnique({
+      where: { accountId },
+      select: { nationwideOpenedAt: true },
+    });
+    if (!cp?.nationwideOpenedAt) return this.nationwide(accountId);
+    await this.prisma.controlPlane.update({
+      where: { accountId },
+      data: {
+        nationwideOpenedAt: null,
+        nationwideOpenedBy: null,
+        nationwideOpenedByName: null,
+        nationwideNote: null,
+        updatedBy: userId,
+      },
+    });
+    await this.audit.log({
+      accountId,
+      userId,
+      action: 'markets.nationwide.close',
+      resource: 'markets:ALL',
+      details: { reason, openedAt: cp.nationwideOpenedAt.toISOString() },
+    });
+    return this.nationwide(accountId);
   }
 
   // ------------------------------------------------------------ gates

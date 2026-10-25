@@ -49,6 +49,11 @@ export default function MarketPage() {
         description={
           <span className="flex flex-wrap items-center gap-2">
             <Badge variant={STATUS_VARIANT[d.effectiveStatus]}>{STATUS_LABEL[d.effectiveStatus]}</Badge>
+            {d.openNationwide && (
+              <Badge variant="info" title="Every state is open on the owner's own legal judgment; Halo has not verified the law here. Block this state to close it.">
+                open nationwide, owner's decision
+              </Badge>
+            )}
             <span>{CLASSIFICATION_LABEL[d.classification]}</span>
             {d.approvalBasis ? (
               <Badge variant={BASIS_VARIANT[d.approvalBasis]}>{BASIS_LABEL[d.approvalBasis]}</Badge>

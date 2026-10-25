@@ -153,6 +153,14 @@ export const OWNER_ACCEPTANCE_MAX_MONTHS = 6;
 export const OWNER_ACCEPTANCE_ATTESTATION =
   'I am not acting as legal counsel, and this is not an attorney\'s approval or legal advice. I reviewed this policy, the research and sources cited and the answers recorded, and I accept the legal and business risk of operating in this jurisdiction within the uses this policy permits.';
 
+/**
+ * The statement an owner signs to open every jurisdiction at once
+ * (docs/markets.md s12): no per-state policy, authorization, operator or
+ * self-test gates wholesaling while it stands.
+ */
+export const NATIONWIDE_ATTESTATION =
+  'I own this business and open all 50 states and DC to wholesaling on my own legal judgment. Halo has not verified the law in any of them. Licensing, registration, required disclosures and seller cancellation rights are my responsibility. Messaging rules (consent, Do Not Call, quiet hours, opt-outs) still apply.';
+
 /** The statement an owner signs to accept a document template. */
 export const OWNER_TEMPLATE_ATTESTATION =
   'I am not acting as legal counsel, and this is not an attorney\'s approval. I reviewed this exact text, chose it for the jurisdictions listed, and accept the legal and business risk of using it there.';

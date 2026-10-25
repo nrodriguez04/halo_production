@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PageHeader } from '@/components/page-header';
+import { NationwideCard } from '@/components/markets/nationwide-card';
 import { ErrorState, LoadingState } from '@/components/states';
 import { toast } from '@/components/ui/toast';
 import { errorText } from '@/lib/disposition';
@@ -118,7 +119,7 @@ export default function MarketsPage() {
       <PageHeader
         eyebrow="Compliance"
         title="Market activation"
-        description="Every state and DC. A market operates only as far as its approved policy (approved by counsel, or accepted by the owner and labelled so), its requirements and a person's decision allow. Unknown never means allowed."
+        description="Every state and DC. Open them all at once on your own legal judgment, or let each market operate as far as its approved policy (approved by counsel, or accepted by the owner and labelled so), its requirements and a person's decision allow."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" loading={importResearch.isPending} onClick={() => importResearch.mutate()}>
@@ -136,6 +137,7 @@ export default function MarketsPage() {
         <ErrorState title="Could not load markets" description={errorText(matrix.error)} onRetry={() => matrix.refetch()} />
       ) : (
         <>
+          <NationwideCard status={matrix.data.nationwide} />
           <div className="grid gap-3 md:grid-cols-3">
             <Kpi
               icon={Database}
@@ -244,8 +246,15 @@ export default function MarketsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge className="whitespace-nowrap" variant={STATUS_VARIANT[r.effectiveStatus]}>{STATUS_LABEL[r.effectiveStatus]}</Badge>
-                        {r.requestedStatus !== r.effectiveStatus && !['RESEARCH_ONLY'].includes(r.requestedStatus) && (
+                        <Badge
+                          className="whitespace-nowrap"
+                          variant={STATUS_VARIANT[r.effectiveStatus]}
+                          title={r.openNationwide ? "Open by the owner's nationwide decision; Halo has not verified the law here." : undefined}
+                        >
+                          {STATUS_LABEL[r.effectiveStatus]}
+                        </Badge>
+                        {r.openNationwide && <div className="text-caption text-muted-foreground">nationwide</div>}
+                        {!r.openNationwide && r.requestedStatus !== r.effectiveStatus && !['RESEARCH_ONLY'].includes(r.requestedStatus) && (
                           <div className="text-caption text-muted-foreground">set: {STATUS_LABEL[r.requestedStatus]}</div>
                         )}
                       </TableCell>

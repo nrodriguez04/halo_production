@@ -9,11 +9,13 @@ describe('DisclosureGateService', () => {
   const prisma = {
     deal: { findFirst: jest.fn() },
     document: { findFirst: jest.fn() },
+    controlPlane: { findUnique: jest.fn() },
   };
   const service = () => new DisclosureGateService(prisma as any);
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.controlPlane.findUnique.mockResolvedValue(null);
   });
 
   it('normalizes state names and codes', () => {
@@ -94,6 +96,22 @@ describe('DisclosureGateService', () => {
     expect(prisma.document.findFirst.mock.calls[0][0].where.OR).toEqual([
       { dealId: 'deal-1' },
     ]);
+  });
+
+  it("leaves the notice to the owner once every state is open on the owner's decision", async () => {
+    prisma.deal.findFirst.mockResolvedValue({
+      id: 'deal-1',
+      leadId: null,
+      property: { state: 'TX' },
+      lead: null,
+    });
+    prisma.controlPlane.findUnique.mockResolvedValue({
+      nationwideOpenedAt: new Date('2026-10-25T00:00:00Z'),
+    });
+    await expect(
+      service().assertEquitableInterest('acct', 'deal-1', 'marketing'),
+    ).resolves.toEqual({ required: false, satisfied: true, state: 'TX' });
+    expect(prisma.document.findFirst).not.toHaveBeenCalled();
   });
 
   it('lets an unknown deal through so the caller reports its own not-found', async () => {

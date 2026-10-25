@@ -114,7 +114,8 @@ function DocumentsLibrary() {
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const q = useDebouncedValue(search, 250);
-  const [state, setState] = useState('TX');
+  // Empty: the paperwork every state needs; a state adds its own items.
+  const [state, setState] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [form, setForm] = useState<UploadForm>(emptyUpload);
   const [fileName, setFileName] = useState('');
@@ -329,11 +330,12 @@ function DocumentsLibrary() {
                   {items.length ? `${ready} of ${items.length} on file` : 'Checklist'}
                 </span>
                 <label className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
-                  Operating state
+                  State-specific items for
                   <Input
                     value={state}
                     onChange={(e) => setState(e.target.value)}
                     maxLength={2}
+                    placeholder="all"
                     className="w-16 uppercase"
                   />
                 </label>
