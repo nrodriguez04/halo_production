@@ -1,6 +1,6 @@
 # Markets
 
-Hālo is built to operate in every US jurisdiction: the 50 states and DC. It operates in each one only as far as an approved policy allows and a person has decided. A policy is approved by counsel, or accepted by the owner on the strength of the research; the two are never shown as each other. This document describes how that works:
+Hālo is built to operate in every US jurisdiction: the 50 states and DC. The owner can open all of them at once on their own legal judgment (s12). Otherwise it operates in each one only as far as an approved policy allows and a person has decided. A policy is approved by counsel, or accepted by the owner on the strength of the research; the two are never shown as each other. This document describes how that works:
 - the market record;
 - the research behind each draft policy;
 - counsel's approval and the owner's risk acceptance;
@@ -17,7 +17,7 @@ Code:
 ## 1. Principles
 
 - **Every jurisdiction has a market.** The 51 rows exist for every tenant. None is enabled by default.
-- **Unknown never means allowed.** An unanswered question, an unreviewed policy, a missing template or an unverified licence each stop the activity they bear on.
+- **Unknown never means allowed.** An unanswered question, an unreviewed policy, a missing template or an unverified licence each stop the activity they bear on. The one way past this is the owner's own decision to open every state (s12), which says so wherever it applies.
 - **Research is a lead, not a conclusion.** Bundled research only ever fills a *draft*. Nothing a draft says permits anything.
 - **The gates rely on the approved version, never on the draft.** A draft can change while the approved version stays in force.
 - **An approval always names its basis.** Counsel's approval and the owner's risk acceptance (s3.1) open the same gates. Every surface that shows an approval says which it is, and an owner's acceptance is never called counsel's, legal or attorney approval.
@@ -243,9 +243,22 @@ The agent also holds without asking a model when:
 
 **Web research.** A person asking for a proposal can let the agent search the web as well (on by default on the Expansion tab). The search step finds pages, official sources first; the proposal cites them by a number Halo gave each page, so a page no search returned is never recorded. A web page goes into the draft marked found on the web and not verified, and only a government page can answer a question on its own: anything resting on other pages stays unknown, with a counsel question. See docs/agent-design.md s3.7.
 
-## 12. Not operational yet
+## 12. Operating in every state
 
-- **No market is approved or accepted.** Counsel or the owner must decide each policy. On the bundled research, 21 jurisdictions can be accepted by the owner as they stand; 19 have a required question still unknown (most often the seller's cancellation right), and 11 are class E.
+The owner can open all 50 states and DC at once, on their own legal judgment, instead of deciding each policy. Set on 2026-10-25, at the owner's request: "I need the ability to wholesale at scale in all 50 states and DC. I will deal with the legal matters on my own."
+
+- **Who:** an owner or admin (the role check of s3.1), on the Markets page or `POST /markets/nationwide` with the owner's full name, an optional note and the statement `NATIONWIDE_ATTESTATION`. `POST /markets/nationwide/close` with a reason returns every state to its own approval. Both are audited (`markets.nationwide.open` / `.close`); `GET /markets/nationwide` reports it.
+- **Effect:** `evaluateMarket` makes every market active for every activity, structure and channel. No policy, authorization, operator or self-test is needed, and Texas's equitable-interest notice no longer holds buyer marketing. The legal, readiness and technical findings are still computed and shown, for reference.
+- **What still applies:**
+  - a state a person set to Blocked or Restricted stays closed;
+  - contracts still come from the owner's own templates (accepted once, for `ALL` jurisdictions on the Templates page);
+  - messaging rules are unchanged: consent, the Do Not Call list and registry, quiet hours, opt-outs and the email footer protect the people contacted, and are not state wholesaling approval.
+- **Labels:** every surface says a market is open on the owner's nationwide decision ("open nationwide, owner's decision"; the activity reasons read "Halo has not verified the law here"), never that it is approved or legal.
+- Stored on the control plane: `nationwideOpenedAt`, `nationwideOpenedBy`, `nationwideOpenedByName`, `nationwideNote`.
+
+## 13. Not operational yet
+
+- **No market is approved or accepted.** Counsel or the owner must decide each policy, unless the owner opens every state (s12). On the bundled research, 21 jurisdictions can be accepted by the owner as they stand; 19 have a required question still unknown (most often the seller's cancellation right), and 11 are class E.
 - **No template is approved or accepted.** Real agreements must be uploaded and approved per state. The starter scaffolds are not legal text.
 - **Data access needs a provider key.** Research coverage is 0 until ATTOM, Realie, RentCast or Regrid is configured, or sourcing markets are added.
 - **Word-to-PDF needs Gotenberg** at `PDF_CONVERTER_URL`. It is in `docker-compose.prod.yml` and verified against the same image locally and in CI; without it, Word templates generate `.docx` only.

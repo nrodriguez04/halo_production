@@ -209,6 +209,49 @@ describe('market evaluation', () => {
     expect(e.technical.checks.find((c) => c.key === 'policy_encoded')?.met).toBe(false);
   });
 
+  it("opens a state with nothing approved on the owner's nationwide decision", () => {
+    const nationwide = { since: NOW, byName: 'SYNTHETIC Owner' };
+    // A bare research draft: no approved policy, template, authorization, operator or self-test.
+    const e = evaluateMarket(
+      input({
+        code: 'WY',
+        requestedStatus: 'RESEARCH_ONLY',
+        approved: null,
+        authorizations: [],
+        templates: [],
+        operatorAssigned: false,
+        selfTest: null,
+        nationwide,
+      }),
+    );
+    expect(e.effectiveStatus).toBe('ACTIVE');
+    expect(Object.values(e.activities).every((a) => a.allowed)).toBe(true);
+    expect(marketAllows(e, 'seller_contracting').reason).toMatch(/SYNTHETIC Owner's decision; Halo has not verified the law here/);
+    expect(channelAllowed(e, 'public_listing').allowed).toBe(true);
+    expect(e.structures).toEqual(expect.arrayContaining(['assignment', 'double_close']));
+    expect(e.nationwide).toEqual(nationwide);
+    expect(e.missing).toEqual([]);
+    // The legal finding is still reported as it stands.
+    expect(e.legal.state).toBe('draft');
+    expect(e.coverage.active).toBe(true);
+  });
+
+  it('keeps a state a person blocked or restricted closed under the nationwide decision', () => {
+    const nationwide = { since: NOW, byName: 'SYNTHETIC Owner' };
+    for (const status of ['BLOCKED', 'RESTRICTED'] as const) {
+      const e = evaluateMarket(input({ requestedStatus: status, approved: null, nationwide }));
+      expect(e.effectiveStatus).toBe(status);
+      expect(e.nationwide).toBeNull();
+      expect(marketAllows(e, 'seller_contracting').allowed).toBe(false);
+    }
+  });
+
+  it('changes nothing without the nationwide decision', () => {
+    const e = evaluateMarket(input({ approved: null, requestedStatus: 'RESEARCH_ONLY' }));
+    expect(e.nationwide).toBeNull();
+    expect(marketAllows(e, 'seller_contracting').allowed).toBe(false);
+  });
+
   it('counts the three coverage measures independently', () => {
     const rows = [
       { evaluation: evaluateMarket(input()), researchOnFile: true, dataAccess: true },

@@ -56,6 +56,15 @@ export class DisclosureGateService {
       deal.property?.state ?? deal.lead?.canonicalState ?? null,
     );
     if (state !== 'TX') return { required: false, satisfied: true, state };
+    // With every state open on the owner's own legal judgment
+    // (docs/markets.md s12), the notice is the owner's to give; Halo does
+    // not hold buyer marketing for it.
+    const cp = await this.prisma.controlPlane.findUnique({
+      where: { accountId },
+      select: { nationwideOpenedAt: true },
+    });
+    if (cp?.nationwideOpenedAt)
+      return { required: false, satisfied: true, state };
 
     const doc = await this.prisma.document.findFirst({
       where: {

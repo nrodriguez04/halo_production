@@ -497,6 +497,14 @@ model ControlPlane {
   /// file (docs/communications.md s7). On until a person turns it off with
   /// counsel's answer: an unknown obligation never permits.
   dncRegistryRequired       Boolean  @default(true)
+  /// Every jurisdiction open on the owner's own legal judgment
+  /// (docs/markets.md s12): no per-state policy, authorization, operator or
+  /// self-test gates wholesaling while it is set. A state a person blocked
+  /// or restricted stays closed; messaging rules are unchanged.
+  nationwideOpenedAt        DateTime?
+  nationwideOpenedBy        String?
+  nationwideOpenedByName    String?
+  nationwideNote            String?
   updatedAt                 DateTime @updatedAt
   updatedBy                 String?
 

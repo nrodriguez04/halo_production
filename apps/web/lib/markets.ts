@@ -43,6 +43,8 @@ export interface MarketRow {
   requestedStatus: ActivationStatus;
   effectiveStatus: ActivationStatus;
   maxStatus: ActivationStatus;
+  /** Open by the owner's nationwide decision rather than this state's own approval. */
+  openNationwide: boolean;
   legal: {
     state: 'none' | 'draft' | 'in_review' | 'approved' | 'expired';
     version: number | null;
@@ -72,8 +74,19 @@ export interface MarketRow {
   draftError: string | null;
 }
 
+/** The owner's decision to open every jurisdiction (docs/markets.md s12). */
+export interface NationwideStatus {
+  open: boolean;
+  openedAt: string | null;
+  openedByName: string | null;
+  note: string | null;
+  attestation: string;
+  closedStates: Array<{ state: string; status: ActivationStatus }>;
+}
+
 export interface MarketMatrix {
   kpis: CoverageKpis;
+  nationwide: NationwideStatus;
   dataAccess: { providers: string[]; externalDataEnabled: boolean; states: number };
   rows: MarketRow[];
 }

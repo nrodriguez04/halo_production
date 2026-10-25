@@ -59,6 +59,15 @@ export const AcceptRiskSchema = z
   })
   .strict();
 
+const NationwideSchema = z
+  .object({
+    /** The full name the owner signs with. */
+    openedByName: z.string().trim().min(2).max(200),
+    note: z.string().trim().max(2000).nullable().optional(),
+    attest: z.literal(true),
+  })
+  .strict();
+
 const NoteSchema = z
   .object({ note: z.string().trim().min(3).max(2000) })
   .strict();
@@ -133,6 +142,33 @@ export class MarketsController {
       jurisdictions: this.markets.jurisdictions(),
       authorizationKinds: this.markets.authorizationKinds(),
     };
+  }
+
+  /** Whether every jurisdiction is open on the owner's decision (docs/markets.md s12). */
+  @Get('nationwide')
+  nationwide(@CurrentAccountId() a: string) {
+    return this.markets.nationwide(a);
+  }
+
+  /** The owner opens all 50 states and DC at once; a role, like accepting risk for one state. */
+  @Post('nationwide')
+  @UseGuards(OwnerRoleGuard)
+  openNationwide(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Body() body: unknown,
+  ) {
+    return this.markets.openNationwide(a, u, input(NationwideSchema, body));
+  }
+
+  @Post('nationwide/close')
+  @UseGuards(OwnerRoleGuard)
+  closeNationwide(
+    @CurrentAccountId() a: string,
+    @CurrentUserId() u: string,
+    @Body() body: unknown,
+  ) {
+    return this.markets.closeNationwide(a, u, input(ReasonSchema, body).reason);
   }
 
   @Post('research/import')

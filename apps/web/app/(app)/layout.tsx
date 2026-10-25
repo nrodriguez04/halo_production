@@ -80,7 +80,7 @@ const ROUTE_PREFETCH: Record<string, Prefetch[]> = {
     { path: '/cost-governance/events', params: { limit: 100 } },
   ],
   '/leads/markets': [{ path: '/sourcing/markets' }, { path: '/sourcing/runs', params: { limit: 20 } }],
-  '/documents': [{ path: '/documents' }, { path: '/documents/checklist', params: { state: 'TX' } }],
+  '/documents': [{ path: '/documents' }, { path: '/documents/checklist' }],
   '/admin/integrations': [{ path: '/integration-secrets' }],
   '/admin/chaos': [{ path: '/admin/chaos/status' }, { path: '/admin/dlq' }],
 };

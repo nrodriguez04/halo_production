@@ -76,6 +76,17 @@ export interface MarketInput {
   dataAccess: boolean;
   /** Research or a draft policy is on file. */
   researchOnFile: boolean;
+  /**
+   * Every jurisdiction is open on the owner's own legal judgment
+   * (docs/markets.md s12). Only a state a person blocked or restricted
+   * stays closed.
+   */
+  nationwide?: NationwideOperation | null;
+}
+
+export interface NationwideOperation {
+  since: Date;
+  byName: string;
 }
 
 export interface MarketCheck {
@@ -118,6 +129,8 @@ export interface MarketEvaluation {
   /** What would move the market up, in words. */
   missing: string[];
   nextStep: string | null;
+  /** Set when the market is open by the owner's nationwide decision rather than its own approval. */
+  nationwide: NationwideOperation | null;
 }
 
 const SELF_TEST_MAX_AGE_DAYS = 30;
@@ -440,7 +453,7 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
     nextStep = `Ready: a person with markets:activate can move the market to ${next}.`;
   }
 
-  return {
+  const evaluation: MarketEvaluation = {
     code: input.code,
     requestedStatus: req,
     maxStatus,
@@ -466,6 +479,35 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
     },
     missing,
     nextStep,
+    nationwide: null,
+  };
+  // A person's block or restriction on one state outlasts the nationwide decision.
+  if (input.nationwide && req !== 'BLOCKED' && req !== 'RESTRICTED') {
+    return openNationwide(evaluation, input.nationwide);
+  }
+  return evaluation;
+}
+
+/**
+ * The market as the owner's nationwide decision leaves it: active for every
+ * activity, structure and channel. The legal, readiness and technical
+ * findings stay as they were, for reference; none of them gates anything.
+ */
+function openNationwide(e: MarketEvaluation, n: NationwideOperation): MarketEvaluation {
+  const reason = `Open in every state by ${n.byName}'s decision; Halo has not verified the law here.`;
+  return {
+    ...e,
+    maxStatus: 'ACTIVE',
+    effectiveStatus: 'ACTIVE',
+    activities: Object.fromEntries(
+      MARKET_ACTIVITIES.map((act) => [act, { allowed: true, reason }]),
+    ) as MarketEvaluation['activities'],
+    structures: [...TRANSACTION_STRUCTURES],
+    channels: [...MARKETING_CHANNELS],
+    coverage: { ...e.coverage, active: true },
+    missing: [],
+    nextStep: null,
+    nationwide: n,
   };
 }
 

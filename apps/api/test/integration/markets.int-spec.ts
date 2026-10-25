@@ -645,4 +645,79 @@ describeDb('markets (synthetic fixtures, real database)', () => {
       ),
     ).rejects.toThrow('Counsel is reviewing');
   });
+
+  it("opens every jurisdiction on the owner's decision, keeps a blocked one closed, and closes again", async () => {
+    const accountId = await fx.tenant();
+    await expect(
+      markets.assertAllowed(
+        accountId,
+        'WY',
+        'seller_contracting',
+        'Contracting',
+      ),
+    ).rejects.toThrow(/not allowed in WY/);
+
+    const opened = await markets.openNationwide(accountId, USER, {
+      openedByName: 'SYNTHETIC Owner',
+      note: 'SYNTHETIC',
+      attest: true,
+    });
+    expect(opened).toMatchObject({
+      open: true,
+      openedByName: 'SYNTHETIC Owner',
+    });
+
+    // Any state, any activity and channel, with no policy, template or authorization on file.
+    for (const state of ['WY', 'CA', 'DC']) {
+      const m = await markets.assertAllowed(
+        accountId,
+        state,
+        'seller_contracting',
+        'Contracting',
+      );
+      expect(m.evaluation.effectiveStatus).toBe('ACTIVE');
+      expect(m.evaluation.nationwide?.byName).toBe('SYNTHETIC Owner');
+    }
+    await markets.assertChannel(accountId, 'OH', 'public_listing', 'Listing');
+    const matrix = await markets.matrix(accountId);
+    expect(matrix.nationwide.open).toBe(true);
+    expect(matrix.rows.filter((r) => r.openNationwide)).toHaveLength(51);
+    expect(matrix.kpis).toBeDefined();
+
+    // A person's block on one state still holds.
+    await markets.setStatus(accountId, 'NV', USER, {
+      status: 'BLOCKED',
+      note: 'SYNTHETIC block',
+    });
+    await expect(
+      markets.assertAllowed(accountId, 'NV', 'seller_outreach', 'Outreach'),
+    ).rejects.toThrow(/not allowed in NV/);
+    expect((await markets.nationwide(accountId)).closedStates).toEqual([
+      { state: 'NV', status: 'BLOCKED' },
+    ]);
+
+    const closed = await markets.closeNationwide(
+      accountId,
+      USER,
+      'SYNTHETIC done',
+    );
+    expect(closed.open).toBe(false);
+    await expect(
+      markets.assertAllowed(
+        accountId,
+        'WY',
+        'seller_contracting',
+        'Contracting',
+      ),
+    ).rejects.toThrow(/not allowed in WY/);
+
+    const trail = await prisma.auditLog.findMany({
+      where: { accountId, action: { startsWith: 'markets.nationwide.' } },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(trail.map((x) => x.action)).toEqual([
+      'markets.nationwide.open',
+      'markets.nationwide.close',
+    ]);
+  });
 });
