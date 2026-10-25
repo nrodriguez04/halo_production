@@ -10,6 +10,7 @@ import {
   parseEnv,
   requestSession,
 } from '../integrations/docusign/docusign-auth';
+import { senderOf } from '../integrations/email/sender';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -555,7 +556,7 @@ export class IntegrationSecretsService {
         personalizations: [
           { to: [{ email: 'connectivity-check@example.com' }] },
         ],
-        from: { email: from },
+        from: senderOf(from),
         subject: 'Halo connectivity check',
         content: [{ type: 'text/plain', value: 'sandbox' }],
         mail_settings: { sandbox_mode: { enable: true } },

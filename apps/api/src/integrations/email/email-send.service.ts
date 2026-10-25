@@ -4,6 +4,7 @@ import { IntegrationCostControlService } from '../../cost-control/cost-control.s
 import { IntegrationSecretsService } from '../../integration-secrets/integration-secrets.service';
 import { IntegrationUnavailableException } from '../integration-unavailable.exception';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
+import { senderOf } from './sender';
 
 // Cost-aware email adapter. Provider preference, in order:
 //   1. SendGrid when USE_SENDGRID=true (key from the integration-secrets
@@ -28,6 +29,15 @@ export interface SendEmailInput {
 }
 
 export type EmailProvider = 'sendgrid' | 'resend' | 'smtp';
+
+export { senderOf };
+
+/** `"Name" <address>`, or the bare address, for the string-based providers. */
+function senderHeader(sender: { email: string; name?: string }): string {
+  return sender.name
+    ? `"${sender.name.replace(/"/g, '')}" <${sender.email}>`
+    : sender.email;
+}
 
 export interface SendEmailResult {
   messageId: string;
@@ -101,7 +111,7 @@ export class EmailSendService {
     }
     // SendGrid only accepts verified senders; a configured sender wins over
     // whatever the caller put in `from`.
-    const from = process.env.SENDGRID_FROM_EMAIL || input.from;
+    const from = senderOf(process.env.SENDGRID_FROM_EMAIL || input.from);
     const content: Array<{ type: string; value: string }> = [];
     if (input.text) content.push({ type: 'text/plain', value: input.text });
     if (input.html) content.push({ type: 'text/html', value: input.html });
@@ -115,7 +125,7 @@ export class EmailSendService {
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: input.to }] }],
-        from: { email: from },
+        from,
         ...(input.replyTo ? { reply_to: { email: input.replyTo } } : {}),
         subject: input.subject,
         content,
@@ -153,7 +163,7 @@ export class EmailSendService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: input.from,
+        from: senderHeader(senderOf(input.from)),
         to: input.to,
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         subject: input.subject,
@@ -170,8 +180,11 @@ export class EmailSendService {
   }
 
   private async sendViaSmtp(input: SendEmailInput): Promise<SendEmailResult> {
+    const sender = senderOf(input.from);
     const result = await this.smtp.sendMail({
-      from: input.from,
+      from: sender.name
+        ? { name: sender.name, address: sender.email }
+        : sender.email,
       to: input.to,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
       subject: input.subject,
