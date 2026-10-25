@@ -51,7 +51,7 @@ export default function MarketPage() {
             <Badge variant={STATUS_VARIANT[d.effectiveStatus]}>{STATUS_LABEL[d.effectiveStatus]}</Badge>
             {d.openNationwide && (
               <Badge variant="info" title="Every state is open on the owner's own legal judgment; Halo has not verified the law here. Block this state to close it.">
-                open nationwide, owner's decision
+                open nationwide, owner&rsquo;s decision
               </Badge>
             )}
             <span>{CLASSIFICATION_LABEL[d.classification]}</span>
