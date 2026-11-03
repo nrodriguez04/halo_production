@@ -20,6 +20,9 @@ import {
   type MarketActivity,
   type TemplateKind,
   OWNER_TEMPLATE_ATTESTATION,
+  ASSET_CLASS_LABEL,
+  isAssetClass,
+  propertyLabel,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -158,6 +161,8 @@ export class TemplatesService {
       disclosureKey?: string | null;
       documentId: string;
       states: string[];
+      assetClasses?: string[];
+      structures?: string[];
       notes?: string | null;
     },
   ) {
@@ -176,6 +181,8 @@ export class TemplatesService {
       const version = await this.addVersionTo(accountId, template, userId, {
         documentId: input.documentId,
         states,
+        assetClasses: input.assetClasses,
+        structures: input.structures,
         notes: input.notes,
       });
       return { template, version };
@@ -189,7 +196,13 @@ export class TemplatesService {
     accountId: string,
     templateId: string,
     userId: string,
-    input: { documentId: string; states: string[]; notes?: string | null },
+    input: {
+      documentId: string;
+      states: string[];
+      assetClasses?: string[];
+      structures?: string[];
+      notes?: string | null;
+    },
   ) {
     const template = await this.prisma.documentTemplate.findFirst({
       where: { id: templateId, accountId },
@@ -212,8 +225,19 @@ export class TemplatesService {
     accountId: string,
     template: { id: string; kind: string; name: string },
     userId: string,
-    input: { documentId: string; states: string[]; notes?: string | null },
+    input: {
+      documentId: string;
+      states: string[];
+      assetClasses?: string[];
+      structures?: string[];
+      notes?: string | null;
+    },
   ) {
+    // Written for houses unless the uploader says otherwise: residential,
+    // land and commercial deals never share an agreement by default.
+    const assetClasses = input.assetClasses?.length
+      ? Array.from(new Set(input.assetClasses))
+      : ['residential'];
     const { doc, buffer } = await this.catalog.loadFile(
       accountId,
       input.documentId,
@@ -249,6 +273,8 @@ export class TemplatesService {
         unknownFields: unknown,
         missingRequired,
         states: input.states,
+        assetClasses,
+        structures: Array.from(new Set(input.structures ?? [])),
         status:
           unknown.length || missingRequired.length ? 'draft' : 'validated',
         notes: input.notes ?? null,
@@ -265,6 +291,8 @@ export class TemplatesService {
         version: version.version,
         kind,
         states: input.states,
+        assetClasses,
+        structures: input.structures ?? [],
         fields,
         unknown,
         missingRequired,
@@ -554,9 +582,11 @@ export class TemplatesService {
     const applicable = this.catalog.forState(
       await this.catalog.usable(accountId),
       deal.state,
+      deal.assetClass,
     );
     return {
       state: deal.state,
+      assetClass: deal.assetClass,
       templates: applicable.filter((t) => t.status === 'approved'),
     };
   }
@@ -592,6 +622,7 @@ export class TemplatesService {
         deal.state,
         activity,
         `Generating a ${label.toLowerCase()}`,
+        deal.assetClass,
       );
     }
     const version = deal.state
@@ -600,12 +631,16 @@ export class TemplatesService {
           input.kind,
           deal.state,
           input.disclosureKey,
+          { assetClass: deal.assetClass },
         )
       : null;
     if (!version) {
+      const cls = deal.assetClass
+        ? ` ${ASSET_CLASS_LABEL[deal.assetClass].toLowerCase()}`
+        : '';
       throw new BadRequestException({
         code: 'NO_APPROVED_TEMPLATE',
-        message: `There is no counsel-approved ${label.toLowerCase()} template for ${deal.state ?? 'this property'}. Upload counsel's version on the Templates page and approve it for ${deal.state ?? 'the state'}.`,
+        message: `There is no approved${cls} ${label.toLowerCase()} template for ${deal.state ?? 'this property'}. Upload your version on the Templates page${cls ? `, mark it for${cls} deals,` : ''} and approve or accept it for ${deal.state ?? 'the state'}.`,
       });
     }
     const v = await this.version(accountId, version.versionId);
@@ -778,6 +813,10 @@ export class TemplatesService {
         deal.property?.state ?? deal.lead?.canonicalState ?? null,
       ),
       address: deal.property?.address ?? null,
+      // Unclassified: the templates every deal had before asset classes.
+      assetClass: isAssetClass(deal.property?.assetClass)
+        ? deal.property.assetClass
+        : null,
     };
   }
 
@@ -806,12 +845,21 @@ export class TemplatesService {
     const common: Record<string, string | null> = {
       effective_date: formatDate(new Date()),
       seller_name: deal.lead?.canonicalOwner ?? null,
-      property_address: deal.property?.address ?? null,
+      // A rural parcel with no street address is named by APN and county.
+      property_address:
+        deal.property?.address ??
+        (deal.property?.apn ? propertyLabel(deal.property) : null),
       property_city: deal.property?.city ?? null,
       property_state: deal.property?.state ?? null,
       property_zip: deal.property?.zip ?? null,
-      property_county: null,
+      property_county: deal.property?.county ?? null,
       property_apn: deal.property?.apn ?? null,
+      property_acres:
+        deal.property?.acres != null
+          ? deal.property.acres.toFixed(3)
+          : deal.property?.lotSqft
+            ? (deal.property.lotSqft / 43_560).toFixed(3)
+            : null,
     };
     const recipient = buyerId
       ? await this.prisma.buyer.findFirst({

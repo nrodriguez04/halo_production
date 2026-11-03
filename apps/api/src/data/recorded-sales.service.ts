@@ -10,6 +10,7 @@ import {
   type NormalizedSale,
   type PartyKind,
   type DataQuality,
+  saleAssetClass,
 } from '@halo/shared';
 import type { Readable } from 'stream';
 import { PrismaService } from '../prisma.service';
@@ -52,6 +53,13 @@ export function toNormalized(r: SaleRow): NormalizedSale {
     armsLength: r.armsLength,
     deedType: r.deedType,
     propertyType: r.propertyType,
+    landUse: r.landUse,
+    zoning: r.zoning,
+    acres: r.acres,
+    buildingSqft: r.buildingSqft,
+    units: r.units,
+    assetClass: r.assetClass,
+    assetSubtype: r.assetSubtype,
     quality: r.quality as DataQuality,
   };
 }
@@ -78,6 +86,11 @@ export class RecordedSalesService {
     let inserted = 0;
     for (let i = 0; i < sales.length; i += CHUNK) {
       const batch = sales.slice(i, i + CHUNK).map((s) => ({
+        // Classified once, on the way in: comparables and discovery read it.
+        ...(({ assetClass, subtype }) => ({
+          assetClass,
+          assetSubtype: subtype,
+        }))(saleAssetClass(s)),
         accountId,
         source: s.source,
         sourceRef: s.sourceRef,
@@ -101,6 +114,11 @@ export class RecordedSalesService {
         armsLength: s.armsLength,
         deedType: s.deedType,
         propertyType: s.propertyType,
+        landUse: s.landUse ?? null,
+        zoning: s.zoning ?? null,
+        acres: s.acres ?? null,
+        buildingSqft: s.buildingSqft ?? null,
+        units: s.units != null ? Math.round(s.units) : null,
         quality: s.quality,
         importId: importId ?? null,
       }));

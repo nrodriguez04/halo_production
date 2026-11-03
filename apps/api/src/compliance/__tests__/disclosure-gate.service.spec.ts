@@ -98,7 +98,9 @@ describe('DisclosureGateService', () => {
     ]);
   });
 
-  it("leaves the notice to the owner once every state is open on the owner's decision", async () => {
+  it("still requires the Texas notice under the owner's nationwide decision", async () => {
+    // The statute applies to every Texas deal; a decision to operate in
+    // every state does not waive it (docs/markets.md s12).
     prisma.deal.findFirst.mockResolvedValue({
       id: 'deal-1',
       leadId: null,
@@ -108,10 +110,11 @@ describe('DisclosureGateService', () => {
     prisma.controlPlane.findUnique.mockResolvedValue({
       nationwideOpenedAt: new Date('2026-10-25T00:00:00Z'),
     });
+    prisma.document.findFirst.mockResolvedValue(null);
     await expect(
       service().assertEquitableInterest('acct', 'deal-1', 'marketing'),
-    ).resolves.toEqual({ required: false, satisfied: true, state: 'TX' });
-    expect(prisma.document.findFirst).not.toHaveBeenCalled();
+    ).rejects.toThrow();
+    expect(prisma.document.findFirst).toHaveBeenCalled();
   });
 
   it('lets an unknown deal through so the caller reports its own not-found', async () => {

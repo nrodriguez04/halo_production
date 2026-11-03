@@ -57,8 +57,34 @@ describe('buyBoxFromPreferences', () => {
       priceMax: null,
       maxRepairs: 50000,
       minArv: null,
+      // A legacy box states no asset class or size: residential rules apply.
+      assetClasses: [],
+      assetSubtypes: [],
+      counties: [],
+      acresMin: null,
+      acresMax: null,
+      sqftMin: null,
+      sqftMax: null,
+      unitsMin: null,
+      unitsMax: null,
+      zoning: [],
+      minCapRate: null,
     });
     expect(buyBoxFromPreferences(null).locations).toEqual([]);
+  });
+
+  it('reads the land and commercial buy box', () => {
+    const box = buyBoxFromPreferences({
+      assetClasses: ['land', 'boats'],
+      assetSubtypes: ['rural_acreage'],
+      counties: ['Bastrop County'],
+      acreage: { min: 5, max: 40 },
+      minCapRate: 7.5,
+    });
+    expect(box.assetClasses).toEqual(['land']);
+    expect(box.acresMin).toBe(5);
+    expect(box.acresMax).toBe(40);
+    expect(box.minCapRate).toBeCloseTo(0.075);
   });
 });
 

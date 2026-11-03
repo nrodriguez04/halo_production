@@ -71,7 +71,11 @@ const assignments = {
   onEnvelopeCompleted: jest.fn(),
 };
 const eligibility = { assertEligible: jest.fn() };
-const markets = { assertAllowed: jest.fn() };
+const markets = {
+  assertAllowed: jest.fn(),
+  // An unclassified property: gated as the market as a whole.
+  assetClassOf: jest.fn().mockResolvedValue(null),
+};
 
 const service = () =>
   new DocuSignService(

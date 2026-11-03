@@ -29,6 +29,7 @@ import { ShareLinksService } from './share-links.service';
 import { AssignmentsService } from './assignments.service';
 import { CommandCenterService } from './command-center.service';
 import { TaxSalesService } from './tax-sales.service';
+import { AssetUnderwritingService } from './asset-underwriting.service';
 import {
   AcceptOfferSchema,
   AssignmentExecutedSchema,
@@ -180,6 +181,7 @@ export class DealDispositionController {
     private assignments: AssignmentsService,
     private buyers: BuyerIntelligenceService,
     private taxSales: TaxSalesService,
+    private assetUnderwriting: AssetUnderwritingService,
   ) {}
 
   @Get('tax-sale')
@@ -372,6 +374,28 @@ export class DealDispositionController {
   @Get('underwriting')
   underwriting(@CurrentAccountId() a: string, @Param('dealId') dealId: string) {
     return this.offers.underwriting(a, dealId);
+  }
+
+  /**
+   * The asset-specific underwriting (docs/asset-classes.md s5): the
+   * residential model, land comparables or commercial income and sales,
+   * chosen by the property's asset class.
+   */
+  @Get('asset-underwriting')
+  assetUnderwritingView(
+    @CurrentAccountId() a: string,
+    @Param('dealId') dealId: string,
+  ) {
+    return this.assetUnderwriting.forDeal(a, dealId);
+  }
+
+  /** Recompute and record it on the deal, for the agents and the history. */
+  @Post('asset-underwriting')
+  recordAssetUnderwriting(
+    @CurrentAccountId() a: string,
+    @Param('dealId') dealId: string,
+  ) {
+    return this.assetUnderwriting.forDeal(a, dealId, { store: true });
   }
 
   @Post('seller-offer')

@@ -6,10 +6,11 @@ import { SourcingSchedulerService } from './sourcing-scheduler.service';
 import { SourcingController } from './sourcing.controller';
 import { SourcingService } from './sourcing.service';
 import { AutoEnrichService } from './auto-enrich.service';
+import { MarketsModule } from '../markets/markets.module';
 
 // ControlPlaneService comes from the global ControlPlaneModule.
 @Module({
-  imports: [AuthModule, LeadsModule, AutomationModule],
+  imports: [AuthModule, LeadsModule, AutomationModule, MarketsModule],
   controllers: [SourcingController],
   providers: [SourcingService, SourcingSchedulerService, AutoEnrichService],
   exports: [SourcingService],

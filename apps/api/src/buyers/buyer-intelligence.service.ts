@@ -14,6 +14,7 @@ import {
   type PofStatus,
   type RankingBuyer,
   type RankingDeal,
+  isAssetClass,
 } from '@halo/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -81,16 +82,23 @@ export class BuyerIntelligenceService {
       opts.buyerPriceOverride ??
       (await dealBuyerPrice(this.prisma, accountId, deal))?.price ??
       null;
+    const p = deal.property;
     const rankingDeal: RankingDeal = {
-      city: deal.property?.city ?? null,
-      state: normalizeState(
-        deal.property?.state ?? deal.lead?.canonicalState ?? null,
-      ),
-      zip: deal.property?.zip ?? null,
+      city: p?.city ?? null,
+      state: normalizeState(p?.state ?? deal.lead?.canonicalState ?? null),
+      zip: p?.zip ?? null,
       propertyType: null,
       buyerPrice: price,
       arv: deal.arv,
       repairEstimate: deal.repairEstimate,
+      // Land and commercial deals are matched on their own terms
+      // (docs/asset-classes.md s6); an unclassified one as before.
+      assetClass: isAssetClass(p?.assetClass) ? p.assetClass : null,
+      assetSubtype: p?.assetSubtype ?? null,
+      county: p?.county ?? null,
+      acres: p?.acres ?? (p?.lotSqft ? p.lotSqft / 43_560 : null),
+      buildingSqft: p?.buildingSqft ?? p?.sqft ?? null,
+      units: p?.units ?? null,
     };
     const buyers = await this.rankingBuyers(accountId);
     const ranked = rankBuyersForDeal(rankingDeal, buyers, now).map((m) => ({
@@ -265,6 +273,9 @@ export class BuyerIntelligenceService {
           price: t.price,
           closedAt: t.closedAt,
           source: t.source as BuyerTransactionSource,
+          assetClass: isAssetClass(t.assetClass) ? t.assetClass : null,
+          acres: t.acres,
+          buildingSqft: t.buildingSqft,
         })),
         engagement: {
           sent: mine.filter(

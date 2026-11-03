@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   JURISDICTION_CODES,
   sampleTemplateValues,
+  type AssetClass,
   type TemplateKind,
 } from '@halo/shared';
 import type { Readable } from 'stream';
@@ -31,6 +32,21 @@ export interface ApplicableTemplate {
   approvedAt: Date | null;
   /** counsel | owner_risk_acceptance once approved. */
   approvalBasis: string | null;
+  /** The asset classes it was written for ("ALL" for every class). */
+  assetClasses: string[];
+  /** Transaction structures it serves; empty for any. */
+  structures: string[];
+  /** Written for the asked-for asset class by name, rather than through "ALL". */
+  assetSpecific: boolean;
+}
+
+/** A version with no classes predates them and is residential. */
+export function templateCoversClass(
+  classes: string[],
+  assetClass: string,
+): boolean {
+  const list = classes.length ? classes : ['residential'];
+  return list.includes('ALL') || list.includes(assetClass);
 }
 
 async function readAll(stream: Readable): Promise<Buffer> {
@@ -70,16 +86,24 @@ export class TemplateCatalogService {
     });
   }
 
-  /** The newest version per template and status that applies to a jurisdiction. */
+  /**
+   * The newest version per template and status that applies to a
+   * jurisdiction and, when one is given, an asset class. Residential, land
+   * and commercial deals do not share an agreement unless a person marked
+   * the version for each (docs/asset-classes.md s8).
+   */
   forState(
     versions: Awaited<ReturnType<TemplateCatalogService['usable']>>,
     state: string,
+    assetClass: AssetClass | null = null,
   ): ApplicableTemplate[] {
     const seen = new Set<string>();
     const out: ApplicableTemplate[] = [];
     for (const v of versions) {
       const applies = v.states.includes(state) || v.states.includes('ALL');
       if (!applies) continue;
+      if (assetClass && !templateCoversClass(v.assetClasses, assetClass))
+        continue;
       const key = `${v.templateId}:${v.status}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -95,6 +119,9 @@ export class TemplateCatalogService {
         specific: v.states.includes(state),
         approvedAt: v.approvedAt,
         approvalBasis: v.approvalBasis,
+        assetClasses: v.assetClasses.length ? v.assetClasses : ['residential'],
+        structures: v.structures,
+        assetSpecific: !!assetClass && v.assetClasses.includes(assetClass),
       });
     }
     return out;
@@ -111,9 +138,19 @@ export class TemplateCatalogService {
     kind: TemplateKind,
     state: string,
     disclosureKey?: string | null,
+    opts: { assetClass?: AssetClass | null; structure?: string | null } = {},
   ): Promise<ApplicableTemplate | null> {
-    const all = this.forState(await this.usable(accountId), state).filter(
-      (t) => t.kind === kind && t.status === 'approved',
+    const all = this.forState(
+      await this.usable(accountId),
+      state,
+      opts.assetClass ?? null,
+    ).filter(
+      (t) =>
+        t.kind === kind &&
+        t.status === 'approved' &&
+        (!opts.structure ||
+          !t.structures.length ||
+          t.structures.includes(opts.structure)),
     );
     const narrowed = disclosureKey
       ? all.filter((t) => t.disclosureKey === disclosureKey)
@@ -121,9 +158,12 @@ export class TemplateCatalogService {
     const pool = narrowed.length
       ? narrowed
       : all.filter((t) => !disclosureKey || !t.disclosureKey);
+    // Most specific first: this state, then this asset class by name, then
+    // the most recently approved.
     pool.sort(
       (a, b) =>
         Number(b.specific) - Number(a.specific) ||
+        Number(b.assetSpecific) - Number(a.assetSpecific) ||
         (b.approvedAt?.getTime() ?? 0) - (a.approvedAt?.getTime() ?? 0),
     );
     return pool[0] ?? null;

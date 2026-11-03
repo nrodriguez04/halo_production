@@ -11,12 +11,13 @@ import type { TemplateKind } from '../markets/policy';
 
 const COMMON: Record<string, string> = {
   effective_date: 'Date the document is prepared',
-  property_address: 'Street address',
+  property_address: 'Street address; for a parcel with none, its APN and county',
   property_city: 'City',
   property_state: 'State',
   property_zip: 'Zip',
   property_county: 'County',
   property_apn: 'Parcel number (APN)',
+  property_acres: 'Acreage on the county record',
   seller_name: "Seller's name, from the lead",
 };
 
@@ -155,6 +156,7 @@ export function sampleTemplateValues(kind: TemplateKind, state: string): Record<
     property_zip: '00000',
     property_county: 'SYNTHETIC County',
     property_apn: '000-000-000',
+    property_acres: '10.000',
     seller_name: 'SYNTHETIC Seller',
     buyer_entity: 'SYNTHETIC Buyer LLC',
     assignor_entity: 'SYNTHETIC Buyer LLC',

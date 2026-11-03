@@ -10,11 +10,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
+import {
+  ASSET_CLASSES,
+  CommercialCriteriaSchema,
+  LandCriteriaSchema,
+} from '@halo/shared';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentAccountId, CurrentUserId } from '../auth/decorators';
 import { AutoEnrichService } from './auto-enrich.service';
 import { LISTING_SOURCES } from '../integrations/listings/listing-source.types';
 import {
+  MAX_BATCH,
   SOURCING_CADENCES,
   SourcingService,
   type MarketInput,
@@ -30,6 +36,8 @@ const MarketCriteriaSchema = z
     transferredWithinDays: z.number().int().positive().max(3650).optional(),
     propertyType: z.string().trim().min(1).optional(),
     limit: z.number().int().min(1).max(200).optional(),
+    land: LandCriteriaSchema.optional(),
+    commercial: CommercialCriteriaSchema.optional(),
   })
   .strict();
 
@@ -44,15 +52,39 @@ const MarketShape = z
       .regex(/^\d{5}$/)
       .optional(),
     sources: z.array(z.enum(LISTING_SOURCES)).min(1),
+    assetClasses: z.array(z.enum(ASSET_CLASSES)).min(1).max(3).optional(),
     criteria: MarketCriteriaSchema.optional(),
     cadence: z.enum(SOURCING_CADENCES).optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
 
-const MarketSchema = MarketShape.refine((m) => m.city || m.postalCode, {
-  message: 'city or postalCode is required',
-});
+/**
+ * An area is a city or ZIP; a land or commercial market may instead name
+ * its counties (rural land often has neither).
+ */
+const MarketSchema = MarketShape.refine(
+  (m) =>
+    m.city ||
+    m.postalCode ||
+    (m.criteria?.land?.counties?.length ?? 0) > 0 ||
+    (m.criteria?.commercial?.counties?.length ?? 0) > 0,
+  { message: 'city, postalCode or a county is required' },
+);
+
+const EstimateSchema = z
+  .object({
+    state: z.string().trim().length(2),
+    sources: z.array(z.enum(LISTING_SOURCES)).min(1),
+    assetClasses: z.array(z.enum(ASSET_CLASSES)).min(1).max(3).optional(),
+    cadence: z.enum(SOURCING_CADENCES).optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+
+const RunSchema = z
+  .object({ limit: z.number().int().min(1).max(MAX_BATCH).optional() })
+  .strict();
 const MarketPatchSchema = MarketShape.partial().strict();
 
 const MetrosSchema = z
@@ -132,14 +164,29 @@ export class SourcingController {
     return { deleted: true, id };
   }
 
-  /** Pull this market now, outside its cadence. */
+  /** What a market would cost to run and what its sources can filter, before anything is pulled. */
+  @Post('estimate')
+  estimate(@CurrentAccountId() accountId: string, @Body() body: unknown) {
+    return this.sourcing.estimate(
+      accountId,
+      EstimateSchema.parse(body) as Parameters<SourcingService['estimate']>[1],
+    );
+  }
+
+  /** Pull this market now, outside its cadence; `limit` runs a small batch. */
   @Post('markets/:id/run')
   run(
     @CurrentAccountId() accountId: string,
     @CurrentUserId() userId: string,
     @Param('id') id: string,
+    @Body() body: unknown,
   ) {
-    return this.sourcing.runNow(accountId, id, userId);
+    return this.sourcing.runNow(
+      accountId,
+      id,
+      userId,
+      RunSchema.parse(body ?? {}) as { limit?: number },
+    );
   }
 
   /** Today's auto-enrichment allowance for this account. */

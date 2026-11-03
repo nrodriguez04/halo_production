@@ -27,7 +27,11 @@ describe('MessageDispatchService', () => {
     lead: { findFirst: jest.Mock };
   };
   let deals: { updateStage: jest.Mock };
-  let markets: { assertAllowed: jest.Mock; assertChannel: jest.Mock };
+  let markets: {
+    assertAllowed: jest.Mock;
+    assertChannel: jest.Mock;
+    assetClassOf: jest.Mock;
+  };
   let eligibility: any;
   let disclosure: { assertEquitableInterest: jest.Mock };
   let compliance: { getFacts: jest.Mock };
@@ -60,6 +64,8 @@ describe('MessageDispatchService', () => {
     markets = {
       assertAllowed: jest.fn().mockResolvedValue({}),
       assertChannel: jest.fn().mockResolvedValue({}),
+      // An unclassified property: gated as the market as a whole.
+      assetClassOf: jest.fn().mockResolvedValue(null),
     };
     deals = { updateStage: jest.fn().mockResolvedValue({}) };
     eligibility = {
@@ -634,6 +640,7 @@ describe('MessageDispatchService', () => {
         'TX',
         'seller_outreach',
         'Contacting this seller',
+        null,
       );
       expect(twilio.sendSms).not.toHaveBeenCalled();
       expect(email.sendEmail).not.toHaveBeenCalled();
@@ -664,6 +671,7 @@ describe('MessageDispatchService', () => {
         'GA',
         'investor_sms',
         'Marketing this contract to buyers',
+        null,
       );
       expect(twilio.sendSms).not.toHaveBeenCalled();
     });

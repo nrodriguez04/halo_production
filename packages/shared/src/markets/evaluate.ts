@@ -23,6 +23,7 @@ import {
   type TemplateKind,
   type TransactionStructure,
 } from './policy';
+import { ASSET_CLASS_LABEL, type AssetClass } from '../assets/taxonomy';
 
 /**
  * Where a market stands and what it may do (docs/markets.md s3). Pure: the
@@ -77,16 +78,28 @@ export interface MarketInput {
   /** Research or a draft policy is on file. */
   researchOnFile: boolean;
   /**
-   * Every jurisdiction is open on the owner's own legal judgment
-   * (docs/markets.md s12). Only a state a person blocked or restricted
-   * stays closed.
+   * The owner's nationwide decision (docs/markets.md s12): the activities
+   * and asset classes it opens in every state a person has not blocked or
+   * restricted. It never waives a recorded licence or registration
+   * requirement, and what it does override is listed in `waived`.
    */
   nationwide?: NationwideOperation | null;
+  /**
+   * Evaluate for this asset class (docs/asset-classes.md s9). Land and
+   * commercial activity needs a policy that covers the class, or a
+   * nationwide decision that includes it. Absent or null: the market as a
+   * whole, which is how an unclassified property is gated.
+   */
+  assetClass?: AssetClass | null;
 }
 
 export interface NationwideOperation {
   since: Date;
   byName: string;
+  /** The activities opened; empty means every activity (a decision recorded before scopes). */
+  activities?: MarketActivity[];
+  /** The asset classes opened; empty means every class. */
+  assetClasses?: AssetClass[];
 }
 
 export interface MarketCheck {
@@ -131,6 +144,10 @@ export interface MarketEvaluation {
   nextStep: string | null;
   /** Set when the market is open by the owner's nationwide decision rather than its own approval. */
   nationwide: NationwideOperation | null;
+  /** The checks the nationwide decision overrode here, in words; empty without one. */
+  waived: string[];
+  /** The asset class evaluated for, when one was given. */
+  assetClass: AssetClass | null;
 }
 
 const SELF_TEST_MAX_AGE_DAYS = 30;
@@ -155,8 +172,10 @@ function requirementChecks(
   activities: MarketActivity[],
   input: MarketInput,
 ): MarketCheck[] {
+  const cls = input.assetClass ?? null;
   return reqs
     .filter((r) => r.appliesTo.some((a) => activities.includes(a)))
+    .filter((r) => !cls || !r.assetClasses?.length || r.assetClasses.includes(cls))
     .map((r) => {
       const met = authorizationMet(r.kind, input.authorizations, input.now);
       return {
@@ -436,6 +455,20 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
     }),
   ) as MarketEvaluation['activities'];
 
+  // Land and commercial deals need a policy written for them: the law on
+  // assigning a contract for a house says nothing settled about acreage
+  // or a strip center.
+  const cls = input.assetClass ?? null;
+  if (cls && content && !content.assetClasses.includes(cls)) {
+    for (const act of MARKET_ACTIVITIES) {
+      if (act === 'research' || !activities[act].allowed) continue;
+      activities[act] = {
+        allowed: false,
+        reason: `The approved policy covers ${content.assetClasses.map((c) => ASSET_CLASS_LABEL[c].toLowerCase()).join(' and ')} only; ${ASSET_CLASS_LABEL[cls].toLowerCase()} deals here need the policy reviewed for ${ASSET_CLASS_LABEL[cls].toLowerCase()}.`,
+      };
+    }
+  }
+
   const technical = technicalChecks(working, input);
   const technicalReady = technical.every((x) => x.met);
 
@@ -480,34 +513,91 @@ export function evaluateMarket(input: MarketInput): MarketEvaluation {
     missing,
     nextStep,
     nationwide: null,
+    waived: [],
+    assetClass: cls,
   };
   // A person's block or restriction on one state outlasts the nationwide decision.
   if (input.nationwide && req !== 'BLOCKED' && req !== 'RESTRICTED') {
-    return openNationwide(evaluation, input.nationwide);
+    return openNationwide(evaluation, input.nationwide, working, input);
   }
   return evaluation;
 }
 
+/** The activities a nationwide decision opens: its scope, or every one for a decision recorded before scopes. */
+export function nationwideActivities(n: NationwideOperation): MarketActivity[] {
+  return n.activities?.length ? n.activities : [...MARKET_ACTIVITIES];
+}
+
+export function nationwideCovers(n: NationwideOperation, cls: AssetClass | null | undefined): boolean {
+  return !cls || !n.assetClasses?.length || n.assetClasses.includes(cls);
+}
+
 /**
- * The market as the owner's nationwide decision leaves it: active for every
- * activity, structure and channel. The legal, readiness and technical
- * findings stay as they were, for reference; none of them gates anything.
+ * The market as the owner's nationwide decision leaves it. Each activity in
+ * the decision's scope opens unless the state's policy (approved, or the
+ * draft or research on file) lists a licence or registration for it that
+ * is not recorded: a requirement of law is not the owner's to waive, and
+ * recording it on the Licences tab is the owner's confirmation that it is
+ * met. Everything else the decision overrides (no legal approval, open
+ * questions, an operator, the self-test, channel permissions) is listed in
+ * `waived`, so nothing is skipped silently. Research is open everywhere
+ * with or without the decision.
  */
-function openNationwide(e: MarketEvaluation, n: NationwideOperation): MarketEvaluation {
-  const reason = `Open in every state by ${n.byName}'s decision; Halo has not verified the law here.`;
+function openNationwide(
+  e: MarketEvaluation,
+  n: NationwideOperation,
+  working: MarketPolicyContent | null,
+  input: MarketInput,
+): MarketEvaluation {
+  if (!nationwideCovers(n, input.assetClass)) return { ...e, waived: [] };
+  const scope = new Set(nationwideActivities(n));
+  const reason = `Open by ${n.byName}'s nationwide decision; Halo has not verified the law here.`;
+  const activities = { ...e.activities };
+  const opened: MarketActivity[] = [];
+  for (const act of MARKET_ACTIVITIES) {
+    if (activities[act].allowed || !scope.has(act)) continue;
+    const unmet = working ? requirementChecks(working.requirements, [act], input).filter((x) => !x.met) : [];
+    if (unmet.length) {
+      activities[act] = {
+        allowed: false,
+        reason: `${unmet.map((x) => x.label).join('; ')} required here and not on file. Record it on the Licences tab; the nationwide decision does not waive it.`,
+      };
+      continue;
+    }
+    activities[act] = { allowed: true, reason };
+    opened.push(act);
+  }
+  if (!opened.length) return { ...e, nationwide: n, waived: [] };
+
+  const waived: string[] = [];
+  if (e.legal.state !== 'approved') waived.push('No policy approved by counsel or accepted by the owner for this state.');
+  if (e.legal.unansweredForApproval.length) waived.push(`${e.legal.unansweredForApproval.length} legal question(s) unanswered.`);
+  for (const check of [...e.rungs.acquisition, ...e.rungs.disposition, ...e.rungs.active]) {
+    if (!check.met && !check.key.startsWith('requirement:')) waived.push(check.detail);
+  }
+  if (!e.rungs.acquisition.length && !input.operatorAssigned) waived.push('No operator assigned for this state.');
+  if (!e.rungs.acquisition.length && !(input.selfTest?.passed && !input.selfTest.stale)) waived.push('Self-test not passed.');
+  const allowedNow = (act: MarketActivity) => activities[act].allowed;
+  const structures = TRANSACTION_STRUCTURES.filter((s) =>
+    s === 'assignment' ? allowedNow('assignment') : s === 'double_close' ? allowedNow('double_close') : e.structures.includes(s) || allowedNow('seller_contracting'),
+  );
+  const channels = allowedNow('buyer_marketing') ? [...MARKETING_CHANNELS] : e.channels;
+  if (allowedNow('buyer_marketing') && e.channels.length < MARKETING_CHANNELS.length) {
+    waived.push('Marketing channels the policy has not permitted are open.');
+  }
+  const everyActivity = MARKET_ACTIVITIES.every((a) => activities[a].allowed);
   return {
     ...e,
-    maxStatus: 'ACTIVE',
-    effectiveStatus: 'ACTIVE',
-    activities: Object.fromEntries(
-      MARKET_ACTIVITIES.map((act) => [act, { allowed: true, reason }]),
-    ) as MarketEvaluation['activities'],
-    structures: [...TRANSACTION_STRUCTURES],
-    channels: [...MARKETING_CHANNELS],
-    coverage: { ...e.coverage, active: true },
-    missing: [],
+    maxStatus: everyActivity ? 'ACTIVE' : e.maxStatus,
+    effectiveStatus: everyActivity ? 'ACTIVE' : e.effectiveStatus,
+    activities,
+    structures,
+    channels,
+    coverage: { ...e.coverage, active: everyActivity || e.coverage.active },
+    missing: MARKET_ACTIVITIES.filter((a) => !activities[a].allowed).map((a) => activities[a].reason),
     nextStep: null,
     nationwide: n,
+    waived: Array.from(new Set(waived)),
   };
 }
 

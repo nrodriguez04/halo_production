@@ -319,17 +319,22 @@ export class CampaignsService {
     );
     // The campaign emails each buyer a link to their deal page: both
     // channels must be ones the market's approved policy permits.
+    const assetClass = await this.markets.assetClassOf(accountId, {
+      dealId: c.dealId,
+    });
     await this.markets.assertChannel(
       accountId,
       gate.state,
       'investor_email',
       'Launching a buyer campaign',
+      assetClass,
     );
     await this.markets.assertChannel(
       accountId,
       gate.state,
       'buyer_deal_page',
       'Launching a buyer campaign',
+      assetClass,
     );
     // Campaign emails are marketing: they need their own switch on top of
     // email's (docs/communications.md s2).

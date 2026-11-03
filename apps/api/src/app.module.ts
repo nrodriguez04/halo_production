@@ -46,6 +46,7 @@ import { EmailSendModule } from './integrations/email/email-send.module';
 import { SkipTraceModule } from './skip-trace/skip-trace.module';
 import { LeadLifecycleModule } from './lead-lifecycle/lead-lifecycle.module';
 import { DispositionModule } from './disposition/disposition.module';
+import { AssetsModule } from './assets/assets.module';
 import { MarketsModule } from './markets/markets.module';
 import { TemplatesModule } from './templates/templates.module';
 import { DataModule } from './data/data.module';
@@ -129,6 +130,7 @@ import { AuthModule } from './auth/auth.module';
     SkipTraceModule,
     LeadLifecycleModule,
     DispositionModule,
+    AssetsModule,
     MarketsModule,
     TemplatesModule,
     DataModule,

@@ -244,48 +244,73 @@ model SourceRecord {
 
 // Properties (canonical)
 model Property {
-  id             String    @id @default(cuid())
-  leadId         String?
-  accountId      String
-  apn            String?
-  address        String
-  city           String
-  state          String
-  zip            String
-  latitude       Float?
-  longitude      Float?
-  estimatedValue Float?
+  id                   String    @id @default(cuid())
+  leadId               String?
+  accountId            String
+  apn                  String?
+  /// A rural parcel may have no street address, city or ZIP; its APN,
+  /// county and coordinates identify it instead (docs/asset-classes.md s3).
+  address              String?
+  city                 String?
+  state                String
+  zip                  String?
+  latitude             Float?
+  longitude            Float?
+  estimatedValue       Float?
   /// Seller asking / agreed sale price (vs estimatedValue for spread)
-  salePrice      Float?
-  confidence     Float     @default(1.0)
+  salePrice            Float?
+  confidence           Float     @default(1.0)
   /// Facts from property-data providers (docs/data-pipeline.md s2).
-  county         String?
-  countyFips     String?
-  propertyType   String?
-  beds           Float?
-  baths          Float?
-  sqft           Float?
-  lotSqft        Float?
-  yearBuilt      Int?
-  assessedValue  Float?
-  lastSaleDate   DateTime?
-  lastSalePrice  Float?
+  county               String?
+  countyFips           String?
+  propertyType         String?
+  beds                 Float?
+  baths                Float?
+  sqft                 Float?
+  lotSqft              Float?
+  yearBuilt            Int?
+  assessedValue        Float?
+  lastSaleDate         DateTime?
+  lastSalePrice        Float?
   /// company | trust | individual | lender | government
-  ownerKind      String?
-  absentee       Boolean?
+  ownerKind            String?
+  absentee             Boolean?
   /// Which provider the facts came from, its id for the parcel, and how far to trust them.
-  dataSource     String?
-  dataSourceRef  String?
+  dataSource           String?
+  dataSourceRef        String?
   /// recorded | reported | estimated
-  dataQuality    String?
-  dataUpdatedAt  DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  dataQuality          String?
+  dataUpdatedAt        DateTime?
+  /// The provider's land-use label or county use code, as given.
+  landUse              String?
+  zoning               String?
+  acres                Float?
+  /// Gross building area (sqft is living area, for homes).
+  buildingSqft         Float?
+  units                Int?
+  improvementValue     Float?
+  /// state|county|APN, normalized: the parcel's identity across sources and
+  /// overlapping sourcing markets.
+  parcelKey            String?
+  /// ASSET_CLASSES / ASSET_SUBTYPES (packages/shared/src/assets). Null is
+  /// unclassified, never "residential by default".
+  assetClass           String?
+  assetSubtype         String?
+  /// rules | mapping | operator
+  assetClassBasis      String?
+  /// high | medium (rules only; an operator's or a mapping's call has none)
+  assetClassConfidence String?
+  assetClassReasons    String[]  @default([])
+  assetClassSetBy      String?
+  assetClassSetAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   lead                Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
   sourceRecords       SourceRecord[]
   deals               Deal[]
   underwritingResults UnderwritingResult[]
+  facts               PropertyFact[]
 
   @@index([apn])
   @@index([address, city, state, zip])
@@ -293,8 +318,58 @@ model Property {
   @@index([accountId, createdAt])
   @@index([latitude, longitude])
   @@index([accountId, countyFips])
+  @@index([accountId, parcelKey])
+  @@index([accountId, assetClass])
   @@index([address(ops: raw("gin_trgm_ops"))], type: Gin, map: "properties_address_trgm_idx")
   @@map("properties")
+}
+
+/// One fact about a property and how it was established
+/// (packages/shared/src/assets/facts.ts): verified, reported, estimated,
+/// unknown or needs professional diligence. The newest value per key; its
+/// history is in audit_logs.
+model PropertyFact {
+  id         String    @id @default(cuid())
+  accountId  String
+  propertyId String
+  key        String
+  /// A number, boolean or text, or null when a document holds it.
+  value      Json?
+  /// FACT_STATUSES
+  status     String
+  /// A provider key, "seller", "operator", or the public source's name.
+  source     String?
+  sourceUrl  String?
+  documentId String?
+  note       String?
+  observedAt DateTime?
+  recordedBy String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, key])
+  @@index([accountId, key])
+  @@map("property_facts")
+}
+
+/// What a county use code means, confirmed by a person once and applied to
+/// every record with that code. Empty county or provider means any.
+model AssetCodeMapping {
+  id           String   @id @default(cuid())
+  accountId    String
+  state        String
+  county       String   @default("")
+  provider     String   @default("")
+  code         String
+  assetClass   String
+  assetSubtype String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  @@unique([accountId, state, county, provider, code])
+  @@map("asset_code_mappings")
 }
 
 // Deals
@@ -446,57 +521,57 @@ model Buyer {
 
 // Control plane
 model ControlPlane {
-  id                        String   @id @default(cuid())
+  id                        String    @id @default(cuid())
   /// Owning tenant. The reserved value "GLOBAL" is a platform-wide master
   /// switch: a flag is only on if BOTH the tenant row and the GLOBAL row
   /// (when present) allow it, and the effective cap is the lower of the two.
   /// Before this column existed there was a single unscoped row, so one
   /// tenant flipping a switch changed behaviour for every tenant.
   accountId                 String
-  enabled                   Boolean  @default(true)
+  enabled                   Boolean   @default(true)
   /// Channel switches. New tenants start with both off: external messages
   /// need an explicit decision (docs/communications.md s2).
-  smsEnabled                Boolean  @default(false)
-  emailEnabled              Boolean  @default(false)
+  smsEnabled                Boolean   @default(false)
+  emailEnabled              Boolean   @default(false)
   /// Marketing (campaigns, blasts, first approaches) needs its own switch on
   /// top of the channel's, so enabling deal paperwork never enables campaigns.
-  marketingEmailEnabled     Boolean  @default(false)
-  marketingSmsEnabled       Boolean  @default(false)
-  docusignEnabled           Boolean  @default(true)
-  externalDataEnabled       Boolean  @default(true)
-  aiDailyCostCap            Float    @default(2.0)
-  apiDailyCostCap           Float    @default(50)
-  aiEnabled                 Boolean  @default(true)
+  marketingEmailEnabled     Boolean   @default(false)
+  marketingSmsEnabled       Boolean   @default(false)
+  docusignEnabled           Boolean   @default(true)
+  externalDataEnabled       Boolean   @default(true)
+  aiDailyCostCap            Float     @default(2.0)
+  apiDailyCostCap           Float     @default(50)
+  aiEnabled                 Boolean   @default(true)
   /// Agent autonomy tier (docs/agent-design.md s5): draft_only keeps every
   /// agent action approval-gated; standard lets agents apply the autonomous
   /// tier (scores, notes, hard-rule disqualifies) on their own.
-  agentAutonomy             String   @default("draft_only")
+  agentAutonomy             String    @default("draft_only")
   /// Model per tier, e.g. {"cheap":"gpt-4o-mini","mid":"gpt-4o","strong":"claude-opus-5-5"}; null = platform default.
   agentModels               Json?
   /// New leads moved to enriching automatically, up to autoEnrichDailyCap per UTC day.
-  autoEnrichEnabled         Boolean  @default(true)
-  autoEnrichDailyCap        Int      @default(20)
+  autoEnrichEnabled         Boolean   @default(true)
+  autoEnrichDailyCap        Int       @default(20)
   /// Wholesale fee in dollars: added to the seller price to get the buyers'
   /// price, subtracted in the Underwriter's MAO. A deal's own fee
   /// (deal_economics.assignmentFee) overrides it.
-  defaultAssignmentFee      Int      @default(10000)
+  defaultAssignmentFee      Int       @default(10000)
   /// Contract flipping (docs/contract-flipping.md). The least net profit a
   /// deal may be assigned for; offers below it are recommended for rejection.
-  minNetProfit              Int      @default(5000)
+  minNetProfit              Int       @default(5000)
   /// Our typical costs paid out of the fee, used when a deal records none.
-  dispositionCosts          Int      @default(0)
+  dispositionCosts          Int       @default(0)
   /// Below this underwriting confidence the ARV is shown to buyers as unconfirmed.
-  minUnderwritingConfidence Float    @default(0.5)
+  minUnderwritingConfidence Float     @default(0.5)
   /// A buyer's proof of funds must be verified before an offer is accepted.
-  requireVerifiedPof        Boolean  @default(true)
+  requireVerifiedPof        Boolean   @default(true)
   /// on_funds_received | on_closing_confirmed
-  revenueRecognition        String   @default("on_funds_received")
-  campaignFollowUpDays      Int      @default(3)
-  campaignMaxFollowUps      Int      @default(2)
+  revenueRecognition        String    @default("on_funds_received")
+  campaignFollowUpDays      Int       @default(3)
+  campaignMaxFollowUps      Int       @default(2)
   /// Marketing texts are scrubbed against the Do Not Call registry data on
   /// file (docs/communications.md s7). On until a person turns it off with
   /// counsel's answer: an unknown obligation never permits.
-  dncRegistryRequired       Boolean  @default(true)
+  dncRegistryRequired       Boolean   @default(true)
   /// Every jurisdiction open on the owner's own legal judgment
   /// (docs/markets.md s12): no per-state policy, authorization, operator or
   /// self-test gates wholesaling while it is set. A state a person blocked
@@ -505,7 +580,11 @@ model ControlPlane {
   nationwideOpenedBy        String?
   nationwideOpenedByName    String?
   nationwideNote            String?
-  updatedAt                 DateTime @updatedAt
+  /// MARKET_ACTIVITIES and ASSET_CLASSES the nationwide decision opens.
+  /// Empty on a decision recorded before scopes existed: every activity and class.
+  nationwideActivities      String[]  @default([])
+  nationwideAssetClasses    String[]  @default([])
+  updatedAt                 DateTime  @updatedAt
   updatedBy                 String?
 
   @@unique([accountId])
@@ -681,6 +760,11 @@ model UnderwritingResult {
   rationale          String?
   compsSummary       Json?
   evaluationMetadata Json?
+  /// The strategy used and its full result (AssetUnderwriting), for land
+  /// and commercial deals and the shared view of residential ones.
+  assetClass         String?
+  strategy           String?
+  analysis           Json?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -1090,21 +1174,23 @@ model LeadEnrichmentJob {
 /// listing-source keys (mls | rentcast | realie), `criteria` the per-source
 /// filters, `lastResult` the outcome of the latest pull.
 model SourcingMarket {
-  id         String    @id @default(cuid())
-  accountId  String
-  label      String
-  state      String
-  city       String?
-  postalCode String?
-  sources    String[]
-  criteria   Json?
-  cadence    String    @default("daily") // daily | weekly | manual
-  enabled    Boolean   @default(true)
-  nextRunAt  DateTime?
-  lastRunAt  DateTime?
-  lastResult Json?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  accountId    String
+  label        String
+  state        String
+  city         String?
+  postalCode   String?
+  sources      String[]
+  /// ASSET_CLASSES this market sources; per-class filters live in criteria.
+  assetClasses String[]  @default([])
+  criteria     Json?
+  cadence      String    @default("daily") // daily | weekly | manual
+  enabled      Boolean   @default(true)
+  nextRunAt    DateTime?
+  lastRunAt    DateTime?
+  lastResult   Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([accountId, label])
   @@index([enabled, nextRunAt])
@@ -1356,6 +1442,11 @@ model DocumentTemplateVersion {
   missingRequired    String[]
   /// Jurisdiction codes it applies to; "ALL" for every jurisdiction.
   states             String[]
+  /// ASSET_CLASSES it is written for; "ALL" for every class. A version
+  /// uploaded before asset classes existed is residential.
+  assetClasses       String[]         @default([])
+  /// TRANSACTION_STRUCTURES it serves; empty for any.
+  structures         String[]         @default([])
   /// draft | validated | approved | retired
   status             String           @default("draft")
   /// counsel | owner_risk_acceptance, once approved.
@@ -1414,6 +1505,10 @@ model BuyerTransaction {
   state        String?
   zip          String?
   propertyType String?
+  assetClass   String?
+  assetSubtype String?
+  acres        Float?
+  buildingSqft Float?
   price        Float?
   closedAt     DateTime?
   /// public_record | buyer_provided | halo_closing | manual
@@ -1824,6 +1919,14 @@ model RecordedSale {
   armsLength      Boolean?
   deedType        String?
   propertyType    String?
+  landUse         String?
+  zoning          String?
+  acres           Float?
+  buildingSqft    Float?
+  units           Int?
+  /// Classified from the facts above (packages/shared/src/assets).
+  assetClass      String?
+  assetSubtype    String?
   /// recorded | reported | estimated
   quality         String   @default("recorded")
   importId        String?
@@ -1881,6 +1984,10 @@ model BuyerCandidate {
   states            String[]
   buyBox            Json
   purchases         Json
+  /// Asset classes they bought, and the buyer categories the record suggests
+  /// ({ category, basis: "inferred", reasons }[]). Inferences, not criteria.
+  assetClasses      String[] @default([])
+  categories        Json?
   score             Int
   reasons           String[]
   /// candidate | promoted | dismissed

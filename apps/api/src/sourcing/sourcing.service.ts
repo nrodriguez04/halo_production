@@ -18,6 +18,15 @@ import type {
   ListingSource,
 } from '../integrations/listings/listing-source.types';
 import { metroLabel, US_METROS, type Metro } from './sourcing.metros';
+import {
+  ACTIVITY_LABEL,
+  ASSET_CLASS_LABEL,
+  SOURCING_COVERAGE,
+  type AssetClass,
+  type CommercialCriteria,
+  type LandCriteria,
+} from '@halo/shared';
+import { MarketsService } from '../markets/markets.service';
 
 export type SourcingCadence = 'daily' | 'weekly' | 'manual';
 export const SOURCING_CADENCES = ['daily', 'weekly', 'manual'] as const;
@@ -31,6 +40,10 @@ export interface MarketCriteria {
   transferredWithinDays?: number;
   propertyType?: string;
   limit?: number;
+  /** Land filters, when the market sources land (docs/asset-classes.md s3). */
+  land?: LandCriteria;
+  /** Commercial filters, when the market sources commercial property. */
+  commercial?: CommercialCriteria;
 }
 
 export interface MarketInput {
@@ -39,6 +52,8 @@ export interface MarketInput {
   city?: string;
   postalCode?: string;
   sources: ListingSource[];
+  /** What the market looks for; residential when omitted. */
+  assetClasses?: AssetClass[];
   criteria?: MarketCriteria;
   cadence?: SourcingCadence;
   enabled?: boolean;
@@ -58,6 +73,10 @@ export interface MarketSourceOutcome {
   created?: number;
   duplicates?: number;
   error?: string;
+  filtered?: number;
+  filteredReasons?: Record<string, number>;
+  unclassified?: number;
+  byClass?: Partial<Record<AssetClass, number>>;
 }
 
 export interface MarketRunResult {
@@ -69,10 +88,20 @@ export interface MarketRunResult {
   skipped?: string;
   outcomes: MarketSourceOutcome[];
   created: number;
+  /** Set when a person ran a small batch with a lower limit than the market's. */
+  batchLimit?: number;
 }
 
 export const SYSTEM_USER_ID = 'system';
 const DEFAULT_LIMIT = 50;
+/** The largest "try a small batch" run a person can ask for. */
+export const MAX_BATCH = 25;
+/** Realie pages per import (realie-leads.adapter MAX_PAGES); the most one source can bill a run. */
+const MAX_PAGES_PER_SOURCE: Record<ListingSource, number> = {
+  realie: 5,
+  rentcast: 1,
+  mls: 1,
+};
 
 /**
  * Markets are the standing "find" instruction: an area, the sources to pull
@@ -90,6 +119,7 @@ export class SourcingService {
     private listingImport: ListingImportService,
     private automation: AutomationService,
     private controlPlane: ControlPlaneService,
+    private markets: MarketsService,
   ) {}
 
   list(accountId: string): Promise<SourcingMarket[]> {
@@ -104,16 +134,22 @@ export class SourcingService {
   }
 
   async create(accountId: string, input: MarketInput): Promise<SourcingMarket> {
-    const cadence = input.cadence ?? 'daily';
+    const assetClasses = assetClassesOf(input.assetClasses);
+    // A land or commercial market starts manual: run a small batch, check
+    // what came back, then turn the schedule on.
+    const cadence =
+      input.cadence ??
+      (assetClasses.some((c) => c !== 'residential') ? 'manual' : 'daily');
     const enabled = input.enabled ?? true;
     return this.prisma.sourcingMarket.create({
       data: {
         accountId,
-        label: input.label?.trim() || defaultLabel(input),
+        label: input.label?.trim() || defaultLabel(input, assetClasses),
         state: input.state.trim().toUpperCase(),
         city: input.city?.trim() || null,
         postalCode: input.postalCode?.trim() || null,
         sources: Array.from(new Set(input.sources)),
+        assetClasses,
         criteria: (input.criteria ?? {}) as Prisma.InputJsonObject,
         cadence,
         enabled,
@@ -178,6 +214,9 @@ export class SourcingService {
         ...(patch.sources !== undefined
           ? { sources: Array.from(new Set(patch.sources)) }
           : {}),
+        ...(patch.assetClasses !== undefined
+          ? { assetClasses: assetClassesOf(patch.assetClasses) }
+          : {}),
         ...(patch.criteria !== undefined
           ? { criteria: patch.criteria as Prisma.InputJsonObject }
           : {}),
@@ -195,13 +234,137 @@ export class SourcingService {
     await this.prisma.sourcingMarket.delete({ where: { id } });
   }
 
+  /**
+   * Pull this market now. `limit` runs a small batch (at most MAX_BATCH
+   * records per source) without changing the market's own filters.
+   */
   async runNow(
     accountId: string,
     id: string,
     userId: string,
+    opts: { limit?: number } = {},
   ): Promise<MarketRunResult> {
     const market = await this.get(accountId, id);
-    return this.runMarket(market, 'UI', userId);
+    const limit =
+      opts.limit != null
+        ? Math.max(1, Math.min(MAX_BATCH, Math.round(opts.limit)))
+        : undefined;
+    return this.runMarket(market, 'UI', userId, limit);
+  }
+
+  /**
+   * What a run could cost and what the sources can see, before anything is
+   * pulled: the most pages each source can bill at the rate card, what is
+   * filtered by the provider and what by Halo, and where the state stands.
+   */
+  async estimate(
+    accountId: string,
+    input: {
+      state: string;
+      sources: ListingSource[];
+      assetClasses?: AssetClass[];
+      cadence?: SourcingCadence;
+      limit?: number;
+    },
+  ) {
+    const classes = assetClassesOf(input.assetClasses);
+    const rules = await this.prisma.providerPricingRule.findMany({
+      where: {
+        provider: { key: { in: input.sources } },
+        action: { in: ['search_properties', 'search_listings'] },
+      },
+      include: { provider: { select: { key: true } } },
+    });
+    const perSource = input.sources.map((source) => {
+      const rule = rules.find((r) => r.provider.key === source);
+      const unit = rule?.unitCostUsd ?? 0;
+      const filteredByHalo = classes.some((c) => c !== 'residential');
+      // A filtered Realie pull reads full pages, up to its page cap.
+      const pages =
+        source === 'realie'
+          ? filteredByHalo
+            ? MAX_PAGES_PER_SOURCE.realie
+            : Math.min(
+                MAX_PAGES_PER_SOURCE.realie,
+                Math.ceil((input.limit ?? DEFAULT_LIMIT) / 100),
+              )
+          : MAX_PAGES_PER_SOURCE[source];
+      return {
+        source,
+        maxCallsPerRun: pages,
+        unitCostUsd: unit,
+        maxUsdPerRun: Math.round(pages * unit * 100) / 100,
+        note:
+          source === 'realie'
+            ? 'One token per page of up to 100 parcels; a search with no results is free. Repeating a pull within 12 hours is served from cache.'
+            : source === 'rentcast'
+              ? 'One request per page; listings only (no unlisted parcels).'
+              : 'Your MLS feed; $0 unless the vendor charges.',
+      };
+    });
+    const maxUsdPerRun =
+      Math.round(perSource.reduce((s, p) => s + p.maxUsdPerRun, 0) * 100) / 100;
+    const runsPerMonth =
+      input.cadence === 'daily' ? 30 : input.cadence === 'weekly' ? 4.3 : 0;
+    const status = await this.stateStatus(accountId, input.state, classes);
+    return {
+      perSource,
+      maxUsdPerRun,
+      runsPerMonth,
+      maxUsdPerMonth: Math.round(maxUsdPerRun * runsPerMonth * 100) / 100,
+      coverage: SOURCING_COVERAGE.filter((row) =>
+        row.assetClasses.some((c) => classes.includes(c)),
+      ).map((row) => ({
+        ...row,
+        support: Object.fromEntries(
+          input.sources
+            .filter((s) => s !== 'mls')
+            .map((s) => [s, row[s as 'realie' | 'rentcast']]),
+        ),
+      })),
+      status,
+    };
+  }
+
+  /**
+   * Where the state stands for each asset class: sourcing and analysis are
+   * research and always allowed; contacting sellers and everything after it
+   * needs the market opened.
+   */
+  async stateStatus(accountId: string, state: string, classes: AssetClass[]) {
+    const out = [];
+    for (const assetClass of classes) {
+      try {
+        const r = await this.markets.evaluate(accountId, state.toUpperCase(), {
+          assetClass,
+        });
+        if (!r) throw new Error(`${state} is not a jurisdiction Halo knows`);
+        const e = r.evaluation;
+        const outreach = e.activities.seller_outreach;
+        out.push({
+          assetClass,
+          label: ASSET_CLASS_LABEL[assetClass],
+          effectiveStatus: e.effectiveStatus,
+          researchOnly: !outreach.allowed,
+          sellerOutreach: outreach,
+          summary: outreach.allowed
+            ? `${ACTIVITY_LABEL.seller_outreach} is allowed for ${ASSET_CLASS_LABEL[assetClass].toLowerCase()} in ${state.toUpperCase()}.`
+            : `Research only for ${ASSET_CLASS_LABEL[assetClass].toLowerCase()} in ${state.toUpperCase()}: Halo can find and analyze properties, but not contact sellers. ${outreach.reason}`,
+          nationwide: !!e.nationwide,
+        });
+      } catch (err) {
+        out.push({
+          assetClass,
+          label: ASSET_CLASS_LABEL[assetClass],
+          effectiveStatus: null,
+          researchOnly: true,
+          sellerOutreach: { allowed: false, reason: (err as Error).message },
+          summary: `Research only: ${(err as Error).message}`,
+          nationwide: false,
+        });
+      }
+    }
+    return out;
   }
 
   /**
@@ -213,6 +376,7 @@ export class SourcingService {
     market: SourcingMarket,
     trigger: MarketRunResult['trigger'],
     userId: string = SYSTEM_USER_ID,
+    batchLimit?: number,
   ): Promise<MarketRunResult> {
     const now = new Date();
     const base: MarketRunResult = {
@@ -222,6 +386,7 @@ export class SourcingService {
       trigger,
       outcomes: [],
       created: 0,
+      ...(batchLimit ? { batchLimit } : {}),
     };
 
     if (!(await this.controlPlane.isEnabled(market.accountId))) {
@@ -232,6 +397,8 @@ export class SourcingService {
 
     const runId = await this.openRun(market, trigger);
     const criteria = toCriteria(market);
+    if (batchLimit)
+      criteria.limit = Math.min(criteria.limit ?? batchLimit, batchLimit);
     for (const source of market.sources as ListingSource[]) {
       try {
         const r = await this.listingImport.importListings(
@@ -246,6 +413,14 @@ export class SourcingService {
           searched: r.searched,
           created: r.created,
           duplicates: r.duplicates,
+          ...(r.filtered != null
+            ? {
+                filtered: r.filtered,
+                filteredReasons: r.filteredReasons,
+                unclassified: r.unclassified,
+                byClass: r.byClass,
+              }
+            : {}),
         });
       } catch (err) {
         base.outcomes.push({ source, ok: false, error: errorMessage(err) });
@@ -324,6 +499,7 @@ export class SourcingService {
           city: market.city,
           postalCode: market.postalCode,
           sources: market.sources,
+          assetClasses: market.assetClasses,
           criteria: market.criteria,
         },
       });
@@ -377,7 +553,16 @@ export function toCriteria(market: SourcingMarket): ListingSearchCriteria {
     transferredWithinDays: stored.transferredWithinDays,
     propertyType: stored.propertyType,
     limit: stored.limit ?? DEFAULT_LIMIT,
+    // A market saved before asset classes has none: residential, as it always was.
+    assetClasses: assetClassesOf(market.assetClasses as AssetClass[]),
+    land: stored.land,
+    commercial: stored.commercial,
   };
+}
+
+function assetClassesOf(v: AssetClass[] | null | undefined): AssetClass[] {
+  const list = Array.from(new Set(v ?? []));
+  return list.length ? list : ['residential'];
 }
 
 /**
@@ -413,9 +598,13 @@ function runHour(): number {
   return Number.isInteger(n) && n >= 0 && n <= 23 ? n : 6;
 }
 
-function defaultLabel(input: MarketInput): string {
+function defaultLabel(input: MarketInput, classes: AssetClass[]): string {
   const area = input.city?.trim() || input.postalCode?.trim() || 'Market';
-  return `${area}, ${input.state.trim().toUpperCase()}`;
+  const kind =
+    classes.length === 1 && classes[0] === 'residential'
+      ? ''
+      : ` (${classes.map((c) => ASSET_CLASS_LABEL[c].toLowerCase()).join(', ')})`;
+  return `${area}, ${input.state.trim().toUpperCase()}${kind}`;
 }
 
 function errorMessage(err: unknown): string {

@@ -86,7 +86,14 @@ export class RentCastListingsService implements ListingSourceAdapter {
     if (criteria.state) q.push(['state', criteria.state.toUpperCase()]);
     if (criteria.postalCode) q.push(['zipCode', criteria.postalCode]);
     q.push(['status', status]);
-    if (criteria.propertyType) q.push(['propertyType', criteria.propertyType]);
+    // RentCast lists land as the property type "Land"; a land-only pull asks for it.
+    const propertyType =
+      criteria.propertyType ??
+      (criteria.assetClasses?.length === 1 &&
+      criteria.assetClasses[0] === 'land'
+        ? 'Land'
+        : undefined);
+    if (propertyType) q.push(['propertyType', propertyType]);
     if (criteria.minPrice != null || criteria.maxPrice != null) {
       q.push([
         'price',
@@ -224,6 +231,33 @@ export function normalizeRentCastListing(r: Record<string, unknown>): Listing {
           office: str(office.name),
         }
       : null,
+    // RentCast's documented listing fields; lotSize and county have not
+    // been seen in a live response here yet.
+    parcel: {
+      apn: null,
+      county: str(r.county),
+      latitude: num(r.latitude),
+      longitude: num(r.longitude),
+      acres: null,
+      lotSqft: num(r.lotSize),
+      livingSqft: num(r.squareFootage),
+      buildingSqft: num(r.squareFootage),
+      units: null,
+      yearBuilt: num(r.yearBuilt),
+      landUse: str(r.propertyType),
+      residentialFlag: null,
+      hasStructure: null,
+      improvementValue: null,
+      assessedValue: null,
+      marketValue: null,
+      lastSaleDate: null,
+      lastSalePrice: null,
+      absentee: null,
+      taxDelinquent: null,
+      lienCount: null,
+      foreclosure: null,
+      ownerKind: null,
+    },
     raw: r,
   };
 }

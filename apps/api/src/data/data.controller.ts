@@ -42,6 +42,12 @@ const SALE_FIELDS = [
   'armsLength',
   'deedType',
   'propertyType',
+  // Land and commercial columns, when the county export has them.
+  'landUse',
+  'zoning',
+  'acres',
+  'buildingSqft',
+  'units',
 ] as const;
 
 const DocSchema = z

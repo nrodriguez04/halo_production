@@ -85,7 +85,11 @@ export class PurchaseAgreementsService {
       detail: string;
     }> = [];
     if (!agreement) return { checks };
-    const market = await this.markets.evaluate(accountId, deal.state);
+    const market = await this.markets.evaluate(accountId, deal.state, {
+      assetClass: await this.markets.assetClassOf(accountId, {
+        dealId: deal.id,
+      }),
+    });
     const sellerNotices = (market?.approved?.disclosures ?? []).filter(
       (d) => d.audience === 'seller',
     );
@@ -247,6 +251,7 @@ export class PurchaseAgreementsService {
       deal.state,
       'seller_contracting',
       'Recording a seller contract',
+      await this.markets.assetClassOf(accountId, { dealId: deal.id }),
     );
     const open = await this.prisma.purchaseAgreement.findFirst({
       where: { accountId, dealId, status: { in: OPEN_STATUSES } },

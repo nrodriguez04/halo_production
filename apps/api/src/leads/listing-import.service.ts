@@ -1,6 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { CSVImportRow } from '@halo/shared';
-import { normalizeAddress } from '@halo/shared';
+import {
+  classifyProperty,
+  improvementStatus,
+  matchesCriteria,
+  normalizeAddress,
+  parcelKey,
+  type AssetClass,
+  type AssetClassification,
+  type ClassificationInput,
+  type ParcelCandidate,
+} from '@halo/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { LeadsService } from './leads.service';
@@ -11,6 +21,7 @@ import type {
   ListingSource,
 } from '../integrations/listings/listing-source.types';
 import { sealJson } from '../pii/contact-crypto';
+import { PropertyIntelligenceService } from '../assets/property-intelligence.service';
 
 export interface ListingImportResult {
   source: ListingSource;
@@ -21,6 +32,13 @@ export interface ListingImportResult {
   created: number;
   duplicates: number;
   errors: string[];
+  /** Asset-class pulls only (docs/asset-classes.md s3). */
+  filtered?: number;
+  /** Why records were left out, with counts. */
+  filteredReasons?: Record<string, number>;
+  /** Kept but unclassified: a person confirms what they are. */
+  unclassified?: number;
+  byClass?: Partial<Record<AssetClass, number>>;
 }
 
 export const LISTING_SOURCE_LABEL: Record<ListingSource, string> = {
@@ -70,6 +88,7 @@ export class ListingImportService {
     private prisma: PrismaService,
     private leads: LeadsService,
     private sources: ListingSourceService,
+    @Optional() private intelligence?: PropertyIntelligenceService,
   ) {}
 
   async importListings(
@@ -83,6 +102,15 @@ export class ListingImportService {
       actor: 'user',
       userId,
     });
+    if (criteria.assetClasses?.length && this.intelligence) {
+      return this.importByAssetClass(
+        source,
+        criteria,
+        accountId,
+        userId,
+        search,
+      );
+    }
 
     const usable = search.listings.filter(
       (l) => l.address.street && l.address.postalCode,
@@ -121,12 +149,347 @@ export class ListingImportService {
     };
   }
 
+  /**
+   * An asset-class pull (docs/asset-classes.md s3). Each record is
+   * classified from what it is, kept only when it fits one of the market's
+   * classes and that class's filters, and deduplicated by parcel (state,
+   * county, APN) before address, so overlapping markets and sources never
+   * make a second lead for the same parcel. A parcel with no street address
+   * becomes a lead identified by its APN and county.
+   */
+  private async importByAssetClass(
+    source: ListingSource,
+    criteria: ListingSearchCriteria,
+    accountId: string,
+    userId: string,
+    search: Awaited<ReturnType<ListingSourceService['search']>>,
+  ): Promise<ListingImportResult> {
+    const classes = criteria.assetClasses!;
+    const now = new Date();
+    const filteredReasons: Record<string, number> = {};
+    const byClass: Partial<Record<AssetClass, number>> = {};
+    const errors: string[] = [];
+    let unclassified = 0;
+    const kept: Array<{
+      listing: Listing;
+      cls: AssetClass;
+      classification: AssetClassification;
+      key: string | null;
+    }> = [];
+
+    const mappings = await this.prisma.assetCodeMapping.findMany({
+      where: { accountId, state: (criteria.state ?? '').toUpperCase() },
+    });
+    for (const listing of search.listings) {
+      const parcel = listing.parcel;
+      const state = (
+        listing.address.state ||
+        criteria.state ||
+        ''
+      ).toUpperCase();
+      const input: ClassificationInput = {
+        labels: [listing.propertyType, parcel?.landUse].filter(
+          (l, i, a) => l && a.indexOf(l) === i,
+        ),
+        acres: parcel?.acres,
+        lotSqft: parcel?.lotSqft,
+        buildingSqft: parcel?.buildingSqft ?? listing.livingArea,
+        units: parcel?.units,
+        yearBuilt: parcel?.yearBuilt ?? listing.yearBuilt,
+        improvementValue: parcel?.improvementValue,
+        residentialFlag: parcel?.residentialFlag,
+        hasStructure: parcel?.hasStructure,
+      };
+      let classification = classifyProperty(input);
+      const code = parcel?.landUse;
+      const mapping = code
+        ? mappings.find(
+            (m) => m.code === code && (!m.provider || m.provider === source),
+          )
+        : null;
+      if (mapping) {
+        classification = {
+          ...classification,
+          assetClass: mapping.assetClass as AssetClass,
+          subtype:
+            (mapping.assetSubtype as AssetClassification['subtype']) ?? null,
+          confidence: 'high',
+          unresolved: null,
+          suggestion: null,
+          reasons: [`use code "${code}" confirmed as ${mapping.assetClass}`],
+        };
+      }
+      const candidate: ParcelCandidate = {
+        state,
+        county: parcel?.county ?? null,
+        apn: parcel?.apn ?? null,
+        acres:
+          parcel?.acres ?? (parcel?.lotSqft ? parcel.lotSqft / 43_560 : null),
+        buildingSqft: input.buildingSqft ?? null,
+        units: parcel?.units ?? null,
+        yearBuilt: input.yearBuilt ?? null,
+        landUse: parcel?.landUse ?? listing.propertyType ?? null,
+        assessedValue: parcel?.assessedValue ?? null,
+        lastSaleDate: parcel?.lastSaleDate ?? null,
+        absentee: parcel?.absentee ?? null,
+        taxDelinquent: parcel?.taxDelinquent ?? null,
+        lienCount: parcel?.lienCount ?? null,
+        foreclosure: parcel?.foreclosure ?? null,
+        ownerKind: parcel?.ownerKind ?? null,
+        classification,
+        improved: improvementStatus(input),
+      };
+      let match: { cls: AssetClass; reason: string | null } | null = null;
+      let firstReason: string | null = null;
+      for (const cls of classes) {
+        if (cls === 'residential') {
+          // The residential pull keeps what it always kept, minus what is
+          // plainly land or commercial.
+          const other =
+            classification.assetClass &&
+            classification.assetClass !== 'residential';
+          if (!other) {
+            match = {
+              cls,
+              reason: classification.assetClass
+                ? null
+                : classification.unresolved,
+            };
+            break;
+          }
+          firstReason ??= `classified as ${classification.assetClass}`;
+          continue;
+        }
+        const v = matchesCriteria(
+          candidate,
+          cls,
+          cls === 'land' ? criteria.land : criteria.commercial,
+          now,
+        );
+        if (v.keep) {
+          match = { cls, reason: v.reason };
+          break;
+        }
+        firstReason ??= v.reason;
+      }
+      if (!match) {
+        const why = firstReason ?? 'did not match';
+        filteredReasons[why] = (filteredReasons[why] ?? 0) + 1;
+        continue;
+      }
+      if (!classification.assetClass) unclassified++;
+      byClass[match.cls] = (byClass[match.cls] ?? 0) + 1;
+      kept.push({
+        listing,
+        cls: match.cls,
+        classification,
+        key: parcelKey(state, parcel?.county, parcel?.apn),
+      });
+    }
+
+    // Parcels already on file, from any market or source.
+    const keys = kept.map((k) => k.key).filter((k): k is string => !!k);
+    const known = keys.length
+      ? await this.prisma.property.findMany({
+          where: { accountId, parcelKey: { in: keys } },
+          select: { parcelKey: true, leadId: true },
+        })
+      : [];
+    const knownKeys = new Set(known.map((k) => k.parcelKey));
+    let duplicates = 0;
+    const fresh: typeof kept = [];
+    const seen = new Set<string>();
+    for (const k of kept) {
+      if (k.key && (knownKeys.has(k.key) || seen.has(k.key))) {
+        duplicates++;
+        continue;
+      }
+      if (k.key) seen.add(k.key);
+      fresh.push(k);
+    }
+
+    // Addressed records go through the CSV path (address dedupe, as before);
+    // a parcel with no address is created directly, keyed by its APN.
+    const addressed = fresh.filter(
+      (k) => k.listing.address.street && k.listing.address.postalCode,
+    );
+    const parcelsOnly = fresh.filter(
+      (k) =>
+        !(k.listing.address.street && k.listing.address.postalCode) && k.key,
+    );
+    const dropped = fresh.length - addressed.length - parcelsOnly.length;
+    if (dropped > 0)
+      filteredReasons['no address and no APN with county'] = dropped;
+
+    const imported = await this.leads.importCSV(
+      addressed.map(({ listing: l }) => ({
+        address: l.address.street,
+        city: l.address.city || undefined,
+        state: l.address.state || undefined,
+        zip: l.address.postalCode,
+        owner: l.ownerName || undefined,
+        notes: describe(source, l),
+      })),
+      accountId,
+      userId,
+      { source },
+    );
+    errors.push(...imported.errors);
+    let created = imported.created;
+    duplicates += imported.duplicates;
+
+    const leadFor = new Map<Listing, string>();
+    for (const k of parcelsOnly) {
+      const l = k.listing;
+      const lead = await this.prisma.lead.create({
+        data: {
+          accountId,
+          canonicalAddress: null,
+          canonicalCity: l.address.city || null,
+          canonicalState:
+            (l.address.state || criteria.state || '').toUpperCase() || null,
+          canonicalZip: l.address.postalCode || null,
+          canonicalOwner: l.ownerName || null,
+          status: 'new',
+          tags: [`source:${source}`],
+        },
+        select: { id: true },
+      });
+      leadFor.set(l, lead.id);
+      created++;
+    }
+    await this.attachSourceRecords(
+      source,
+      accountId,
+      addressed.map((k) => k.listing),
+      leadFor,
+      parcelsOnly.map((k) => k.listing),
+    );
+
+    // The parcel itself: facts, classification, and the asset tags the
+    // leads list filters on.
+    const addressedLeads = addressed.length
+      ? await this.prisma.lead.findMany({
+          where: {
+            accountId,
+            canonicalZip: {
+              in: Array.from(
+                new Set(addressed.map((k) => k.listing.address.postalCode)),
+              ),
+            },
+          },
+          select: { id: true, canonicalAddress: true, canonicalZip: true },
+        })
+      : [];
+    const byAddress = new Map(
+      addressedLeads
+        .filter((l) => l.canonicalAddress)
+        .map((l) => [
+          key(
+            l.canonicalZip ?? '',
+            l.canonicalAddress!,
+            l.canonicalZip ?? undefined,
+          ),
+          l.id,
+        ]),
+    );
+    for (const k of [...addressed, ...parcelsOnly]) {
+      const l = k.listing;
+      const leadId =
+        leadFor.get(l) ??
+        byAddress.get(
+          key(l.address.postalCode, l.address.street, l.address.postalCode),
+        ) ??
+        null;
+      if (!leadId) continue;
+      try {
+        if (l.parcel) {
+          await this.intelligence!.upsertParcel(
+            accountId,
+            leadId,
+            {
+              street: l.address.street || null,
+              city: l.address.city || null,
+              state: (l.address.state || criteria.state || '').toUpperCase(),
+              zip: l.address.postalCode || null,
+            },
+            {
+              ...l.parcel,
+              labels: [l.propertyType, l.parcel.landUse],
+              zoning: null,
+              source,
+            },
+          );
+        }
+        const tags = [
+          k.classification.assetClass
+            ? `asset:${k.classification.assetClass}`
+            : 'asset:unclassified',
+          ...(k.classification.subtype
+            ? [`asset:${k.classification.subtype}`]
+            : []),
+        ];
+        const lead = await this.prisma.lead.findUnique({
+          where: { id: leadId },
+          select: { tags: true },
+        });
+        await this.prisma.lead.update({
+          where: { id: leadId },
+          data: { tags: Array.from(new Set([...(lead?.tags ?? []), ...tags])) },
+        });
+      } catch (err) {
+        errors.push(
+          `${l.parcel?.apn ?? l.address.street}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    const filtered = Object.values(filteredReasons).reduce((s, n) => s + n, 0);
+    this.logger.log(
+      `${LISTING_SOURCE_LABEL[source]} ${classes.join('+')} import for ${accountId}: ${search.listings.length} records, ${filtered} filtered, ${created} new leads, ${duplicates} duplicates`,
+    );
+    return {
+      source,
+      feed: search.feed,
+      searched: search.listings.length,
+      total: search.total,
+      created,
+      duplicates,
+      errors,
+      filtered,
+      filteredReasons,
+      unclassified,
+      byClass,
+    };
+  }
+
   private async attachSourceRecords(
     source: ListingSource,
     accountId: string,
     listings: Listing[],
+    leadFor: Map<Listing, string> = new Map(),
+    parcelListings: Listing[] = [],
   ): Promise<number> {
-    if (listings.length === 0) return 0;
+    let attached = 0;
+    for (const listing of parcelListings) {
+      const leadId = leadFor.get(listing);
+      if (!leadId) continue;
+      await this.prisma.sourceRecord.create({
+        data: {
+          leadId,
+          provider: source,
+          endpoint: SOURCE_ENDPOINT[source],
+          requestHash: listing.listingKey,
+          response: sealJson(
+            listing.raw,
+            provenance(source, listing),
+          ) as Prisma.InputJsonObject,
+          trustWeight: SOURCE_TRUST[source],
+        },
+      });
+      attached++;
+    }
+    if (listings.length === 0) return attached;
     const zips = Array.from(new Set(listings.map((l) => l.address.postalCode)));
     const leads = await this.prisma.lead.findMany({
       where: { accountId, canonicalZip: { in: zips } },
@@ -150,7 +513,6 @@ export class ListingImportService {
       );
     }
 
-    let attached = 0;
     for (const listing of listings) {
       const lead = byKey.get(
         key(
@@ -178,22 +540,10 @@ export class ListingImportService {
           endpoint: SOURCE_ENDPOINT[source],
           requestHash: listing.listingKey,
           // The listing agent's direct contacts live in the raw record.
-          response: sealJson(listing.raw, {
-            source,
-            listingKey: listing.listingKey,
-            mlsId: listing.mlsId,
-            status: listing.status,
-            listPrice: listing.listPrice,
-            daysOnMarket: listing.daysOnMarket,
-            propertyType: listing.propertyType,
-            bedrooms: listing.bedrooms,
-            bathrooms: listing.bathrooms,
-            livingArea: listing.livingArea,
-            yearBuilt: listing.yearBuilt,
-            listDate: listing.listDate,
-            city: listing.address.city,
-            postalCode: listing.address.postalCode,
-          }) as Prisma.InputJsonObject,
+          response: sealJson(
+            listing.raw,
+            provenance(source, listing),
+          ) as Prisma.InputJsonObject,
           trustWeight: SOURCE_TRUST[source],
         },
       });
@@ -215,6 +565,34 @@ export class ListingImportService {
     }
     return attached;
   }
+}
+
+/** The non-contact facts kept in the clear beside the sealed raw record. */
+function provenance(source: ListingSource, listing: Listing) {
+  return {
+    source,
+    listingKey: listing.listingKey,
+    mlsId: listing.mlsId,
+    status: listing.status,
+    listPrice: listing.listPrice,
+    daysOnMarket: listing.daysOnMarket,
+    propertyType: listing.propertyType,
+    bedrooms: listing.bedrooms,
+    bathrooms: listing.bathrooms,
+    livingArea: listing.livingArea,
+    yearBuilt: listing.yearBuilt,
+    listDate: listing.listDate,
+    city: listing.address.city,
+    postalCode: listing.address.postalCode,
+    ...(listing.parcel
+      ? {
+          apn: listing.parcel.apn,
+          county: listing.parcel.county,
+          acres: listing.parcel.acres,
+          landUse: listing.parcel.landUse,
+        }
+      : {}),
+  };
 }
 
 function key(zip: string, address: string, zipForNormalize?: string): string {
