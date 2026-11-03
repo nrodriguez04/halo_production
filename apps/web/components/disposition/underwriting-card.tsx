@@ -151,14 +151,17 @@ function Num({ label, value, strong }: { label: string; value: string; strong?: 
  * policy; above it, or while the numbers need review, the reason is asked
  * for and recorded. The Outreach Drafter repeats this amount, never its own.
  */
-function SellerOfferForm({
+export function SellerOfferForm({
   dealId,
   current,
   underwriting,
+  ceilingLabel = 'the MAO',
 }: {
   dealId: string;
   current: number | null;
-  underwriting: Underwriting | null;
+  underwriting: Pick<Underwriting, 'mao' | 'offerRange' | 'recommendation'> | null;
+  /** What the ceiling is called: the MAO for a house, the top of the offer range for land and commercial. */
+  ceilingLabel?: string;
 }) {
   const [amount, setAmount] = useState(current != null ? String(current) : '');
   const [reason, setReason] = useState('');
@@ -201,7 +204,7 @@ function SellerOfferForm({
       </div>
       {outside && (
         <p className="text-caption text-amber-400">
-          Above the MAO or on numbers that need review: the reason is recorded with the offer.
+          Above {ceilingLabel} or on numbers that need review: the reason is recorded with the offer.
         </p>
       )}
     </div>

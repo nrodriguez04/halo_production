@@ -283,12 +283,18 @@ export interface Workspace {
     leadId: string | null;
     property: {
       id: string;
-      address: string;
-      city: string;
+      /** A rural parcel may have no street address, city or ZIP; its APN and county name it. */
+      address: string | null;
+      city: string | null;
       state: string;
-      zip: string;
+      zip: string | null;
       latitude?: number | null;
       longitude?: number | null;
+      apn?: string | null;
+      county?: string | null;
+      /** residential | land | commercial; null when nobody has confirmed it. */
+      assetClass?: string | null;
+      assetSubtype?: string | null;
     } | null;
     lead: { id: string; canonicalOwner?: string | null; canonicalEmail?: string | null } | null;
     contracts: Array<Record<string, any>>;

@@ -156,6 +156,25 @@ export function MarketOverview({ m }: { m: MarketDetail }) {
         </CardContent>
       </Card>
 
+      {(m.evaluation.waived ?? []).length > 0 && (
+        <Card className="border-amber-500/30">
+          <CardHeader className="pb-3">
+            <CardTitle>What the nationwide decision overrides here</CardTitle>
+            <CardDescription>
+              {m.name} is open on the owner&rsquo;s decision to operate in every state, not on its own approval. These checks would otherwise
+              keep it closed; Halo has not verified the law here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-caption text-muted-foreground">
+              {m.evaluation.waived!.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">

@@ -24,7 +24,8 @@ import { toast } from '@/components/ui/toast';
 import { Field } from '@/components/disposition/agreement-panel';
 import { DocumentSelect } from '@/components/disposition/document-select';
 import { day, errorText } from '@/lib/disposition';
-import { BASIS_LABEL, BASIS_VARIANT, TEMPLATE_KIND_LABEL, type ApprovalBasis } from '@/lib/markets';
+import { BASIS_LABEL, BASIS_VARIANT, STRUCTURE_LABEL, TEMPLATE_KIND_LABEL, type ApprovalBasis } from '@/lib/markets';
+import { ASSET_CLASSES, ASSET_CLASS_LABEL, isAssetClass } from '@/lib/assets';
 
 interface Version {
   id: string;
@@ -32,6 +33,10 @@ interface Version {
   status: 'draft' | 'validated' | 'approved' | 'retired';
   format: 'docx' | 'txt';
   states: string[];
+  /** The asset classes it was written for; "ALL" for every class, empty for a version from before classes (residential). */
+  assetClasses: string[];
+  /** Transaction structures it serves; empty for any. */
+  structures: string[];
   fields: string[];
   unknownFields: string[];
   missingRequired: string[];
@@ -75,6 +80,78 @@ function useTemplateCall<I>(fn: (i: I) => Promise<unknown>, ok: string, fail: st
   });
 }
 
+/** Residential unless the uploader says otherwise: house, land and commercial deals never share an agreement by default. */
+const DEFAULT_CLASSES = ['residential'];
+
+/**
+ * Which asset classes a template is for, and optionally which transaction
+ * structures. A land or commercial deal only uses a version marked for it.
+ */
+function ScopeFields({
+  idPrefix,
+  classes,
+  onClasses,
+  structures,
+  onStructures,
+}: {
+  idPrefix: string;
+  classes: string[];
+  onClasses: (next: string[]) => void;
+  structures: string[];
+  onStructures: (next: string[]) => void;
+}) {
+  const all = classes.includes('ALL');
+  const toggleClass = (c: string, on: boolean) => {
+    if (c === 'ALL') return onClasses(on ? ['ALL'] : DEFAULT_CLASSES);
+    const base = classes.filter((x) => x !== 'ALL');
+    onClasses(on ? Array.from(new Set([...base, c])) : base.filter((x) => x !== c));
+  };
+  const toggleStructure = (k: string, on: boolean) =>
+    onStructures(on ? Array.from(new Set([...structures, k])) : structures.filter((x) => x !== k));
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <fieldset className="space-y-2">
+        <legend className="text-caption uppercase tracking-wider text-muted-foreground">Asset classes it is written for</legend>
+        {ASSET_CLASSES.map((c) => (
+          <label key={c} htmlFor={`${idPrefix}-cls-${c}`} className="flex items-center gap-2 text-body">
+            <Checkbox
+              id={`${idPrefix}-cls-${c}`}
+              checked={!all && classes.includes(c)}
+              disabled={all}
+              onCheckedChange={(v) => toggleClass(c, v === true)}
+            />
+            <span>{ASSET_CLASS_LABEL[c]}</span>
+          </label>
+        ))}
+        <label htmlFor={`${idPrefix}-cls-all`} className="flex items-center gap-2 text-body">
+          <Checkbox id={`${idPrefix}-cls-all`} checked={all} onCheckedChange={(v) => toggleClass('ALL', v === true)} />
+          <span>All asset classes</span>
+        </label>
+        <p className="text-caption text-muted-foreground">
+          A contract written for a house rarely fits a parcel of land or a shopping center. Choose All only when the text really covers every kind
+          of property.
+        </p>
+        {classes.length === 0 && <p className="text-caption text-destructive">Choose at least one.</p>}
+      </fieldset>
+      <fieldset className="space-y-2">
+        <legend className="text-caption uppercase tracking-wider text-muted-foreground">Transaction structures (optional)</legend>
+        {Object.keys(STRUCTURE_LABEL).map((k) => (
+          <label key={k} htmlFor={`${idPrefix}-st-${k}`} className="flex items-start gap-2 text-body">
+            <Checkbox
+              id={`${idPrefix}-st-${k}`}
+              className="mt-1"
+              checked={structures.includes(k)}
+              onCheckedChange={(v) => toggleStructure(k, v === true)}
+            />
+            <span>{STRUCTURE_LABEL[k]}</span>
+          </label>
+        ))}
+        <p className="text-caption text-muted-foreground">Leave all unchecked when the document works for any of them.</p>
+      </fieldset>
+    </div>
+  );
+}
+
 const statesOf = (s: string) =>
   s
     .split(/[\s,]+/)
@@ -96,6 +173,8 @@ export default function TemplatesPage() {
   const [disclosureKey, setDisclosureKey] = useState('');
   const [documentId, setDocumentId] = useState('');
   const [states, setStates] = useState('');
+  const [assetClasses, setAssetClasses] = useState<string[]>(DEFAULT_CLASSES);
+  const [structures, setStructures] = useState<string[]>([]);
   const [versionFor, setVersionFor] = useState<Template | null>(null);
   const [approveFor, setApproveFor] = useState<Version | null>(null);
   const [counselName, setCounselName] = useState('');
@@ -112,7 +191,15 @@ export default function TemplatesPage() {
     () =>
       apiJson('/templates', {
         method: 'POST',
-        body: JSON.stringify({ kind, name, disclosureKey: disclosureKey.trim() || null, documentId, states: statesOf(states) }),
+        body: JSON.stringify({
+          kind,
+          name,
+          disclosureKey: disclosureKey.trim() || null,
+          documentId,
+          states: statesOf(states),
+          assetClasses,
+          structures,
+        }),
       }),
     'Template uploaded and checked',
     'Could not add the template',
@@ -122,7 +209,7 @@ export default function TemplatesPage() {
     () =>
       apiJson(`/templates/${versionFor?.id}/versions`, {
         method: 'POST',
-        body: JSON.stringify({ documentId, states: statesOf(states) }),
+        body: JSON.stringify({ documentId, states: statesOf(states), assetClasses, structures }),
       }),
     'New version uploaded and checked',
     'Could not add the version',
@@ -171,6 +258,8 @@ export default function TemplatesPage() {
     setDisclosureKey('');
     setDocumentId('');
     setStates('');
+    setAssetClasses(DEFAULT_CLASSES);
+    setStructures([]);
     setCreateOpen(true);
   };
 
@@ -230,6 +319,8 @@ export default function TemplatesPage() {
                         setVersionFor(t);
                         setDocumentId('');
                         setStates(t.versions[0]?.states.join(', ') ?? '');
+                        setAssetClasses(t.versions[0]?.assetClasses?.length ? t.versions[0].assetClasses : DEFAULT_CLASSES);
+                        setStructures(t.versions[0]?.structures ?? []);
                       }}
                     >
                       New version
@@ -244,6 +335,25 @@ export default function TemplatesPage() {
                     <div className="space-y-1">
                       <p className="font-medium">
                         v{v.version} · {v.format} · {v.states.length ? v.states.join(', ') : 'no state'}
+                      </p>
+                      <p className="flex flex-wrap items-center gap-1 text-caption text-muted-foreground">
+                        <span>For:</span>
+                        {(v.assetClasses ?? []).includes('ALL') ? (
+                          <Badge variant="outline">every asset class</Badge>
+                        ) : (
+                          ((v.assetClasses ?? []).length ? v.assetClasses : DEFAULT_CLASSES).map((c) => (
+                            <Badge key={c} variant="outline">
+                              {isAssetClass(c) ? ASSET_CLASS_LABEL[c] : c}
+                            </Badge>
+                          ))
+                        )}
+                        {(v.assetClasses ?? []).length === 0 && <span>(uploaded before asset classes, so residential)</span>}
+                        <span>·</span>
+                        <span>
+                          {(v.structures ?? []).length
+                            ? v.structures.map((k) => STRUCTURE_LABEL[k] ?? k).join('; ')
+                            : 'any transaction structure'}
+                        </span>
                       </p>
                       <p className="text-caption text-muted-foreground">
                         {v.document?.title ?? 'file'} · {v.fields.length} field(s): {v.fields.join(', ')}
@@ -331,7 +441,7 @@ export default function TemplatesPage() {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add a template</DialogTitle>
             <DialogDescription>Upload the file to the documents library first. Halo checks its merge fields now.</DialogDescription>
@@ -362,12 +472,23 @@ export default function TemplatesPage() {
                 <Input id="tp-disc" value={disclosureKey} onChange={(e) => setDisclosureKey(e.target.value)} />
               </Field>
             </div>
+            <ScopeFields
+              idPrefix="tp"
+              classes={assetClasses}
+              onClasses={setAssetClasses}
+              structures={structures}
+              onStructures={setStructures}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!documentId || name.trim().length < 3} loading={create.isPending} onClick={() => create.mutate()}>
+            <Button
+              disabled={!documentId || name.trim().length < 3 || assetClasses.length === 0}
+              loading={create.isPending}
+              onClick={() => create.mutate()}
+            >
               Add
             </Button>
           </DialogFooter>
@@ -375,7 +496,7 @@ export default function TemplatesPage() {
       </Dialog>
 
       <Dialog open={!!versionFor} onOpenChange={(o) => !o && setVersionFor(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New version of {versionFor?.name}</DialogTitle>
             <DialogDescription>Earlier versions stay on the record; a new one needs its own approval.</DialogDescription>
@@ -387,12 +508,19 @@ export default function TemplatesPage() {
             <Field label="States it covers" htmlFor="tv-states">
               <Input id="tv-states" value={states} onChange={(e) => setStates(e.target.value)} />
             </Field>
+            <ScopeFields
+              idPrefix="tv"
+              classes={assetClasses}
+              onClasses={setAssetClasses}
+              structures={structures}
+              onStructures={setStructures}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setVersionFor(null)}>
               Cancel
             </Button>
-            <Button disabled={!documentId} loading={addVersion.isPending} onClick={() => addVersion.mutate()}>
+            <Button disabled={!documentId || assetClasses.length === 0} loading={addVersion.isPending} onClick={() => addVersion.mutate()}>
               Upload version
             </Button>
           </DialogFooter>
