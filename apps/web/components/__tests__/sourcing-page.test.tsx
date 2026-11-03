@@ -80,6 +80,10 @@ function renderPage() {
   );
 }
 
+// The add-market test fills a long form and waits out the estimate's
+// debounce: about 2 s locally, past Jest's 5 s default on a CI runner.
+jest.setTimeout(20_000);
+
 describe('Sourcing markets page', () => {
   it('shows a county-only land market and runs a small batch with a limit', async () => {
     responses.set('POST /sourcing/markets/m1/run', {
