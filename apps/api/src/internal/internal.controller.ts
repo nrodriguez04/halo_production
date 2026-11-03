@@ -13,6 +13,7 @@ import { GeocodingService } from '../integrations/geocoding/geocoding.service';
 import { AttomService } from '../integrations/attom/attom.service';
 import { PropertyFactsService } from '../data/property-facts.service';
 import { MarketAgentContextService } from '../data/market-agent-context.service';
+import { AssetUnderwritingService } from '../disposition/asset-underwriting.service';
 import { propertyFromAttom } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import type { CostContext } from '../cost-control/dto/cost-intent.dto';
@@ -65,6 +66,7 @@ export class InternalController {
     private readonly prisma: PrismaService,
     private readonly agents: AgentOrchestrationService,
     private readonly marketContext: MarketAgentContextService,
+    private readonly assetUnderwriting: AssetUnderwritingService,
   ) {}
 
   private context(accountId: string, dto: CostAttributionDto): CostContext {
@@ -274,6 +276,19 @@ export class InternalController {
     @Body() dto: MarketAgentContextDto,
   ) {
     return this.marketContext.forAgent(accountId, dto.agent, dto.entityId);
+  }
+
+  /**
+   * The deal's asset-specific underwriting (docs/asset-classes.md s5),
+   * computed here and recorded on the deal, so the Deal Underwriter
+   * explains numbers it never produces.
+   */
+  @Post('deals/:dealId/asset-underwriting')
+  assetUnderwritingForAgent(
+    @CurrentAccountId() accountId: string,
+    @Param('dealId') dealId: string,
+  ) {
+    return this.assetUnderwriting.forDeal(accountId, dealId, { store: true });
   }
 
   /** The worker's decision for a run; applied within the tenant's autonomy tier. */

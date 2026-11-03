@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { partyKind } from '@halo/shared';
 import type { CostContext } from '../../cost-control/dto/cost-intent.dto';
 import { RealieService } from '../realie/realie.service';
 import type { RealieProperty } from '../realie/realie.types';
@@ -49,6 +50,15 @@ export class RealieLeadsAdapter implements ListingSourceAdapter {
       MAX_LIMIT,
     );
     const filter = ownerFilter(criteria.status?.[0]);
+    // Realie's only class filter is residential true/false.
+    const classes = criteria.assetClasses;
+    const residential = !classes?.length
+      ? true
+      : classes.every((c) => c === 'residential')
+        ? true
+        : classes.includes('residential')
+          ? undefined
+          : false;
 
     const listings: Listing[] = [];
     let cursor: string | undefined;
@@ -58,7 +68,13 @@ export class RealieLeadsAdapter implements ListingSourceAdapter {
           state,
           city: criteria.city,
           zipCode: criteria.postalCode,
-          residential: true,
+          county:
+            criteria.land?.counties?.length === 1
+              ? criteria.land.counties[0]
+              : criteria.commercial?.counties?.length === 1
+                ? criteria.commercial.counties[0]
+                : undefined,
+          residential,
           transferredWithinDays: criteria.transferredWithinDays,
           // A filtered pull reads full pages so one token yields as many
           // matches as possible.
@@ -164,6 +180,34 @@ export function toListing(
     ownerName: p.owner.name,
     signals,
     summary,
+    parcel: {
+      apn: p.parcelId,
+      county: p.address.county,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      acres: p.building.lotAcres,
+      lotSqft: null,
+      livingSqft: p.building.livingArea,
+      // Realie gives living area only; a commercial building's gross area is not in it.
+      buildingSqft: p.building.livingArea,
+      units: null,
+      yearBuilt: p.building.yearBuilt,
+      landUse: p.building.useCode,
+      residentialFlag: p.building.residential,
+      hasStructure: null,
+      improvementValue: null,
+      assessedValue: p.values.assessed,
+      marketValue: p.values.market,
+      lastSaleDate: p.lastSale?.date ?? null,
+      lastSalePrice: p.lastSale?.price ?? null,
+      absentee: p.owner.occupied == null ? null : !p.owner.occupied,
+      taxDelinquent: p.distress.taxStatus
+        ? p.distress.taxStatus === 'delinquent'
+        : null,
+      lienCount: p.distress.lienCount,
+      foreclosure: p.distress.foreclosure,
+      ownerKind: p.owner.name ? partyKind(p.owner.name) : null,
+    },
     raw: p.raw,
   };
 }

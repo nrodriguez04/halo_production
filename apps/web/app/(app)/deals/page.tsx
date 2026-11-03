@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useApiQuery } from '@/lib/api-query';
+import { propertyLabel, type AssetFilter } from '@/lib/assets';
+import { AssetClassBadge, AssetClassFilter } from '@/components/assets/asset-class-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,10 +22,16 @@ interface Deal {
   offerAmount?: number;
   createdAt: string;
   property?: {
-    address: string;
-    city: string;
+    /** A parcel may have no street address: its APN and county name it. */
+    address: string | null;
+    city: string | null;
     state: string;
-  };
+    zip?: string | null;
+    apn?: string | null;
+    county?: string | null;
+    assetClass?: string | null;
+    assetSubtype?: string | null;
+  } | null;
 }
 
 const stageVariant = (stage: string) => {
@@ -77,7 +86,12 @@ function FinancialField({
 
 export default function DealsPage() {
   const reduced = useReducedMotion();
-  const { data: deals = [], isPending, isError, error, refetch } = useApiQuery<Deal[]>('/deals');
+  const [assetClass, setAssetClass] = useState<AssetFilter>('');
+  const { data: deals = [], isPending, isError, error, refetch } = useApiQuery<Deal[]>('/deals', {
+    // No params for All, so the sidebar's hover prefetch of /deals is the same cache entry.
+    params: assetClass ? { assetClass } : undefined,
+    placeholderData: (prev) => prev,
+  });
 
   return (
     <div className="space-y-6 p-6">
@@ -92,6 +106,10 @@ export default function DealsPage() {
         }
       />
 
+      <div className="flex justify-end">
+        <AssetClassFilter value={assetClass} onChange={setAssetClass} />
+      </div>
+
       {isPending ? (
         <LoadingState skeleton>
           <SkeletonTable rows={5} cols={4} />
@@ -105,8 +123,12 @@ export default function DealsPage() {
       ) : deals.length === 0 ? (
         <EmptyState
           icon={Handshake}
-          title="No deals in pipeline"
-          description="Convert a qualified lead to start a deal, or create one manually."
+          title={assetClass ? 'No deals match this filter' : 'No deals in pipeline'}
+          description={
+            assetClass
+              ? 'Choose another asset class, or All, to see the rest of the pipeline.'
+              : 'Convert a qualified lead to start a deal, or create one manually.'
+          }
           action={
             <Button size="sm">
               <Plus size={16} className="mr-2" />
@@ -132,10 +154,13 @@ export default function DealsPage() {
                         <Badge variant={stageVariant(deal.stage)}>
                           {deal.stage.replace('_', ' ')}
                         </Badge>
+                        <AssetClassBadge
+                          assetClass={deal.property?.assetClass}
+                          subtype={deal.property?.assetSubtype}
+                          showSubtype
+                        />
                         {deal.property && (
-                          <span className="text-body text-muted-foreground">
-                            {deal.property.address}, {deal.property.city}, {deal.property.state}
-                          </span>
+                          <span className="text-body text-muted-foreground">{propertyLabel(deal.property)}</span>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-8">

@@ -10,6 +10,7 @@ import {
   type RequiredDisclosure,
   type TaxSaleInterestType,
   type TaxSaleTitleStatus,
+  isAssetClass,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { ComplianceBlockedException } from '../compliance/compliance-blocked.exception';
@@ -83,12 +84,16 @@ export class DispositionEligibilityService {
         leadId: true,
         acquisitionType: true,
         taxSaleInterest: true,
-        property: { select: { state: true } },
+        property: { select: { state: true, assetClass: true } },
         lead: { select: { canonicalState: true } },
       },
     });
     if (!deal) throw new NotFoundException(`Deal ${dealId} not found`);
     const t = deal.taxSaleInterest;
+    // A land or commercial deal is marketed only where a policy covers its class.
+    const assetClass = isAssetClass(deal.property?.assetClass)
+      ? deal.property.assetClass
+      : null;
     const state = normalizeState(
       deal.property?.state ?? deal.lead?.canonicalState ?? null,
     );
@@ -99,7 +104,7 @@ export class DispositionEligibilityService {
         orderBy: { createdAt: 'desc' },
         select: AGREEMENT_SELECT,
       }),
-      this.markets.evaluate(accountId, state),
+      this.markets.evaluate(accountId, state, { assetClass }),
       this.prisma.closingIssue.findMany({
         where: { accountId, dealId, status: 'open', severity: 'blocking' },
         select: { kind: true, description: true },

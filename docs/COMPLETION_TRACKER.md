@@ -68,6 +68,25 @@ Gaps the audit found and where they stand:
 | 9 | Dependency security: Next 15.5 and React 19, nodemailer 10, maplibre 6, multer 2.5 and patch overrides, Node 22 images; production advisories 52 -> 14, none critical, none reachable at runtime | done (docs/DEPENDENCY_SECURITY.md; the map's tiles seen drawing in a browser 2026-10-23) | deployed 2026-10-24: DigitalOcean, https://app.haloacquisitions.com, Let's Encrypt certificates, all 11 smoke checks passing | — |
 | 9 | Final engineering and operational readiness report | done (docs/OPERATIONAL_READINESS.md) | — | — |
 
+## Land and commercial (directive 2026-11-03)
+
+Design: docs/asset-classes.md. Owner's guide: docs/texas-activation-guide.md.
+
+| Item | Built | Operational | External dependency |
+|---|---|---|---|
+| Asset classes and subtypes; classification from labels and building facts; unclassified kept unclassified; operator override; county use-code mappings; migration that classifies only plainly residential records | done (unit, real-Postgres) | after deploy | — |
+| Parcels with no street address (APN, county, coordinates); parcel-key dedupe across sources and overlapping markets | done | after deploy | — |
+| Sourcing by asset class: per-class filters, manual start, capped small batch, cost estimate, provider filter coverage, research-only status | done | after deploy | Realie tokens (configured); RentCast key for listed land |
+| Property facts with status (verified, reported, estimated, unknown, needs diligence); land and commercial fact lists; diligence checklists | done | after deploy | professionals' reports (survey, title, Phase I) |
+| FEMA flood zones and USFWS wetlands, free, through cost control | done (endpoints checked live 2026-11-03; tests use a stand-in) | after deploy | — |
+| Land underwriting from comparable land sales per acre; commercial from verified NOI at a sourced cap rate and comparable sales; residential unchanged; offer bounds by strategy | done | needs recorded sales per county | county recorded-sales exports or ATTOM sales |
+| Buyer discovery and matching by asset class; inferred categories kept as inferences | done | needs recorded sales | — |
+| Agents: asset-aware contexts and rules; Underwriter restates land and commercial strategies without a model | done (golden set, recorded replies) | AI on and a model key | `EVAL_OPENAI_API_KEY` to measure the new prompt versions live |
+| Templates by asset class and structure; parcel-safe merge fields | done | after the owner uploads land and commercial agreements | the agreements, approved by counsel or accepted by the owner |
+| Nationwide decision scoped by activity and class; never waives a recorded requirement, the Texas notice, messaging rules or approved templates; lists what it overrides | done | not opened in production | the owner's decision |
+| Screens: sourcing, filters, deal asset and underwriting panels, templates, nationwide scope | done (typecheck, lint, render tests; land deal page seen in a browser) | after deploy | — |
+| Texas acceptance tests (10 checks) | done (real Postgres, SYNTHETIC data) | — | — |
+
 ## Milestones
 
 | Date | Milestone | Commit |
@@ -77,3 +96,4 @@ Gaps the audit found and where they stand:
 | 2026-10-22 | Communications: message classes, marketing switches, market channel gates at send time, internal test sends, SendGrid/Resend delivery events, suppression list, deliverability, seller consent, buyer SMS matching | see git log |
 | 2026-10-22 | Security: approvals need deals:approve; automation-run writes are operator-only; uploads typed by their bytes | see git log |
 | 2026-10-22 | Agents: Market Intelligence and Market Expansion, golden sets, role mapping, CrewAI evaluation | see git log |
+| 2026-11-03 | Land and commercial: asset classes, parcels, sourcing by class, property facts, public maps, land and commercial underwriting, buyers by class, agents, templates by class, scoped nationwide decision, Texas acceptance tests | see git log |

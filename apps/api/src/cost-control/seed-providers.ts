@@ -97,6 +97,24 @@ const PROVIDERS = [
       { action: 'address_lookup', unitCostUsd: 0.05, unit: 'per_call' },
     ],
   },
+  // Free federal map services for land diligence (integrations/public-gis).
+  // No key and no charge; listed so calls are rate-limited and ledgered.
+  {
+    key: 'fema_nfhl',
+    displayName: 'FEMA National Flood Hazard Layer',
+    category: 'property_data',
+    enabled: true,
+    rateLimitPerMin: 60,
+    pricing: [{ action: 'flood_zone', unitCostUsd: 0, unit: 'per_call' }],
+  },
+  {
+    key: 'usfws_nwi',
+    displayName: 'USFWS National Wetlands Inventory',
+    category: 'property_data',
+    enabled: true,
+    rateLimitPerMin: 60,
+    pricing: [{ action: 'wetlands', unitCostUsd: 0, unit: 'per_call' }],
+  },
 
   // Contracts
   {

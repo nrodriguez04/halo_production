@@ -1,6 +1,7 @@
 import type { AgentJobPayload, AgentTrigger } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { onDncList } from './agent-context';
+import { ASSET_PROPERTY_SELECT, type AssetPropertyFields } from './asset-context';
 
 const THREAD_TAKE = 20;
 const MAX_CONTENT_CHARS = 600;
@@ -31,7 +32,14 @@ export interface OutreachContext {
     hasPhone: boolean;
     hasEmail: boolean;
   } | null;
-  property: { address: string; city: string; state: string; zip: string } | null;
+  property:
+    | ({
+        address: string | null;
+        city: string | null;
+        state: string;
+        zip: string | null;
+      } & AssetPropertyFields)
+    | null;
   compliance: { dnc: boolean; consents: { sms: boolean; email: boolean } };
   thread: Array<{
     id: string;
@@ -68,7 +76,13 @@ const dealSelect = {
   offerAmount: true,
   createdAt: true,
 } as const;
-const propertySelect = { address: true, city: true, state: true, zip: true } as const;
+const propertySelect = {
+  address: true,
+  city: true,
+  state: true,
+  zip: true,
+  ...ASSET_PROPERTY_SELECT,
+} as const;
 
 export async function loadOutreachContext(
   p: Pick<AgentJobPayload, 'accountId' | 'entityType' | 'entityId' | 'trigger' | 'messageId'>,

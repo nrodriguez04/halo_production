@@ -55,16 +55,10 @@ export class DisclosureGateService {
     const state = normalizeState(
       deal.property?.state ?? deal.lead?.canonicalState ?? null,
     );
+    // Every Texas deal, whatever its asset class and whatever the owner's
+    // nationwide decision: the statute requires the notice, and a decision
+    // to operate everywhere does not waive it (docs/markets.md s12).
     if (state !== 'TX') return { required: false, satisfied: true, state };
-    // With every state open on the owner's own legal judgment
-    // (docs/markets.md s12), the notice is the owner's to give; Halo does
-    // not hold buyer marketing for it.
-    const cp = await this.prisma.controlPlane.findUnique({
-      where: { accountId },
-      select: { nationwideOpenedAt: true },
-    });
-    if (cp?.nationwideOpenedAt)
-      return { required: false, satisfied: true, state };
 
     const doc = await this.prisma.document.findFirst({
       where: {

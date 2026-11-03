@@ -1,13 +1,19 @@
 {
   "buyer_responder.v1": "sha256:7c338d12fd0e1cc593605d476954d5f97a9a45c26d92108e633706c93d7c48c1",
+  "buyer_responder.v2": "sha256:0e7f967c2679530b0c0f1b7177541c04753c3a5058583657da0606fdc4ebad3b",
   "deal_underwriter.v1": "sha256:b980854b6124cdc99d6f497d87a226070572ece1e2c161388b8cabf055d3568c",
   "deal_underwriter.v2": "sha256:7345986d5bbe5d0dc5c4fac981933954bb31be236a7127644353a612f8a58b2c",
   "disposition_matcher.v1": "sha256:0645f9f0c63bf1591eb90fbf29f8bb6db84ba92680da5acb2dab8dc064892c5e",
   "disposition_matcher.v2": "sha256:f65ea9c8cf20c16c36ed8f33045ba42d46daf950b3f33b98483243e447ef5add",
+  "disposition_matcher.v3": "sha256:8137686c7238e9f7422755bd221ee3a1dc137944074a24d367f2b75eeb51eb11",
   "lead_analyst.v2": "sha256:eea3e92e2eb5a30ba616808efc568bf9b24926c1ae2232988cbf37b7b871bb1b",
   "lead_analyst.v3": "sha256:fa6492261b7f11290ceb4e5a6ab96b3dd279b39bdb17a4ef13769c2480208e2b",
+  "lead_analyst.v4": "sha256:d253270c7af1d09471c1d369f539b9e76bef7dfb5d857a1b9efcc4fc7833a7ae",
   "market_expansion.v1": "sha256:33d550526e5798ea42ea21d593fe1812139d895cb6390036c0d2e8bb5fe41916",
   "market_expansion.v2": "sha256:fb4599bdf6d2728f93b856a30d5ef13b0b04046e47032151a7e6eaa3a4bb3089",
+  "market_expansion.v3": "sha256:82f467157977ac5913aa41fbb38fbbede262b59ea4a26736e58c4a67fa21f49b",
   "market_intelligence.v1": "sha256:0245391332b54404d35e85439a4f7d2f4f947862f243f6c13c1ba6a77e98d9dd",
-  "outreach_drafter.v1": "sha256:a59648ec52dfe7b293aa6eab5d9857115fc1d0dcdc3d66bbd0b1ffd634f94b69"
+  "market_intelligence.v2": "sha256:d0e7ebdf4cc190bee21dc3c74bbd43ff71f708415c558d15b02415c979092179",
+  "outreach_drafter.v1": "sha256:a59648ec52dfe7b293aa6eab5d9857115fc1d0dcdc3d66bbd0b1ffd634f94b69",
+  "outreach_drafter.v2": "sha256:c07eb5d2cd8eb295ea005821a34e3fa130fc5843213ab6c9489c6658adfb0191"
 }

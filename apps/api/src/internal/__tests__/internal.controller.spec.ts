@@ -13,8 +13,12 @@ import { LeadSkipTraceService } from '../../skip-trace/lead-skip-trace.service';
 import { SkipTraceLeadDto } from '../dto/internal.dto';
 import { AgentOrchestrationService } from '../../agent/agent-orchestration.service';
 import { MarketAgentContextService } from '../../data/market-agent-context.service';
+import { AssetUnderwritingService } from '../../disposition/asset-underwriting.service';
 import { MarketAgentContextDto } from '../dto/internal.dto';
 
+const assetUnderwriting = {
+  forDeal: jest.fn().mockResolvedValue({ strategy: 'land_comparables' }),
+};
 const marketContext = { forAgent: jest.fn() };
 
 describe('InternalController', () => {
@@ -79,6 +83,7 @@ describe('InternalController', () => {
           useValue: { openRun: jest.fn(), recordDecision: jest.fn() },
         },
         { provide: MarketAgentContextService, useValue: marketContext },
+        { provide: AssetUnderwritingService, useValue: assetUnderwriting },
       ],
     }).compile();
     controller = module.get(InternalController);
@@ -343,6 +348,19 @@ describe('InternalController', () => {
           { type: 'body', metatype: MarketAgentContextDto },
         ),
       ).resolves.toEqual(expect.objectContaining({ entityId: 'US' }));
+    });
+  });
+
+  describe('deals/:dealId/asset-underwriting', () => {
+    it('computes and records the asset strategy for the calling tenant', async () => {
+      await expect(
+        controller.assetUnderwritingForAgent('tenant-1', 'deal-1'),
+      ).resolves.toEqual({ strategy: 'land_comparables' });
+      expect(assetUnderwriting.forDeal).toHaveBeenCalledWith(
+        'tenant-1',
+        'deal-1',
+        { store: true },
+      );
     });
   });
 });

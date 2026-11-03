@@ -14,6 +14,8 @@ import {
   ACTIVATION_STATUSES,
   AUTHORIZATION_KINDS,
   MARKET_CLASSIFICATIONS,
+  MARKET_ACTIVITIES,
+  ASSET_CLASSES,
 } from '@halo/shared';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -65,6 +67,9 @@ const NationwideSchema = z
     openedByName: z.string().trim().min(2).max(200),
     note: z.string().trim().max(2000).nullable().optional(),
     attest: z.literal(true),
+    /** What to open everywhere; every activity and class when omitted. */
+    activities: z.array(z.enum(MARKET_ACTIVITIES)).min(1).max(8).optional(),
+    assetClasses: z.array(z.enum(ASSET_CLASSES)).min(1).max(3).optional(),
   })
   .strict();
 

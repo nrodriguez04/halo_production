@@ -30,6 +30,7 @@ describe('SourcingService', () => {
     failRun: jest.Mock;
   };
   let controlPlane: { isEnabled: jest.Mock };
+  let markets: any;
   let service: SourcingService;
 
   beforeEach(() => {
@@ -62,11 +63,27 @@ describe('SourcingService', () => {
       failRun: jest.fn(),
     };
     controlPlane = { isEnabled: jest.fn().mockResolvedValue(true) };
+    markets = {
+      evaluate: jest.fn().mockResolvedValue({
+        evaluation: {
+          effectiveStatus: 'RESEARCH_ONLY',
+          nationwide: null,
+          activities: {
+            seller_outreach: {
+              allowed: false,
+              reason:
+                'Contacting sellers is not allowed while the market is research only.',
+            },
+          },
+        },
+      }),
+    };
     service = new SourcingService(
       prisma,
       listingImport as any,
       automation as any,
       controlPlane as any,
+      markets as any,
     );
   });
 
@@ -157,8 +174,77 @@ describe('SourcingService', () => {
       transferredWithinDays: undefined,
       propertyType: undefined,
       limit: 25,
+      // Saved before asset classes: the residential pull it always was.
+      assetClasses: ['residential'],
+      land: undefined,
+      commercial: undefined,
     });
     expect(toCriteria(market({ criteria: null }) as any).limit).toBe(50);
+  });
+
+  it('starts a land market manual, with its own filters, and runs a capped small batch', async () => {
+    await service.create('acct-1', {
+      state: 'TX',
+      sources: ['realie'],
+      assetClasses: ['land'],
+      criteria: {
+        land: { counties: ['Bastrop'], minAcres: 5, vacantOnly: true },
+      },
+    });
+    const data = prisma.sourcingMarket.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      cadence: 'manual',
+      nextRunAt: null,
+      assetClasses: ['land'],
+      label: 'Market, TX (land)',
+    });
+    const land = market({
+      assetClasses: ['land'],
+      criteria: { land: { minAcres: 5 }, limit: 50 },
+    });
+    prisma.sourcingMarket.findFirst.mockResolvedValue(land);
+    const run = await service.runNow('acct-1', 'm-1', 'user-1', { limit: 500 });
+    expect(run.batchLimit).toBe(25);
+    expect(listingImport.importListings).toHaveBeenCalledWith(
+      'realie',
+      expect.objectContaining({
+        limit: 25,
+        assetClasses: ['land'],
+        land: { minAcres: 5 },
+      }),
+      'tenant-1',
+      'user-1',
+    );
+  });
+
+  it('estimates a run before anything is pulled and says the state is research only', async () => {
+    prisma.providerPricingRule = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          provider: { key: 'realie' },
+          action: 'search_properties',
+          unitCostUsd: 0.05,
+        },
+      ]),
+    };
+    const e = await service.estimate('acct-1', {
+      state: 'TX',
+      sources: ['realie'],
+      assetClasses: ['land'],
+      cadence: 'weekly',
+    });
+    expect(e.perSource[0]).toMatchObject({
+      source: 'realie',
+      maxCallsPerRun: 5,
+      maxUsdPerRun: 0.25,
+    });
+    expect(e.maxUsdPerMonth).toBeCloseTo(1.08, 2);
+    expect(e.coverage.some((r: any) => r.filter === 'acres')).toBe(true);
+    expect(e.status[0]).toMatchObject({
+      assetClass: 'land',
+      researchOnly: true,
+    });
+    expect(e.status[0].summary).toMatch(/Research only for land in TX/);
   });
 
   it('pulls every source, records the outcome, schedules the next run and books an automation run', async () => {

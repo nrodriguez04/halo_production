@@ -71,6 +71,14 @@ describe('Deal Underwriter hard rule', () => {
       hardRule(ctx({ property: { ...ctx().property!, zip: '' } })),
     ).toMatchObject({ rule: 'no_property' });
     expect(hardRule(ctx())).toBeNull();
+    // A rural parcel with no street address is identified by APN and county.
+    expect(
+      hardRule(
+        ctx({
+          property: { ...ctx().property!, address: null, zip: null, apn: 'R123', county: 'Bastrop' },
+        }),
+      ),
+    ).toBeNull();
     const d = decisionFromHardRule({ rule: 'no_property', reason: 'no property' });
     expect(d.recommendation).toBe('hold');
     expect(d.actions).toEqual([{ type: 'append_note', note: 'no property (rule: no_property)' }]);
@@ -83,6 +91,46 @@ describe('DealUnderwriterAgent.run', () => {
     new DealUnderwriterAgent({ models, chat: chat as unknown as typeof chatCompletion });
 
   beforeEach(() => chat.mockReset());
+
+  it('restates the deterministic land strategy and never asks the model for an ARV', async () => {
+    const analysis = {
+      assetClass: 'land',
+      subtype: 'rural_acreage',
+      strategy: 'land_comparables',
+      valuation: { low: 120000, mid: 135000, high: 150000 },
+      approaches: [],
+      evidence: [],
+      confidence: { score: 0.55, level: 'medium' },
+      missing: ['Legal access is not established: confirm road frontage or a recorded easement through title work.'],
+      risks: ['Without legal access the parcel may be unsellable to most buyers.'],
+      assumptions: ['A land buyer pays about 75% of the low end of the value range.'],
+      offerRange: { low: 64000, high: 80000 },
+      targetFee: 10000,
+      expectedBuyerPrice: 90000,
+      expectedNet: 0,
+      buyerDemand: { level: 'unknown', matchingBuyers: 0, detail: 'Buyers have not been matched to this deal yet.' },
+      decision: 'review',
+      summary: 'Worth about $120,000-$150,000; offer $64,000-$80,000. Review first: Legal access is not established.',
+      explanation: ['Halo valued the 12 acres from 5 comparable vacant-land sale(s).'],
+      sensitivity: null,
+    };
+    const load = jest.fn().mockResolvedValue(analysis);
+    const land = ctx({
+      property: { ...ctx().property!, assetClass: 'land', estimatedValue: null, salePrice: null },
+    });
+    const res = await new DealUnderwriterAgent({
+      chat: chat as unknown as typeof chatCompletion,
+      assetUnderwriting: load,
+    }).run(land, 'acct', 'run-1');
+    expect(chat).not.toHaveBeenCalled();
+    expect(load).toHaveBeenCalledWith('acct', land.deal.id);
+    expect(res.costUsd).toBe(0);
+    expect(res.decision.hardRule).toBe('asset_strategy');
+    expect(res.decision.recommendation).toBe('hold');
+    expect(res.decision.actions.map((a) => a.type)).toEqual(['append_note']);
+    expect(res.decision.rationale).toMatch(/Strategy: land: comparable land sales per acre/);
+    expect(res.decision.rationale).toMatch(/Missing: Legal access is not established/);
+  });
 
   it('skips the model when the rule answers', async () => {
     const res = await agent().run(ctx({ property: null }), 'acct', 'run-1');

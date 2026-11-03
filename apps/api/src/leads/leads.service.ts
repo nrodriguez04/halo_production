@@ -66,11 +66,21 @@ export class LeadsService {
       skip?: number;
       take?: number;
       search?: string;
+      /** residential | land | commercial | unclassified (docs/asset-classes.md). */
+      assetClass?: string;
     },
   ) {
     const where: any = { accountId };
     if (options?.status) {
       where.status = options.status;
+    }
+    if (options?.assetClass === 'unclassified') {
+      where.NOT = { properties: { some: { assetClass: { not: null } } } };
+    } else if (
+      options?.assetClass &&
+      ['residential', 'land', 'commercial'].includes(options.assetClass)
+    ) {
+      where.properties = { some: { assetClass: options.assetClass } };
     }
     if (options?.search && options.search.trim()) {
       const q = options.search.trim();
@@ -103,6 +113,20 @@ export class LeadsService {
         createdAt: true,
         updatedAt: true,
         _count: { select: { properties: true, deals: true } },
+        // The parcel's identity and class, for a lead with no street address
+        // and for the asset-class column.
+        properties: {
+          select: {
+            id: true,
+            assetClass: true,
+            assetSubtype: true,
+            apn: true,
+            county: true,
+            acres: true,
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
     });

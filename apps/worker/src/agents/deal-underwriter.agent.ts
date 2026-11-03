@@ -1,5 +1,6 @@
 import {
   AGENT_TIER,
+  ASSET_DECISION_LABEL,
   DEAL_UNDERWRITER_PROMPT_VERSION,
   agentWorkflow,
   parseDealUnderwriterOutput,
@@ -8,10 +9,11 @@ import {
   type AgentAction,
   type AgentDecision,
   type AgentModels,
+  type AssetUnderwriting,
   type DealUnderwriterOutput,
 } from '@halo/shared';
 import { estimateAiCostUsd } from '../ai-model';
-import { chatCompletion } from '../internal-api.client';
+import { assetUnderwriting, chatCompletion } from '../internal-api.client';
 import type { DealUnderwriterContext } from './deal-context';
 import { AgentOutputError, type LeadAnalystResult } from './lead-analyst.agent';
 
@@ -50,12 +52,18 @@ export function hasValueData(ctx: DealUnderwriterContext): boolean {
 export function hardRule(
   ctx: DealUnderwriterContext,
 ): UnderwriterHardRule | null {
-  if (!ctx.property || !ctx.property.address || !ctx.property.zip) {
+  const p = ctx.property;
+  // A street address with its ZIP, or a rural parcel's APN and county.
+  if (!p || !((p.address && p.zip) || (p.apn && p.county))) {
     return {
       rule: 'no_property',
-      reason: 'The deal has no property with a street address and ZIP',
+      reason:
+        'The deal has no property identified by a street address and ZIP, or by APN and county',
     };
   }
+  // Land and commercial deals are valued from comparables and financials
+  // by the api's strategy, which says itself what is missing.
+  if (usesAssetStrategy(ctx)) return null;
   if (!hasValueData(ctx)) {
     return {
       rule: 'no_value_data',
@@ -119,6 +127,50 @@ export function checkedNumbers(
   return {
     out: { ...out, mao, offer_high: high, offer_low: low, recommendation },
     adjustments,
+  };
+}
+
+/** Land and commercial deals are valued by their own deterministic strategy, never by a model's ARV. */
+export function usesAssetStrategy(ctx: DealUnderwriterContext): boolean {
+  const c = ctx.property?.assetClass;
+  return c === 'land' || c === 'commercial';
+}
+
+/**
+ * The Underwriter's decision for a land or commercial deal: the api's
+ * deterministic result (docs/asset-classes.md s5), restated. The numbers
+ * are already recorded on the deal; the run explains the strategy, the
+ * risks and what is missing, and changes no figure.
+ */
+export function decisionFromAssetStrategy(
+  a: AssetUnderwriting,
+): AgentDecision {
+  const recommendation =
+    a.decision === 'pursue' ? 'offer' : a.decision === 'pass' ? 'pass' : 'hold';
+  const strategy =
+    a.strategy === 'land_comparables'
+      ? 'land: comparable land sales per acre'
+      : a.strategy === 'commercial_income_and_sales'
+        ? 'commercial: income capitalization and comparable sales'
+        : 'residential ARV';
+  const lines = [
+    `Strategy: ${strategy}.`,
+    ...a.explanation,
+    ...(a.risks.length ? [`Risks: ${a.risks.join(' ')}`] : []),
+    ...(a.missing.length ? [`Missing: ${a.missing.join(' ')}`] : []),
+    ...(a.assumptions.length ? [`Assumptions: ${a.assumptions.join(' ')}`] : []),
+  ];
+  const rationale = lines.join('\n');
+  return {
+    agent: 'deal_underwriter',
+    promptVersion: DEAL_UNDERWRITER_PROMPT_VERSION,
+    model: null,
+    recommendation,
+    summary: `${ASSET_DECISION_LABEL[a.decision]} (${strategy}): ${a.summary}`,
+    rationale,
+    confidence: a.confidence.score,
+    hardRule: 'asset_strategy',
+    actions: [{ type: 'append_note', note: rationale.slice(0, 4000) }],
   };
 }
 
@@ -194,6 +246,10 @@ export class DealUnderwriterAgent {
     private readonly opts: {
       models?: AgentModels | null;
       chat?: typeof chatCompletion;
+      assetUnderwriting?: (
+        accountId: string,
+        dealId: string,
+      ) => Promise<AssetUnderwriting>;
     } = {},
   ) {}
 
@@ -204,6 +260,13 @@ export class DealUnderwriterAgent {
   ): Promise<LeadAnalystResult> {
     const rule = hardRule(ctx);
     if (rule) return { decision: decisionFromHardRule(rule), costUsd: 0 };
+    if (usesAssetStrategy(ctx)) {
+      const load =
+        this.opts.assetUnderwriting ??
+        ((a: string, d: string) => assetUnderwriting<AssetUnderwriting>(a, d));
+      const analysis = await load(accountId, ctx.deal.id);
+      return { decision: decisionFromAssetStrategy(analysis), costUsd: 0 };
+    }
 
     const model = resolveAgentModel(
       AGENT_TIER.deal_underwriter,

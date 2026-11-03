@@ -245,16 +245,21 @@ The agent also holds without asking a model when:
 
 ## 12. Operating in every state
 
-The owner can open all 50 states and DC at once, on their own legal judgment, instead of deciding each policy. Set on 2026-10-25, at the owner's request: "I need the ability to wholesale at scale in all 50 states and DC. I will deal with the legal matters on my own."
+The owner can open activities in all 50 states and DC at once, on their own legal judgment, instead of deciding each policy. Set on 2026-10-25 at the owner's request ("I need the ability to wholesale at scale in all 50 states and DC. I will deal with the legal matters on my own."), and narrowed on 2026-11-03 at the owner's later request that it "cannot silently bypass necessary legal and operational restrictions" and that owner risk acceptance "must not substitute for requirements that cannot legally be waived".
 
-- **Who:** an owner or admin (the role check of s3.1), on the Markets page or `POST /markets/nationwide` with the owner's full name, an optional note and the statement `NATIONWIDE_ATTESTATION`. `POST /markets/nationwide/close` with a reason returns every state to its own approval. Both are audited (`markets.nationwide.open` / `.close`); `GET /markets/nationwide` reports it.
-- **Effect:** `evaluateMarket` makes every market active for every activity, structure and channel. No policy, authorization, operator or self-test is needed, and Texas's equitable-interest notice no longer holds buyer marketing. The legal, readiness and technical findings are still computed and shown, for reference.
-- **What still applies:**
+- **Who:** an owner or admin (the role check of s3.1), on the Markets page or `POST /markets/nationwide` with the owner's full name, an optional note, the statement `NATIONWIDE_ATTESTATION`, and optionally its scope: `activities` (any of `MARKET_ACTIVITIES` except research) and `assetClasses` (residential, land, commercial). Omitted, the scope is every activity and class. `POST /markets/nationwide/close` with a reason returns every state to its own approval. Both are audited (`markets.nationwide.open` records the scope; `.close`); `GET /markets/nationwide` reports the decision, its scope and `neverWaived`.
+- **Research is separate.** Sourcing, enrichment, underwriting and buyer discovery are research and are allowed in every state with or without the decision. The decision is about contacting sellers, marketing contractual interests, executing documents and closing.
+- **Effect:** for each activity and asset class in scope, `evaluateMarket` opens the activity in every state not blocked or restricted. A decision recorded before scopes existed (empty `nationwideActivities`) opens every activity and class. A partial decision opens its activities without changing the market's own status label.
+- **What the decision never waives** (`neverWaived`):
   - a state a person set to Blocked or Restricted stays closed;
-  - contracts still come from the owner's own templates (accepted once, for `ALL` jurisdictions on the Templates page);
-  - messaging rules are unchanged: consent, the Do Not Call list and registry, quiet hours, opt-outs and the email footer protect the people contacted, and are not state wholesaling approval.
+  - a licence or registration the state's policy (approved, draft or research) lists for an activity blocks that activity until it is recorded and verified on the state's Licences tab: a requirement of law is not the owner's to waive, and recording it is the owner's confirmation that it is met;
+  - required disclosures are enforced before marketing: the Texas equitable-interest notice (Prop. Code 5.0205, Occ. Code 1101.0045) applies to every Texas deal of every asset class;
+  - messaging rules: consent, the Do Not Call list and registry, quiet hours, opt-outs and the email footer;
+  - documents are generated only from templates a person approved or accepted, for the deal's state and asset class (docs/asset-classes.md s8).
+- **What it overrides is listed, not skipped:** the evaluation's `waived` lists each check the decision overrode in that state (no approved policy, open legal questions, no operator, no self-test, channels the policy has not permitted). The state page shows the list.
 - **Labels:** every surface says a market is open on the owner's nationwide decision ("open nationwide, owner's decision"; the activity reasons read "Halo has not verified the law here"), never that it is approved or legal.
-- Stored on the control plane: `nationwideOpenedAt`, `nationwideOpenedBy`, `nationwideOpenedByName`, `nationwideNote`.
+- Stored on the control plane: `nationwideOpenedAt`, `nationwideOpenedBy`, `nationwideOpenedByName`, `nationwideNote`, `nationwideActivities`, `nationwideAssetClasses`.
+- **Asset classes:** a policy covers the classes in its `assetClasses` (a policy written before 2026-11-03 covers residential only). Land and commercial activity needs a policy covering the class, or a nationwide decision that includes it. An unclassified property is gated as the market as a whole, as every deal was before asset classes.
 
 ## 13. Not operational yet
 

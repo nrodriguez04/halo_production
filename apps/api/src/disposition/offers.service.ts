@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  assignmentFeeFor,
   canTransitionOffer,
   evaluatePolicy,
   negotiationBoundsRule,
@@ -29,6 +28,7 @@ import { assertStructureAllowed } from './structure-gate';
 import { AssignmentsService } from './assignments.service';
 import { BuyerMessagingService, greetingName } from './buyer-messaging.service';
 import { buyerEvent, daysBetween, dealEvent } from './timeline-events';
+import { AssetUnderwritingService } from './asset-underwriting.service';
 
 const OPEN: OfferStatus[] = ['received', 'countered'];
 
@@ -72,6 +72,7 @@ export class OffersService {
     private assignments: AssignmentsService,
     private messaging: BuyerMessagingService,
     private markets: MarketsService,
+    private assetUnderwriting: AssetUnderwritingService,
   ) {}
 
   async list(accountId: string, dealId: string) {
@@ -113,44 +114,9 @@ export class OffersService {
    * costs and thresholds, and the contract price once there is one.
    */
   async underwriting(accountId: string, dealId: string) {
-    const [deal, agreement, cp] = await Promise.all([
-      this.prisma.deal.findFirst({
-        where: { id: dealId, accountId },
-        include: {
-          economics: true,
-          underwritingResult: { select: { confidence: true } },
-          property: { select: { salePrice: true } },
-        },
-      }),
-      this.eligibility.currentAgreement(accountId, dealId),
-      this.controlPlane.getStatus(accountId),
-    ]);
-    if (!deal) throw new NotFoundException(`Deal ${dealId} not found`);
-    const e = deal.economics;
-    const knownCosts =
-      (e?.closingCosts ?? 0) +
-      (e?.marketingCost ?? 0) +
-      (e?.otherCost ?? 0) +
-      (e?.skipTraceCost ?? 0);
-    return underwriteDeal({
-      arv: deal.arv,
-      repairEstimate: deal.repairEstimate,
-      assignmentFee: assignmentFeeFor(
-        e?.assignmentFee,
-        cp.defaultAssignmentFee,
-      ),
-      transactionCosts: knownCosts > 0 ? knownCosts : cp.dispositionCosts,
-      minNetProfit: cp.minNetProfit,
-      confidence: deal.underwritingResult?.confidence ?? null,
-      minConfidence: cp.minUnderwritingConfidence,
-      contractPrice:
-        agreement &&
-        agreement.status !== 'terminated' &&
-        agreement.status !== 'expired'
-          ? (agreement.purchasePrice ?? e?.contractPrice ?? null)
-          : (e?.contractPrice ?? null),
-      sellerAsk: deal.property?.salePrice ?? null,
-    });
+    return underwriteDeal(
+      await this.assetUnderwriting.residentialInput(accountId, dealId),
+    );
   }
 
   /**
@@ -177,6 +143,22 @@ export class OffersService {
       );
     }
     const u = await this.underwriting(accountId, dealId);
+    // Land and commercial deals are bounded by their own strategy's offer
+    // range (docs/asset-classes.md s5), never by the residential MAO.
+    const asset = await this.assetUnderwriting.forDeal(accountId, dealId);
+    const nonResidential =
+      asset.assetClass === 'land' || asset.assetClass === 'commercial';
+    if (nonResidential) {
+      u.mao = asset.offerRange?.high ?? null;
+      u.offerRange = asset.offerRange;
+      u.recommendation =
+        asset.decision === 'pursue'
+          ? 'offer'
+          : asset.decision === 'pass'
+            ? 'pass'
+            : 'needs_review';
+      u.flags = asset.decision === 'pursue' ? [] : asset.missing.slice(0, 3);
+    }
     const [bounds] = evaluatePolicy(
       {
         tenantId: accountId,
@@ -196,12 +178,16 @@ export class OffersService {
     if (!bounds.allow) {
       problems.push(
         u.mao != null && u.mao > 0
-          ? `$${input.amount.toLocaleString('en-US')} is above the MAO of $${u.mao.toLocaleString('en-US')}`
-          : 'there is no positive MAO for this deal',
+          ? `$${input.amount.toLocaleString('en-US')} is above the ${nonResidential ? 'top of the offer range' : 'MAO'} of $${u.mao.toLocaleString('en-US')}`
+          : nonResidential
+            ? 'no offer range is supported for this deal yet'
+            : 'there is no positive MAO for this deal',
       );
     }
     if (u.recommendation === 'needs_review') {
-      problems.push(`the numbers need review (${u.flags.join(', ')})`);
+      problems.push(
+        `the numbers need review (${u.flags.join(nonResidential ? '; ' : ', ')})`,
+      );
     }
     if (problems.length && !input.reason) {
       throw new BadRequestException({

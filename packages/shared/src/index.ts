@@ -24,6 +24,9 @@ export * from './markets';
 // Data: provider-neutral records, investor discovery, market intelligence
 export * from './data';
 
+// Asset classes: residential, land and commercial; classification, facts, underwriting
+export * from './assets';
+
 // Communications: message classes and the switches they need
 export * from './communications';
 

@@ -56,7 +56,7 @@ export function legalClearanceClaim(text: string): string | null {
 
 // ------------------------------------------------------- Market Intelligence
 
-export const MARKET_INTELLIGENCE_PROMPT_VERSION = 'market_intelligence.v1';
+export const MARKET_INTELLIGENCE_PROMPT_VERSION = 'market_intelligence.v2';
 
 export const MarketIntelligenceOutputSchema = z.object({
   summary: z.string().min(1).max(1500),
@@ -103,7 +103,7 @@ export interface MarketBrief {
 
 // ---------------------------------------------------------- Market Expansion
 
-export const MARKET_EXPANSION_PROMPT_VERSION = 'market_expansion.v2';
+export const MARKET_EXPANSION_PROMPT_VERSION = 'market_expansion.v3';
 
 const comparable = (s: string) =>
   s.trim().toLowerCase().replace(/[?.!]+$/, '').replace(/\s+/g, ' ');

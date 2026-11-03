@@ -43,10 +43,12 @@ export class PropertiesController {
     @Query('state') state?: string,
     @Query('minPrice') minPrice?: string,
     @Query('maxPrice') maxPrice?: string,
+    @Query('assetClass') assetClass?: string,
   ) {
     return this.propertiesService.search(accountId, {
       city,
       state,
+      assetClass,
       minPrice: minPrice ? parseFloat(minPrice) : undefined,
       maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
     });

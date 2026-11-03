@@ -1,4 +1,5 @@
 import { prisma } from '../prisma-client';
+import { ASSET_PROPERTY_SELECT } from './asset-context';
 
 /**
  * What the Lead Analyst reads. Everything here is non-contact data: the
@@ -69,6 +70,7 @@ export async function loadLeadContext(
           zip: true,
           estimatedValue: true,
           salePrice: true,
+          ...ASSET_PROPERTY_SELECT,
         },
       },
       sourceRecords: {

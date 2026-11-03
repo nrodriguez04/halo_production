@@ -1,6 +1,10 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
-import { TEMPLATE_KINDS } from '@halo/shared';
+import {
+  TEMPLATE_KINDS,
+  ASSET_CLASSES,
+  TRANSACTION_STRUCTURES,
+} from '@halo/shared';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { Permissions } from '../auth/permissions.decorator';
@@ -27,6 +31,13 @@ const CreateSchema = z
       .optional(),
     documentId: z.string().trim().min(1).max(64),
     states: STATES,
+    /** Residential when omitted; "ALL" for every class. */
+    assetClasses: z
+      .array(z.enum([...ASSET_CLASSES, 'ALL']))
+      .min(1)
+      .max(4)
+      .optional(),
+    structures: z.array(z.enum(TRANSACTION_STRUCTURES)).max(4).optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
   })
   .strict();
@@ -35,6 +46,13 @@ const VersionSchema = z
   .object({
     documentId: z.string().trim().min(1).max(64),
     states: STATES,
+    /** Residential when omitted; "ALL" for every class. */
+    assetClasses: z
+      .array(z.enum([...ASSET_CLASSES, 'ALL']))
+      .min(1)
+      .max(4)
+      .optional(),
+    structures: z.array(z.enum(TRANSACTION_STRUCTURES)).max(4).optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
   })
   .strict();

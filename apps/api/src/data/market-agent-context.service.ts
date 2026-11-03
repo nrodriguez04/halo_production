@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
 import {
   APPROVAL_REQUIRED_QUESTIONS,
   MARKET_QUESTIONS,
@@ -32,7 +33,41 @@ export class MarketAgentContextService {
   constructor(
     private markets: MarketsService,
     private intelligence: MarketIntelligenceService,
+    @Optional() private prisma?: PrismaService,
   ) {}
+
+  /**
+   * Recorded sales (last 12 months) and leads in the state by asset class
+   * (docs/asset-classes.md s7), so the agents discuss land and commercial
+   * apart from houses. Unclassified records are counted as such.
+   */
+  async assetMix(accountId: string, state: string) {
+    if (!this.prisma) return null;
+    const since = new Date();
+    since.setUTCFullYear(since.getUTCFullYear() - 1);
+    const [sales, properties] = await Promise.all([
+      this.prisma.recordedSale.groupBy({
+        by: ['assetClass'],
+        where: { accountId, state, saleDate: { gte: since } },
+        _count: { _all: true },
+      }),
+      this.prisma.property.groupBy({
+        by: ['assetClass'],
+        where: { accountId, state, leadId: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const shape = (
+      rows: Array<{ assetClass: string | null; _count: { _all: number } }>,
+    ) =>
+      Object.fromEntries(
+        rows.map((r) => [r.assetClass ?? 'unclassified', r._count._all]),
+      );
+    return {
+      recordedSales12m: shape(sales),
+      leadProperties: shape(properties),
+    };
+  }
 
   /** The scope an agent works on: a state code, or US for the nationwide brief. */
   scope(agent: AgentName, entityId: string): string {
@@ -136,6 +171,7 @@ export class MarketAgentContextService {
         })),
       })),
       coverage: { counties: geos.total, states: geos.total ? 1 : 0 },
+      assetMix: await this.assetMix(accountId, scope),
       kpis,
     };
   }
@@ -167,9 +203,12 @@ export class MarketAgentContextService {
         nextStep: d.nextStep,
         missing: d.missing.slice(0, 12),
       },
+      assetMix: await this.assetMix(accountId, state),
       draft: draft
         ? {
             summary: clip(draft.summary, 1500),
+            /** The asset classes the draft was researched for. */
+            assetClasses: draft.assetClasses,
             answers: Object.fromEntries(
               MARKET_QUESTIONS.map((q) => [
                 q,

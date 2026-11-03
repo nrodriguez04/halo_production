@@ -4,6 +4,8 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApiQuery } from '@/lib/api-query';
 import { useDebouncedValue } from '@/lib/use-debounce';
+import { acresText, propertyLabel, type AssetFilter } from '@/lib/assets';
+import { AssetClassBadge, AssetClassFilter } from '@/components/assets/asset-class-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,10 +28,16 @@ const PropertyMap = dynamic(() => import('@/components/property-map'), { ssr: fa
 
 interface Property {
   id: string;
-  address: string;
-  city: string;
+  /** A rural parcel may have no street address or city: its APN and county name it. */
+  address: string | null;
+  city: string | null;
   state: string;
-  zip?: string;
+  zip?: string | null;
+  apn?: string | null;
+  county?: string | null;
+  acres?: number | null;
+  assetClass?: string | null;
+  assetSubtype?: string | null;
   estimatedValue?: number;
   salePrice?: number | null;
   confidence?: number;
@@ -50,6 +58,7 @@ function valueSpread(estimated?: number | null, sale?: number | null): number | 
 export default function PropertiesPage() {
   const [search, setSearch] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const [assetClass, setAssetClass] = useState<AssetFilter>('');
   const debouncedCity = useDebouncedValue(search, 250);
 
   const {
@@ -59,7 +68,11 @@ export default function PropertiesPage() {
     error,
     refetch,
   } = useApiQuery<Property[]>('/properties/search', {
-    params: { city: debouncedCity || undefined, state: stateFilter || undefined },
+    params: {
+      city: debouncedCity || undefined,
+      state: stateFilter || undefined,
+      assetClass: assetClass || undefined,
+    },
     placeholderData: (prev) => prev,
   });
 
@@ -82,19 +95,22 @@ export default function PropertiesPage() {
         onChange={setSearch}
         placeholder="Filter by city…"
         filters={
-          <Select
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value)}
-            className="w-32"
-            aria-label="Filter by state"
-          >
-            <option value="">All States</option>
-            {['TX', 'CA', 'FL', 'GA', 'AZ', 'NC', 'TN', 'OH', 'IN', 'MO', 'CO', 'NV'].map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
+          <>
+            <AssetClassFilter value={assetClass} onChange={setAssetClass} />
+            <Select
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+              className="w-32"
+              aria-label="Filter by state"
+            >
+              <option value="">All States</option>
+              {['TX', 'CA', 'FL', 'GA', 'AZ', 'NC', 'TN', 'OH', 'IN', 'MO', 'CO', 'NV'].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          </>
         }
       />
 
@@ -113,7 +129,7 @@ export default function PropertiesPage() {
           icon={MapIcon}
           title="No properties match"
           description={
-            debouncedCity || stateFilter
+            debouncedCity || stateFilter || assetClass
               ? 'Try widening your filters.'
               : 'Properties appear here once leads are enriched and geocoded.'
           }
@@ -129,6 +145,7 @@ export default function PropertiesPage() {
                 <TableRow>
                   <TableHead>Address</TableHead>
                   <TableHead>City/State</TableHead>
+                  <TableHead>Asset class</TableHead>
                   <TableHead className="text-right">Estimated Value</TableHead>
                   <TableHead className="text-right">Sale Price</TableHead>
                   <TableHead className="text-right">
@@ -144,9 +161,17 @@ export default function PropertiesPage() {
               <TableBody>
                 {properties.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium text-foreground">{p.address}</TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {p.address?.trim() ? p.address : propertyLabel(p)}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {p.city}, {p.state}
+                      {[p.city ?? (p.county ? `${p.county} County` : null), p.state].filter(Boolean).join(', ')}
+                    </TableCell>
+                    <TableCell>
+                      <AssetClassBadge assetClass={p.assetClass} subtype={p.assetSubtype} />
+                      {p.assetClass === 'land' && acresText(p.acres) && (
+                        <div className="text-caption text-muted-foreground">{acresText(p.acres)}</div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-foreground">
                       {p.estimatedValue != null ? formatUsd(p.estimatedValue) : '—'}

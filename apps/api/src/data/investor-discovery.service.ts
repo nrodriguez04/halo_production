@@ -86,6 +86,8 @@ export class InvestorDiscoveryService {
         states: c.buyBox.states,
         buyBox: c.buyBox as unknown as Prisma.InputJsonObject,
         purchases: c.purchases as unknown as Prisma.InputJsonArray,
+        assetClasses: c.buyBox.assetClasses,
+        categories: c.categories as unknown as Prisma.InputJsonArray,
         score: c.score,
         reasons: c.reasons,
         refreshedAt: asOf,
@@ -187,6 +189,10 @@ export class InvestorDiscoveryService {
       city: string | null;
       zip: string | null;
       propertyType: string | null;
+      assetClass?: string | null;
+      assetSubtype?: string | null;
+      acres?: number | null;
+      buildingSqft?: number | null;
     }>;
     const buyer = await this.prisma.$transaction(async (tx) => {
       const b = await tx.buyer.create({
@@ -208,6 +214,10 @@ export class InvestorDiscoveryService {
             },
             propertyTypes: (box.propertyTypes ?? []).slice(0, 20),
             inferred: true,
+            // What the record suggests they are. Not stated criteria: the
+            // asset classes they buy are read from their purchases until
+            // they confirm them (docs/asset-classes.md s6).
+            inferredCategories: (c.categories ?? []) as Prisma.InputJsonArray,
           } as Prisma.InputJsonObject,
         },
       });
@@ -220,6 +230,10 @@ export class InvestorDiscoveryService {
             state: p.state,
             zip: p.zip,
             propertyType: p.propertyType,
+            assetClass: p.assetClass ?? null,
+            assetSubtype: p.assetSubtype ?? null,
+            acres: p.acres ?? null,
+            buildingSqft: p.buildingSqft ?? null,
             price: p.price,
             closedAt: new Date(`${p.saleDate}T00:00:00Z`),
             source: 'public_record',

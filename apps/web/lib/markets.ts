@@ -80,7 +80,13 @@ export interface NationwideStatus {
   openedAt: string | null;
   openedByName: string | null;
   note: string | null;
+  /** What the decision opened: research plus the activities chosen. Empty while closed. */
+  activities?: string[];
+  /** The asset classes it covers. Empty while closed. */
+  assetClasses?: string[];
   attestation: string;
+  /** What the decision never waives, whatever its scope. */
+  neverWaived?: string[];
   closedStates: Array<{ state: string; status: ActivationStatus }>;
 }
 
@@ -205,6 +211,8 @@ export interface MarketDetail extends MarketRow {
     rungs: { acquisition: MarketCheck[]; disposition: MarketCheck[]; active: MarketCheck[] };
     activities: Record<string, { allowed: boolean; reason: string }>;
     legal: { unansweredForApproval: string[] };
+    /** What the owner's nationwide decision overrides in this state; empty without one. */
+    waived?: string[];
   };
   questions: Array<{ key: string; label: string; requiredForApproval: boolean }>;
   attestation: string;

@@ -291,6 +291,7 @@ export class DocuSignService {
         deal.property?.state ?? deal.lead?.canonicalState ?? null,
         'seller_contracting',
         'Sending a purchase agreement to the seller',
+        await this.markets.assetClassOf(accountId, { dealId: deal.id }),
       );
     }
     if (purpose === 'assignment') {

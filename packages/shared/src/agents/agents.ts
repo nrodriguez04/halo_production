@@ -277,7 +277,7 @@ export function decisionNeedsApproval(decision: AgentDecision): boolean {
 
 // ----------------------------------------------------------------- Lead Analyst
 
-export const LEAD_ANALYST_PROMPT_VERSION = 'lead_analyst.v3';
+export const LEAD_ANALYST_PROMPT_VERSION = 'lead_analyst.v4';
 
 export const LeadAnalystOutputSchema = z.object({
   score: z.number().min(0).max(100),
@@ -356,7 +356,7 @@ export const INBOUND_INTENTS = [
 ] as const;
 export type InboundIntent = (typeof INBOUND_INTENTS)[number];
 
-export const OUTREACH_DRAFTER_PROMPT_VERSION = 'outreach_drafter.v1';
+export const OUTREACH_DRAFTER_PROMPT_VERSION = 'outreach_drafter.v2';
 
 const OPT_OUT_PHRASES: RegExp[] = [
   /\b(stop|quit|cease|never|do not|don'?t|dont)\b[^.!?]{0,40}\b(text|texting|texts|message|messaging|messages|contact|contacting|call|calling|calls|email|emailing|reach(ing)? out)\b/i,
@@ -432,7 +432,7 @@ export interface BuyerShortlistEntry {
   ruleScore: number;
 }
 
-export const DISPOSITION_MATCHER_PROMPT_VERSION = 'disposition_matcher.v2';
+export const DISPOSITION_MATCHER_PROMPT_VERSION = 'disposition_matcher.v3';
 
 export const DispositionMatcherOutputSchema = z.object({
   shortlist: z
@@ -480,7 +480,7 @@ export const BUYER_REPLY_INTENTS = [
 ] as const;
 export type BuyerReplyIntent = (typeof BUYER_REPLY_INTENTS)[number];
 
-export const BUYER_RESPONDER_PROMPT_VERSION = 'buyer_responder.v1';
+export const BUYER_RESPONDER_PROMPT_VERSION = 'buyer_responder.v2';
 
 export const BuyerResponderOutputSchema = z.object({
   intent: z.enum(BUYER_REPLY_INTENTS),

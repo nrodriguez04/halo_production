@@ -18,6 +18,8 @@ import { PublicDealPagesService } from './public-deal-pages.service';
 import { CommandCenterService } from './command-center.service';
 import { DispositionSweepService } from './disposition-sweep.service';
 import { TaxSalesService } from './tax-sales.service';
+import { AssetUnderwritingService } from './asset-underwriting.service';
+import { AssetsModule } from '../assets/assets.module';
 import {
   AssignmentsController,
   CampaignsController,
@@ -45,6 +47,7 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     DocumentsModule,
     BuyersModule,
     DispositionGateModule,
+    AssetsModule,
   ],
   controllers: [
     DealDispositionController,
@@ -70,6 +73,7 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     CommandCenterService,
     DispositionSweepService,
     TaxSalesService,
+    AssetUnderwritingService,
   ],
   exports: [
     PurchaseAgreementsService,
@@ -77,6 +81,7 @@ import { PublicDealPagesController } from './public-deal-pages.controller';
     OffersService,
     ClosingService,
     CampaignsService,
+    AssetUnderwritingService,
   ],
 })
 export class DispositionModule {}

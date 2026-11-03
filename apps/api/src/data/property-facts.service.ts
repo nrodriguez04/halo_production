@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { toJurisdictionCode, type NormalizedProperty } from '@halo/shared';
+import { Injectable, Optional } from '@nestjs/common';
+import {
+  parcelKey,
+  toJurisdictionCode,
+  type NormalizedProperty,
+} from '@halo/shared';
 import { PrismaService } from '../prisma.service';
+import { PropertyIntelligenceService } from '../assets/property-intelligence.service';
 
 /**
  * Property facts from any provider, written onto the lead's Property row
@@ -11,7 +16,10 @@ import { PrismaService } from '../prisma.service';
  */
 @Injectable()
 export class PropertyFactsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private intelligence?: PropertyIntelligenceService,
+  ) {}
 
   async applyToLead(
     accountId: string,
@@ -62,6 +70,13 @@ export class PropertyFactsService {
       lastSalePrice: known(facts.lastSalePrice),
       ownerKind: known(facts.ownerKind),
       absentee: known(facts.absentee),
+      landUse: known(facts.landUse),
+      zoning: known(facts.zoning),
+      acres: known(facts.acres),
+      buildingSqft: known(facts.buildingSqft),
+      units: known(facts.units != null ? Math.round(facts.units) : null),
+      improvementValue: known(facts.improvementValue),
+      parcelKey: known(parcelKey(state, facts.county, facts.apn)),
       dataSource: facts.source,
       dataSourceRef: known(facts.sourceRef),
       dataQuality: facts.quality,
@@ -113,6 +128,12 @@ export class PropertyFactsService {
       where: { accountId, leadId: lead.id, propertyId: null },
       data: { propertyId },
     });
+    // New facts can settle (or sharpen) what the property is.
+    if (this.intelligence) {
+      await this.intelligence.classify(accountId, propertyId, {
+        hasStructure: facts.hasStructure ?? null,
+      });
+    }
     return propertyId;
   }
 }

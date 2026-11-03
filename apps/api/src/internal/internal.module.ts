@@ -7,6 +7,7 @@ import { MessageDispatchService } from '../communications/message-dispatch.servi
 import { DealsModule } from '../deals/deals.module';
 import { DispositionGateModule } from '../disposition/disposition-gate.module';
 import { DataModule } from '../data/data.module';
+import { DispositionModule } from '../disposition/disposition.module';
 
 // OpenAIModule / TwilioSendModule / EmailSendModule, ComplianceModule,
 // ControlPlaneModule and SkipTraceModule are @Global, so their services
@@ -20,6 +21,7 @@ import { DataModule } from '../data/data.module';
     DealsModule,
     DispositionGateModule,
     DataModule,
+    DispositionModule,
   ],
   controllers: [InternalController],
   providers: [MessageDispatchService],

@@ -1550,12 +1550,23 @@ function recordingChat(inner: ChatFn, calls: ChatCall[]): ChatFn {
 function makeAgent(
   agent: AgentName,
   opts: { models: AgentModels; chat: ChatFn },
+  ctx: Record<string, unknown> = {},
 ) {
   switch (agent) {
     case 'lead_analyst':
       return new LeadAnalystAgent(opts);
     case 'deal_underwriter':
-      return new DealUnderwriterAgent(opts);
+      // A land or commercial case carries the api's deterministic result as
+      // `assetAnalysis`; the agent restates it and never asks a model.
+      return new DealUnderwriterAgent({
+        ...opts,
+        assetUnderwriting: async () => {
+          if (!ctx.assetAnalysis) {
+            throw new Error('a land or commercial case needs assetAnalysis');
+          }
+          return ctx.assetAnalysis as never;
+        },
+      });
     case 'outreach_drafter':
       return new OutreachDrafterAgent(opts);
     case 'disposition_matcher':
@@ -1594,7 +1605,7 @@ export async function runCase(
       : recordingChat(opts.chat as ChatFn, calls);
   const models: AgentModels =
     opts.mode === 'offline' ? OFFLINE_MODELS : (opts.models ?? {});
-  const agent = makeAgent(file.agent, { models, chat });
+  const agent = makeAgent(file.agent, { models, chat }, ctx);
 
   let decision: AgentDecision | undefined;
   let error: Error | undefined;

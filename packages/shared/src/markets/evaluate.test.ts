@@ -209,31 +209,77 @@ describe('market evaluation', () => {
     expect(e.technical.checks.find((c) => c.key === 'policy_encoded')?.met).toBe(false);
   });
 
-  it("opens a state with nothing approved on the owner's nationwide decision", () => {
+  it("opens a state with nothing approved on the owner's nationwide decision, except a recorded requirement", () => {
     const nationwide = { since: NOW, byName: 'SYNTHETIC Owner' };
     // A bare research draft: no approved policy, template, authorization, operator or self-test.
-    const e = evaluateMarket(
-      input({
-        code: 'WY',
-        requestedStatus: 'RESEARCH_ONLY',
-        approved: null,
-        authorizations: [],
-        templates: [],
-        operatorAssigned: false,
-        selfTest: null,
-        nationwide,
-      }),
-    );
-    expect(e.effectiveStatus).toBe('ACTIVE');
-    expect(Object.values(e.activities).every((a) => a.allowed)).toBe(true);
-    expect(marketAllows(e, 'seller_contracting').reason).toMatch(/SYNTHETIC Owner's decision; Halo has not verified the law here/);
+    const bare = {
+      code: 'WY',
+      requestedStatus: 'RESEARCH_ONLY' as const,
+      approved: null,
+      authorizations: [],
+      templates: [],
+      operatorAssigned: false,
+      selfTest: null,
+      nationwide,
+    };
+    const e = evaluateMarket(input(bare));
+    // The draft lists a Foreign LLC registration for signing: that is the law, not the owner's to waive.
+    expect(marketAllows(e, 'seller_contracting').allowed).toBe(false);
+    expect(marketAllows(e, 'seller_contracting').reason).toMatch(/Foreign LLC registration required here and not on file.*Licences tab/);
+    for (const act of ['seller_outreach', 'buyer_marketing', 'assignment', 'closing'] as const) {
+      expect(marketAllows(e, act).allowed).toBe(true);
+      expect(marketAllows(e, act).reason).toMatch(/SYNTHETIC Owner's nationwide decision; Halo has not verified the law here/);
+    }
     expect(channelAllowed(e, 'public_listing').allowed).toBe(true);
-    expect(e.structures).toEqual(expect.arrayContaining(['assignment', 'double_close']));
     expect(e.nationwide).toEqual(nationwide);
-    expect(e.missing).toEqual([]);
-    // The legal finding is still reported as it stands.
+    // What the decision overrode is said, not skipped silently.
+    expect(e.waived).toEqual(expect.arrayContaining([expect.stringMatching(/No policy approved/), expect.stringMatching(/No operator/)]));
     expect(e.legal.state).toBe('draft');
-    expect(e.coverage.active).toBe(true);
+
+    // Recorded, the requirement no longer blocks, and every activity is open.
+    const recorded = evaluateMarket(
+      input({ ...bare, authorizations: [{ kind: 'entity_registration', status: 'active', verifiedAt: NOW, expiresAt: null }] }),
+    );
+    expect(Object.values(recorded.activities).every((a) => a.allowed)).toBe(true);
+    expect(recorded.effectiveStatus).toBe('ACTIVE');
+    expect(recorded.structures).toEqual(expect.arrayContaining(['assignment', 'double_close']));
+  });
+
+  it('opens only the activities and asset classes the nationwide decision names', () => {
+    const nationwide = {
+      since: NOW,
+      byName: 'SYNTHETIC Owner',
+      activities: ['seller_outreach' as const],
+      assetClasses: ['land' as const],
+    };
+    const bare = { code: 'WY', requestedStatus: 'RESEARCH_ONLY' as const, approved: null, authorizations: [], templates: [], nationwide };
+    const land = evaluateMarket(input({ ...bare, assetClass: 'land' }));
+    expect(marketAllows(land, 'research').allowed).toBe(true);
+    expect(marketAllows(land, 'seller_outreach').allowed).toBe(true);
+    expect(marketAllows(land, 'buyer_marketing').allowed).toBe(false);
+    // A partial decision opens activities; the market's own status is left as it is.
+    expect(land.effectiveStatus).toBe('RESEARCH_ONLY');
+    // Commercial is outside the decision: research only.
+    const commercial = evaluateMarket(input({ ...bare, assetClass: 'commercial' }));
+    expect(marketAllows(commercial, 'seller_outreach').allowed).toBe(false);
+    expect(marketAllows(commercial, 'research').allowed).toBe(true);
+    expect(commercial.waived).toEqual([]);
+  });
+
+  it('gates land and commercial deals on a policy written for them', () => {
+    const residential = evaluateMarket(input({ assetClass: 'residential' }));
+    expect(marketAllows(residential, 'seller_contracting').allowed).toBe(true);
+    const land = evaluateMarket(input({ assetClass: 'land' }));
+    expect(marketAllows(land, 'seller_contracting').allowed).toBe(false);
+    expect(marketAllows(land, 'seller_contracting').reason).toMatch(/covers residential only; land deals here need the policy reviewed for land/);
+    expect(marketAllows(land, 'research').allowed).toBe(true);
+    const both = approvedContent((c) => {
+      c.assetClasses = ['residential', 'land'];
+    });
+    const covered = evaluateMarket(input({ assetClass: 'land', approved: { ...input().approved!, content: both } }));
+    expect(marketAllows(covered, 'seller_contracting').allowed).toBe(true);
+    // An unclassified property is gated as the market as a whole.
+    expect(marketAllows(evaluateMarket(input({ assetClass: null })), 'seller_contracting').allowed).toBe(true);
   });
 
   it('keeps a state a person blocked or restricted closed under the nationwide decision', () => {

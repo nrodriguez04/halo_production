@@ -46,6 +46,10 @@ import {
   type MarketPolicyContent,
   type MarketingChannel,
   type NationwideOperation,
+  ASSET_CLASSES,
+  MARKET_ACTIVITIES,
+  type AssetClass,
+  isAssetClass,
 } from '@halo/shared';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -131,6 +135,7 @@ export class MarketsService {
     accountId: string,
     states?: string[],
     now = new Date(),
+    assetClass: AssetClass | null = null,
   ): Promise<Loaded[]> {
     await this.ensureAll(accountId);
     const markets = await this.prisma.market.findMany({
@@ -164,6 +169,7 @@ export class MarketsService {
         access,
         now,
         nationwide,
+        assetClass,
       ),
     );
   }
@@ -174,12 +180,19 @@ export class MarketsService {
   ): Promise<NationwideOperation | null> {
     const cp = await this.prisma.controlPlane.findUnique({
       where: { accountId },
-      select: { nationwideOpenedAt: true, nationwideOpenedByName: true },
+      select: {
+        nationwideOpenedAt: true,
+        nationwideOpenedByName: true,
+        nationwideActivities: true,
+        nationwideAssetClasses: true,
+      },
     });
     return cp?.nationwideOpenedAt
       ? {
           since: cp.nationwideOpenedAt,
           byName: cp.nationwideOpenedByName ?? 'the owner',
+          activities: cp.nationwideActivities as MarketActivity[],
+          assetClasses: cp.nationwideAssetClasses as AssetClass[],
         }
       : null;
   }
@@ -192,6 +205,7 @@ export class MarketsService {
     access: DataAccess,
     now: Date,
     nationwide: NationwideOperation | null = null,
+    assetClass: AssetClass | null = null,
   ): Loaded {
     let draft: MarketPolicyContent | null = null;
     let draftError: string | null = null;
@@ -210,7 +224,7 @@ export class MarketsService {
       }
     }
     const auths = authorizations.filter((a) => a.state === m.state);
-    const templates = this.catalog.forState(usable, m.state);
+    const templates = this.catalog.forState(usable, m.state, assetClass);
     const researchOnFile =
       !!m.researchImportedAt || !!m.draftUpdatedBy || !!approved;
     const input: MarketInput = {
@@ -249,6 +263,7 @@ export class MarketsService {
       dataAccess: access.states.has(m.state),
       researchOnFile,
       nationwide,
+      assetClass,
     };
     return {
       market: m,
@@ -263,9 +278,13 @@ export class MarketsService {
     };
   }
 
-  private async one(accountId: string, state: string): Promise<Loaded> {
+  private async one(
+    accountId: string,
+    state: string,
+    assetClass: AssetClass | null = null,
+  ): Promise<Loaded> {
     const code = this.code(state);
-    const [row] = await this.load(accountId, [code]);
+    const [row] = await this.load(accountId, [code], new Date(), assetClass);
     return row;
   }
 
@@ -522,6 +541,8 @@ export class MarketsService {
           nationwideOpenedAt: true,
           nationwideOpenedByName: true,
           nationwideNote: true,
+          nationwideActivities: true,
+          nationwideAssetClasses: true,
         },
       }),
       this.prisma.market.findMany({
@@ -538,7 +559,26 @@ export class MarketsService {
       openedAt: cp?.nationwideOpenedAt ?? null,
       openedByName: cp?.nationwideOpenedByName ?? null,
       note: cp?.nationwideNote ?? null,
+      // An empty scope is a decision recorded before scopes: everything.
+      activities: cp?.nationwideOpenedAt
+        ? cp.nationwideActivities.length
+          ? cp.nationwideActivities
+          : [...MARKET_ACTIVITIES]
+        : [],
+      assetClasses: cp?.nationwideOpenedAt
+        ? cp.nationwideAssetClasses.length
+          ? cp.nationwideAssetClasses
+          : [...ASSET_CLASSES]
+        : [],
       attestation: NATIONWIDE_ATTESTATION,
+      /** What the decision never waives, whatever its scope. */
+      neverWaived: [
+        'A state a person blocked or restricted stays closed.',
+        "A licence or registration a state's policy lists must be recorded on its Licences tab before the activity it covers opens.",
+        'Required disclosures (such as the Texas equitable-interest notice) are still enforced before marketing.',
+        'Consent, do-not-call, quiet hours and opt-outs apply to every message.',
+        'Documents are generated only from templates a person approved or accepted.',
+      ],
       closedStates: closed.map((m) => ({
         state: m.state,
         status: m.requestedStatus,
@@ -550,19 +590,39 @@ export class MarketsService {
   async openNationwide(
     accountId: string,
     userId: string,
-    input: { openedByName: string; note?: string | null; attest: boolean },
+    input: {
+      openedByName: string;
+      note?: string | null;
+      attest: boolean;
+      activities?: MarketActivity[];
+      assetClasses?: AssetClass[];
+    },
   ) {
     if (!input.attest) {
       throw new BadRequestException(
         'Confirm the statement to open every state.',
       );
     }
+    // Research is open everywhere already; the decision is about the rest.
+    const activities = Array.from(
+      new Set(input.activities ?? MARKET_ACTIVITIES),
+    ).filter((a) => a !== 'research');
+    if (!activities.length) {
+      throw new BadRequestException(
+        'Choose at least one activity to open; research is open in every state already.',
+      );
+    }
+    const assetClasses = Array.from(
+      new Set(input.assetClasses ?? ASSET_CLASSES),
+    );
     const now = new Date();
     const fields = {
       nationwideOpenedAt: now,
       nationwideOpenedBy: userId,
       nationwideOpenedByName: input.openedByName,
       nationwideNote: input.note?.trim() || null,
+      nationwideActivities: ['research', ...activities],
+      nationwideAssetClasses: assetClasses,
       updatedBy: userId,
     };
     await this.prisma.controlPlane.upsert({
@@ -578,6 +638,8 @@ export class MarketsService {
       details: {
         openedByName: input.openedByName,
         note: fields.nationwideNote,
+        activities: fields.nationwideActivities,
+        assetClasses,
         attestation: NATIONWIDE_ATTESTATION,
       },
     });
@@ -598,6 +660,8 @@ export class MarketsService {
         nationwideOpenedBy: null,
         nationwideOpenedByName: null,
         nationwideNote: null,
+        nationwideActivities: [],
+        nationwideAssetClasses: [],
         updatedBy: userId,
       },
     });
@@ -613,10 +677,15 @@ export class MarketsService {
 
   // ------------------------------------------------------------ gates
 
-  /** The market's evaluation, for a gate. A state Halo cannot place gets null. */
+  /**
+   * The market's evaluation, for a gate. A state Halo cannot place gets
+   * null. With an asset class, land and commercial activity is judged on a
+   * policy that covers that class (docs/asset-classes.md s9).
+   */
   async evaluate(
     accountId: string,
     state: string | null | undefined,
+    opts: { assetClass?: AssetClass | null } = {},
   ): Promise<{
     evaluation: MarketEvaluation;
     approved: MarketPolicyContent | null;
@@ -632,7 +701,7 @@ export class MarketsService {
   } | null> {
     const code = toJurisdictionCode(state ?? null);
     if (!code) return null;
-    const r = await this.one(accountId, code);
+    const r = await this.one(accountId, code, opts.assetClass ?? null);
     const now = new Date();
     return {
       evaluation: r.evaluation,
@@ -654,14 +723,44 @@ export class MarketsService {
     };
   }
 
+  /**
+   * The asset class a gate judges a deal or lead by: its property's, or
+   * null when the property is unclassified (gated as the market as a
+   * whole, the way every deal was before asset classes).
+   */
+  async assetClassOf(
+    accountId: string,
+    ref: { dealId?: string | null; leadId?: string | null },
+  ): Promise<AssetClass | null> {
+    if (ref.dealId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: ref.dealId, accountId },
+        select: { property: { select: { assetClass: true } }, leadId: true },
+      });
+      const c = deal?.property?.assetClass;
+      if (isAssetClass(c)) return c;
+      if (deal?.leadId && !ref.leadId) ref = { leadId: deal.leadId };
+    }
+    if (ref.leadId) {
+      const p = await this.prisma.property.findFirst({
+        where: { accountId, leadId: ref.leadId, assetClass: { not: null } },
+        select: { assetClass: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (isAssetClass(p?.assetClass)) return p.assetClass;
+    }
+    return null;
+  }
+
   /** Refuse an activity the deal's market does not allow, saying why. */
   async assertAllowed(
     accountId: string,
     state: string | null | undefined,
     activity: MarketActivity,
     action: string,
+    assetClass: AssetClass | null = null,
   ) {
-    const m = await this.evaluate(accountId, state);
+    const m = await this.evaluate(accountId, state, { assetClass });
     if (!m) {
       throw new ComplianceBlockedException(
         MARKET_NOT_AUTHORIZED,
@@ -690,12 +789,14 @@ export class MarketsService {
     state: string | null | undefined,
     channel: MarketingChannel,
     action: string,
+    assetClass: AssetClass | null = null,
   ) {
     const m = await this.assertAllowed(
       accountId,
       state,
       'buyer_marketing',
       action,
+      assetClass,
     );
     const c = channelAllowed(m.evaluation, channel);
     if (!c.allowed) {

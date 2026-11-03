@@ -201,12 +201,17 @@ export class MessageDispatchService {
           DISPOSITION_MARKETING_TYPES.has(meta.type)));
     if (toBuyer && !marketing) return;
     const state = await this.messageState(message);
+    const assetClass = await this.markets.assetClassOf(message.accountId, {
+      dealId: message.dealId,
+      leadId: message.leadId,
+    });
     if (marketing) {
       await this.markets.assertChannel(
         message.accountId,
         state,
         channel === 'email' ? 'investor_email' : 'investor_sms',
         'Marketing this contract to buyers',
+        assetClass,
       );
       return;
     }
@@ -216,6 +221,7 @@ export class MessageDispatchService {
         state,
         'seller_outreach',
         'Contacting this seller',
+        assetClass,
       );
     }
   }

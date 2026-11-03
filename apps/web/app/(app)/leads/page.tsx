@@ -4,6 +4,8 @@ import { useState, type ChangeEvent } from 'react';
 import { useApiQuery, useApiMutation, useQueryClient, apiJson } from '@/lib/api-query';
 import { LISTING_SOURCES, sourceDef } from '@/lib/listing-sources';
 import { useDebouncedValue } from '@/lib/use-debounce';
+import { acresText, propertyLabel, type AssetFilter } from '@/lib/assets';
+import { AssetClassBadge, AssetClassFilter } from '@/components/assets/asset-class-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +44,30 @@ interface Lead {
   score?: number;
   tags: string[];
   createdAt: string;
+  /** The lead's first property: its asset class, and its parcel identity when it has no street address. */
+  properties?: Array<{
+    id: string;
+    assetClass: string | null;
+    assetSubtype: string | null;
+    apn: string | null;
+    county: string | null;
+    acres: number | null;
+  }>;
+}
+
+/** The lead's address, or "Parcel <APN>, <County> County, <ST>" for land with none. */
+function leadLabel(lead: Lead): { title: string; detail: string } {
+  const p = lead.properties?.[0];
+  if (lead.canonicalAddress?.trim()) {
+    return {
+      title: lead.canonicalAddress,
+      detail: [lead.canonicalCity, lead.canonicalState, lead.canonicalZip].filter(Boolean).join(', '),
+    };
+  }
+  if (!p) {
+    return { title: 'No address on file', detail: [lead.canonicalCity, lead.canonicalState].filter(Boolean).join(', ') };
+  }
+  return { title: propertyLabel({ apn: p.apn, county: p.county, state: lead.canonicalState }), detail: '' };
 }
 
 interface ListingImportResult {
@@ -95,6 +121,7 @@ const canDisqualify = (status: string) => status !== 'disqualified';
 
 export default function LeadsPage() {
   const [search, setSearch] = useState('');
+  const [assetClass, setAssetClass] = useState<AssetFilter>('');
   const debouncedSearch = useDebouncedValue(search, 250);
   const queryClient = useQueryClient();
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -115,7 +142,7 @@ export default function LeadsPage() {
     error,
     refetch,
   } = useApiQuery<Lead[]>('/leads', {
-    params: { search: debouncedSearch || undefined, take: 200 },
+    params: { search: debouncedSearch || undefined, assetClass: assetClass || undefined, take: 200 },
     placeholderData: (prev) => prev,
   });
 
@@ -215,6 +242,7 @@ export default function LeadsPage() {
         value={search}
         onChange={setSearch}
         placeholder="Search address, city, or owner…"
+        filters={<AssetClassFilter value={assetClass} onChange={setAssetClass} />}
       />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
@@ -360,8 +388,8 @@ export default function LeadsPage() {
           icon={Users}
           title="No leads yet"
           description={
-            debouncedSearch
-              ? 'No leads match that search. Try clearing it or import a CSV.'
+            debouncedSearch || assetClass
+              ? 'No leads match these filters. Try clearing them or import a CSV.'
               : 'Import a CSV or add a lead manually to get started.'
           }
           action={
@@ -382,7 +410,7 @@ export default function LeadsPage() {
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle>{leads.length} leads</CardTitle>
             <Badge variant="secondary" className="font-mono">
-              {debouncedSearch ? `Filtered: "${debouncedSearch}"` : 'All'}
+              {debouncedSearch ? `Filtered: "${debouncedSearch}"` : assetClass ? 'Filtered' : 'All'}
             </Badge>
           </CardHeader>
           <CardContent className="p-0">
@@ -390,6 +418,7 @@ export default function LeadsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Address</TableHead>
+                  <TableHead>Asset class</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Created</TableHead>
@@ -399,17 +428,20 @@ export default function LeadsPage() {
               <TableBody>
                 {leads.map((lead) => {
                   const busy = pendingId === lead.id;
+                  const name = leadLabel(lead);
+                  const parcel = lead.properties?.[0];
+                  const acres = parcel?.assetClass === 'land' ? acresText(parcel.acres) : null;
                   return (
                     <TableRow key={lead.id}>
                       <TableCell>
-                        <div className="font-medium text-foreground">
-                          {lead.canonicalAddress || 'N/A'}
-                        </div>
-                        <div className="text-caption text-muted-foreground">
-                          {[lead.canonicalCity, lead.canonicalState, lead.canonicalZip]
-                            .filter(Boolean)
-                            .join(', ')}
-                        </div>
+                        <div className="font-medium text-foreground">{name.title}</div>
+                        {name.detail && (
+                          <div className="text-caption text-muted-foreground">{name.detail}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <AssetClassBadge assetClass={parcel?.assetClass} subtype={parcel?.assetSubtype} />
+                        {acres && <div className="text-caption text-muted-foreground">{acres}</div>}
                       </TableCell>
                       <TableCell>
                         <Badge variant={statusVariant(lead.status)}>{lead.status}</Badge>
@@ -432,7 +464,7 @@ export default function LeadsPage() {
                                   onClick={() =>
                                     transitionMutation.mutate({ leadId: lead.id, next: 'qualified' })
                                   }
-                                  aria-label={`Qualify lead ${lead.canonicalAddress ?? lead.id}`}
+                                  aria-label={`Qualify lead ${name.title}`}
                                 >
                                   {busy ? (
                                     <Loader2 size={14} className="animate-spin" />
@@ -459,7 +491,7 @@ export default function LeadsPage() {
                                       reason: 'manual',
                                     })
                                   }
-                                  aria-label={`Disqualify lead ${lead.canonicalAddress ?? lead.id}`}
+                                  aria-label={`Disqualify lead ${name.title}`}
                                 >
                                   {busy ? (
                                     <Loader2 size={14} className="animate-spin" />

@@ -56,6 +56,7 @@ export class DealsController {
     @Query('stage') stage?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
+    @Query('assetClass') assetClass?: string,
   ) {
     return this.dealsService.findAll(
       accountId,
@@ -65,6 +66,7 @@ export class DealsController {
         take: take ? parseInt(take, 10) : 50,
       },
       piiViewer(user),
+      assetClass,
     );
   }
 

@@ -38,6 +38,17 @@ export interface NormalizedProperty {
   ownerName: string | null;
   ownerKind: PartyKind | null;
   absentee: boolean | null;
+  /** The provider's land-use label or code, as given (docs/asset-classes.md s2). */
+  landUse?: string | null;
+  zoning?: string | null;
+  acres?: number | null;
+  /** Gross building area; `sqft` is living area. */
+  buildingSqft?: number | null;
+  units?: number | null;
+  /** Assessed or market improvement value; 0 is evidence of a vacant parcel. */
+  improvementValue?: number | null;
+  /** The provider's own statement that a structure stands on the parcel. */
+  hasStructure?: boolean | null;
   quality: DataQuality;
 }
 
@@ -65,6 +76,14 @@ export interface NormalizedSale {
   armsLength: boolean | null;
   deedType: string | null;
   propertyType: string | null;
+  landUse?: string | null;
+  zoning?: string | null;
+  acres?: number | null;
+  buildingSqft?: number | null;
+  units?: number | null;
+  /** Set when Halo has classified the sale (packages/shared/src/assets). */
+  assetClass?: string | null;
+  assetSubtype?: string | null;
   quality: DataQuality;
 }
 
@@ -84,6 +103,19 @@ const num = (v: unknown): number | null => {
 const pos = (v: unknown): number | null => {
   const n = num(v);
   return n != null && n > 0 ? n : null;
+};
+/** Zero is a value here: an improvement value of 0 says the parcel is unbuilt. */
+const nonNeg = (v: unknown): number | null => {
+  const n = num(v);
+  return n != null && n >= 0 ? n : null;
+};
+const yesNo = (v: unknown): boolean | null => {
+  if (typeof v === 'boolean') return v;
+  const s = str(v);
+  if (!s) return null;
+  if (/^(y|yes|true|1)$/i.test(s)) return true;
+  if (/^(n|no|false|0)$/i.test(s)) return false;
+  return null;
 };
 
 /** YYYY-MM-DD from the date shapes providers and counties use, or null. */
@@ -120,7 +152,9 @@ export function propertyFromAttom(raw: unknown): NormalizedProperty | null {
   const ownerName = str(obj(owner.owner1).fullname) ?? str(obj(owner.owner1).lastname) ?? str(owner.name);
   const absentee = str(summary.absenteeInd) ?? str(owner.absenteeownerstatus);
   const state = toJurisdictionCode(str(address.countrySubd) ?? str(address.state));
-  if (!str(address.line1) && !str(address.oneLine)) return null;
+  // A rural parcel can have no street address; its APN and county identify it.
+  if (!str(address.line1) && !str(address.oneLine) && !(str(id.apn) && (str(id.fips) || str(area.countrysecsubd)))) return null;
+  const lotAcres = pos(lot.lotSize1) ?? (pos(lot.lotsize2) != null ? Math.round((pos(lot.lotsize2)! / 43_560) * 1000) / 1000 : null);
   return {
     source: 'attom',
     sourceRef: str(id.attomId) ?? str(id.Id) ?? str(id.obPropId),
@@ -146,6 +180,13 @@ export function propertyFromAttom(raw: unknown): NormalizedProperty | null {
     ownerName,
     ownerKind: ownerName ? partyKind(ownerName) : null,
     absentee: absentee ? !/owner\s*occupied/i.test(absentee) : null,
+    landUse: str(summary.propLandUse) ?? str(summary.propclass),
+    zoning: null,
+    acres: lotAcres,
+    buildingSqft: pos(size.grosssize) ?? pos(size.bldgsize) ?? pos(size.universalsize),
+    units: null,
+    improvementValue: nonNeg(obj(assessment.market).mktimprvalue) ?? nonNeg(obj(assessment.assessed).assdimprvalue),
+    hasStructure: null,
     quality: 'reported',
   };
 }
@@ -158,7 +199,7 @@ export function propertyFromRegrid(raw: unknown): NormalizedProperty | null {
   const feature = obj(arr(obj(obj(raw).parcels).features)[0] ?? raw);
   const f = obj(obj(feature.properties).fields);
   const address = str(f.address) ?? str(f.saddress);
-  if (!address) return null;
+  if (!address && !(str(f.parcelnumb) && str(f.county))) return null;
   const state = toJurisdictionCode(str(f.state2) ?? str(f.sstate));
   return {
     source: 'regrid',
@@ -185,6 +226,14 @@ export function propertyFromRegrid(raw: unknown): NormalizedProperty | null {
     ownerName: str(f.owner),
     ownerKind: str(f.owner) ? partyKind(str(f.owner)) : null,
     absentee: str(f.mailadd) && address ? normalizeStreet(String(f.mailadd)) !== normalizeStreet(address) : null,
+    // Regrid's standardized schema; not yet run against a live response here.
+    landUse: str(f.usedesc) ?? str(f.usecode),
+    zoning: str(f.zoning),
+    acres: pos(f.ll_gisacre) ?? pos(f.gisacre),
+    buildingSqft: pos(f.area_building),
+    units: pos(f.numunits),
+    improvementValue: nonNeg(f.improvval),
+    hasStructure: yesNo(f.struct),
     quality: 'recorded',
   };
 }
@@ -240,6 +289,11 @@ export function saleFromCountyRow(
     armsLength: armsRaw != null ? /^(y|yes|true|1)$/i.test(armsRaw) : null,
     deedType: get('deedType'),
     propertyType: get('propertyType'),
+    landUse: get('landUse'),
+    zoning: get('zoning'),
+    acres: pos(get('acres')),
+    buildingSqft: pos(get('buildingSqft')),
+    units: pos(get('units')),
     quality: 'recorded',
   };
 }

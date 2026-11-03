@@ -1,3 +1,6 @@
+import { classifyProperty } from '../assets/classify';
+import { inferBuyerCategories, type InferredCategory } from '../assets/buyer-categories';
+import { isAssetClass, type AssetClass, type AssetSubtype } from '../assets/taxonomy';
 import { partyKey, normalizePartyName, type PartyKind } from './entities';
 import type { NormalizedSale } from './records';
 
@@ -20,6 +23,10 @@ export interface InvestorPurchase {
   zip: string | null;
   cashPurchase: boolean | null;
   propertyType: string | null;
+  assetClass: AssetClass | null;
+  assetSubtype: AssetSubtype | null;
+  acres: number | null;
+  buildingSqft: number | null;
 }
 
 export interface InvestorCandidate {
@@ -47,7 +54,18 @@ export interface InvestorCandidate {
     priceMin: number | null;
     priceMax: number | null;
     propertyTypes: string[];
+    /** The asset classes and subtypes they bought, most first. */
+    assetClasses: AssetClass[];
+    assetSubtypes: AssetSubtype[];
+    /** Land: the acreage they bought (10th to 90th percentile). */
+    acresMin: number | null;
+    acresMax: number | null;
+    /** Commercial: building area they bought. */
+    sqftMin: number | null;
+    sqftMax: number | null;
   };
+  /** Buyer categories the record suggests. Inferences, never confirmed criteria. */
+  categories: InferredCategory[];
   score: number;
   reasons: string[];
 }
@@ -65,6 +83,26 @@ function roundTo(n: number | null, step: number): number | null {
 }
 
 const DAY = 86_400_000;
+
+/** A sale's asset class: Halo's when stored, else read from its own facts. */
+export function saleAssetClass(s: NormalizedSale): { assetClass: AssetClass | null; subtype: AssetSubtype | null } {
+  if (isAssetClass(s.assetClass)) return { assetClass: s.assetClass, subtype: (s.assetSubtype as AssetSubtype | null) ?? null };
+  const c = classifyProperty({
+    labels: [s.propertyType, s.landUse],
+    zoning: s.zoning,
+    acres: s.acres,
+    buildingSqft: s.buildingSqft,
+    units: s.units,
+  });
+  return { assetClass: c.assetClass, subtype: c.subtype };
+}
+
+function range(values: Array<number | null | undefined>, step: number): [number | null, number | null] {
+  const sorted = values.filter((v): v is number => typeof v === 'number' && v > 0).sort((a, b) => a - b);
+  const lo = quantile(sorted, 0.1);
+  const hi = quantile(sorted, 0.9);
+  return [lo == null ? null : Math.floor(lo / step) * step, hi == null ? null : Math.ceil(hi / step) * step];
+}
 
 /** The same parcel: by APN when both records have one, else by address. */
 function sameParcel(a: NormalizedSale, b: NormalizedSale): boolean {
@@ -164,6 +202,26 @@ export function discoverInvestors(
     }
     if (kind === 'company' || kind === 'trust') score += 5;
 
+    const classed = sorted.map((s) => ({ sale: s, ...saleAssetClass(s) }));
+    const assetClasses = top(classed.map((c) => c.assetClass), 3);
+    const categories = inferBuyerCategories({
+      name: sorted[sorted.length - 1].buyerName ?? key,
+      kind,
+      purchases: classed.map((c) => ({
+        assetClass: c.assetClass,
+        subtype: c.subtype,
+        state: c.sale.state,
+        county: c.sale.county,
+        acres: c.sale.acres ?? null,
+      })),
+    });
+    const land = classed.filter((c) => c.assetClass === 'land');
+    const commercial = classed.filter((c) => c.assetClass === 'commercial');
+    if (land.length) reasons.push(`${land.length} land purchase(s)`);
+    if (commercial.length) reasons.push(`${commercial.length} commercial purchase(s)`);
+    const [acresMin, acresMax] = range(land.map((c) => c.sale.acres), 0.5);
+    const [sqftMin, sqftMax] = range(commercial.map((c) => c.sale.buildingSqft), 500);
+
     out.push({
       key,
       name: sorted[sorted.length - 1].buyerName ?? key,
@@ -179,6 +237,9 @@ export function discoverInvestors(
         zip: s.zip,
         cashPurchase: s.cashPurchase,
         propertyType: s.propertyType,
+        ...(({ assetClass, subtype }) => ({ assetClass, assetSubtype: subtype }))(saleAssetClass(s)),
+        acres: s.acres ?? null,
+        buildingSqft: s.buildingSqft ?? null,
       })),
       purchaseCount: sorted.length,
       cashPurchases: cash,
@@ -195,7 +256,14 @@ export function discoverInvestors(
         priceMin: roundTo(quantile(prices, 0.1), 5_000),
         priceMax: roundTo(quantile(prices, 0.9), 5_000),
         propertyTypes: top(sorted.map((s) => s.propertyType), 4),
+        assetClasses,
+        assetSubtypes: top(classed.map((c) => c.subtype), 4),
+        acresMin,
+        acresMax,
+        sqftMin,
+        sqftMax,
       },
+      categories,
       score: Math.min(100, score),
       reasons,
     });

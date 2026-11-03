@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ASSET_CLASSES } from '../assets/taxonomy';
 
 /**
  * A market's policy: what counsel confirmed about operating in one
@@ -373,6 +374,8 @@ export const RequirementSchema = z.object({
   kind: z.enum(AUTHORIZATION_KINDS),
   label: z.string().trim().min(1).max(200),
   appliesTo: z.array(z.enum(MARKET_ACTIVITIES)).min(1),
+  /** The asset classes it applies to; empty for every class. */
+  assetClasses: z.array(z.enum(ASSET_CLASSES)).max(3).optional(),
   sourceIds: z.array(z.string()).max(20).default([]),
 });
 export type Requirement = z.infer<typeof RequirementSchema>;
@@ -393,6 +396,12 @@ function record<K extends string, V extends z.ZodTypeAny>(keys: readonly K[], va
 export const MarketPolicyContentSchema = z
   .object({
     summary: TEXT.default(''),
+    /**
+     * The asset classes this policy was researched and approved for
+     * (docs/asset-classes.md s9). A policy written before land and
+     * commercial existed covers residential only.
+     */
+    assetClasses: z.array(z.enum(ASSET_CLASSES)).min(1).max(3).default(['residential']),
     answers: record(MARKET_QUESTIONS, FindingSchema),
     structures: record(TRANSACTION_STRUCTURES, PermissionEntrySchema),
     channels: record(MARKETING_CHANNELS, PermissionEntrySchema),
@@ -437,6 +446,7 @@ export function emptyPolicyContent(): MarketPolicyContent {
   const unknownEntry = (): PermissionEntry => ({ permission: 'unknown', conditions: null });
   return {
     summary: '',
+    assetClasses: ['residential'],
     answers: Object.fromEntries(MARKET_QUESTIONS.map((q) => [q, unknownFinding()])) as MarketPolicyContent['answers'],
     structures: Object.fromEntries(TRANSACTION_STRUCTURES.map((s) => [s, unknownEntry()])) as MarketPolicyContent['structures'],
     channels: Object.fromEntries(MARKETING_CHANNELS.map((c) => [c, unknownEntry()])) as MarketPolicyContent['channels'],

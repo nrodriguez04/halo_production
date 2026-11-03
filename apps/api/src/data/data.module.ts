@@ -5,6 +5,7 @@ import { AttomModule } from '../integrations/attom/attom.module';
 import { RegridModule } from '../integrations/regrid/regrid.module';
 import { IntegrationSecretsModule } from '../integration-secrets/integration-secrets.module';
 import { MarketsModule } from '../markets/markets.module';
+import { AssetsModule } from '../assets/assets.module';
 import { DataAccessService } from '../markets/data-access.service';
 import { PropertyFactsService } from './property-facts.service';
 import { RecordedSalesService } from './recorded-sales.service';
@@ -25,6 +26,7 @@ import { DataController } from './data.controller';
     RegridModule,
     IntegrationSecretsModule,
     MarketsModule,
+    AssetsModule,
   ],
   controllers: [DataController],
   providers: [

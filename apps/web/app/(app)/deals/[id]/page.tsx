@@ -27,6 +27,11 @@ import { TaxSalePanel } from '@/components/disposition/tax-sale-panel';
 import { SellerConsentCard } from '@/components/disposition/seller-consent-card';
 import { ELIGIBILITY_LABEL, ELIGIBILITY_VARIANT, day, errorText, type Workspace } from '@/lib/disposition';
 import { MAPLIBRE_WORKER_URL } from '@/lib/maplibre';
+import { propertyLabel } from '@/lib/assets';
+import { AssetClassBadge } from '@/components/assets/asset-class-badge';
+import { AssetPanel } from '@/components/assets/asset-panel';
+import { AssetUnderwritingPanel } from '@/components/assets/asset-underwriting-panel';
+import { AssetOfferCard } from '@/components/assets/asset-offer-card';
 
 const MapGL = dynamic(() => import('react-map-gl/maplibre').then((m) => m.default), { ssr: false });
 const Marker = dynamic(() => import('react-map-gl/maplibre').then((m) => m.Marker), { ssr: false });
@@ -131,14 +136,21 @@ export default function DealDetailPage() {
   ]);
   const openOffers = ws.offers.filter((o) => o.status === 'received' || o.status === 'countered').length;
   const pending = ws.approvals.agentRuns.length + ws.approvals.messages.length;
+  const p = deal.property;
+  // Land and commercial deals are valued by their own strategy, not ARV and the MAO.
+  const nonResidential = p?.assetClass === 'land' || p?.assetClass === 'commercial';
+  // A parcel with no street address is named by its APN and county.
+  const title = p?.address?.trim() ? p.address : p ? propertyLabel(p) : `Deal ${deal.id.slice(0, 8)}`;
+  const place = p?.address?.trim() ? [p.city, p.state].filter(Boolean).join(', ') : undefined;
 
   return (
     <div className="space-y-6 p-6">
       <PageHeader
-        title={deal.property?.address || `Deal ${deal.id.slice(0, 8)}`}
-        description={deal.property ? `${deal.property.city}, ${deal.property.state}` : undefined}
+        title={title}
+        description={place}
         actions={
           <>
+            {p && <AssetClassBadge assetClass={p.assetClass} subtype={p.assetSubtype} showSubtype className="mr-1" />}
             <Button asChild variant="outline" size="sm">
               <Link href={`/documents?dealId=${deal.id}`}>
                 <FileText size={16} className="mr-2" />
@@ -187,6 +199,7 @@ export default function DealDetailPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          {p && <TabsTrigger value="property">Property</TabsTrigger>}
           <TabsTrigger value="contract">Contract</TabsTrigger>
           <TabsTrigger value="buyers">Buyers</TabsTrigger>
           <TabsTrigger value="campaign">Campaign</TabsTrigger>
@@ -198,18 +211,23 @@ export default function DealDetailPage() {
 
         <TabsContent value="overview" className="space-y-4">
           <EconomicsCard economics={ws.economics} />
+          <AssetUnderwritingPanel dealId={deal.id} />
           <Card className="animate-fade-up">
             <CardHeader>
               <CardTitle>Deal Financials</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                {[
-                  { label: 'ARV', value: deal.arv },
-                  { label: 'Repairs', value: deal.repairEstimate },
-                  { label: 'MAO (computed)', value: ws.underwriting?.mao ?? deal.mao },
-                  { label: 'Offer to seller', value: deal.offerAmount, highlight: true },
-                ].map((f) => (
+                {(nonResidential
+                  ? // Land and commercial deals have no ARV or MAO; their value is above.
+                    [{ label: 'Offer to seller', value: deal.offerAmount, highlight: true }]
+                  : [
+                      { label: 'ARV', value: deal.arv },
+                      { label: 'Repairs', value: deal.repairEstimate },
+                      { label: 'MAO (computed)', value: ws.underwriting?.mao ?? deal.mao },
+                      { label: 'Offer to seller', value: deal.offerAmount, highlight: true },
+                    ]
+                ).map((f: { label: string; value: number | null | undefined; highlight?: boolean }) => (
                   <div key={f.label} className="space-y-1">
                     <p className="text-caption uppercase tracking-wider text-muted-foreground">{f.label}</p>
                     <p className={cn('font-mono text-h3 font-bold', f.highlight ? 'text-primary' : 'text-foreground')}>
@@ -227,17 +245,27 @@ export default function DealDetailPage() {
             </CardContent>
           </Card>
           <EligibilityCard eligibility={ws.eligibility} compact />
-          <UnderwritingCard
-            underwriting={ws.underwriting}
-            ai={uwResult}
-            onRun={() => analyze.mutate(undefined)}
-            running={analyze.isPending}
-            dealId={deal.id}
-            stage={deal.stage}
-            offerAmount={deal.offerAmount}
-          />
+          {nonResidential ? (
+            <AssetOfferCard dealId={deal.id} stage={deal.stage} offerAmount={deal.offerAmount} />
+          ) : (
+            <UnderwritingCard
+              underwriting={ws.underwriting}
+              ai={uwResult}
+              onRun={() => analyze.mutate(undefined)}
+              running={analyze.isPending}
+              dealId={deal.id}
+              stage={deal.stage}
+              offerAmount={deal.offerAmount}
+            />
+          )}
           {deal.leadId && <SellerConsentCard leadId={deal.leadId} dealId={deal.id} />}
         </TabsContent>
+
+        {p && (
+          <TabsContent value="property">
+            <AssetPanel dealId={deal.id} property={{ id: p.id, state: p.state, county: p.county }} />
+          </TabsContent>
+        )}
 
         <TabsContent value="contract" className="space-y-4">
           <EligibilityCard eligibility={ws.eligibility} />
@@ -250,7 +278,7 @@ export default function DealDetailPage() {
           />
           <ContractsPanel
             dealId={deal.id}
-            propertyAddress={deal.property?.address}
+            propertyAddress={deal.property?.address || (deal.property ? propertyLabel(deal.property) : undefined)}
             lead={deal.lead}
             contracts={(deal.contracts ?? []) as ContractRow[]}
             onChanged={reload}

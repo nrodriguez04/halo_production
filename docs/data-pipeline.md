@@ -34,6 +34,8 @@ Code:
   - the source, its reference and the data quality.
 - **A provider that does not report a fact never erases it.** An open deal on the lead is linked to the property.
 - **Regrid parcels** (`POST /data/regrid/parcel`) can fill the same row from county assessor data.
+- **Asset classes (2026-11-03):** the normalizers also read the land-use label, zoning, acreage, gross building area, units, improvement value and a structure flag where the provider has them. An ATTOM or Regrid parcel with an APN and county but no street address is kept. Each write reclassifies the property (docs/asset-classes.md s2). A person's classification is never overwritten.
+- **Recorded sales are classified** on import, and county exports can map `landUse`, `zoning`, `acres`, `buildingSqft` and `units`. They are the comparables for land and commercial underwriting and the evidence for land and commercial buyers (docs/asset-classes.md s5, s6).
 
 ## 3. Recorded sales
 

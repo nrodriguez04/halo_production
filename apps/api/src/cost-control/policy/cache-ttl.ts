@@ -23,6 +23,9 @@ const CACHE_TTL: Record<string, number> = {
   'rentcast.search_listings': 60 * 60 * 12, // 12h: repeating a pull is free
   'realie.search_properties': 60 * 60 * 12, // 12h: one token per page
   'realie.address_lookup': 60 * 60 * 24 * 30,
+  // Flood maps and the wetlands inventory change on revision cycles of years.
+  'fema_nfhl.flood_zone': 60 * 60 * 24 * 90,
+  'usfws_nwi.wetlands': 60 * 60 * 24 * 90,
 
   // Side effects + non-deterministic — never cache
   'twilio.send_sms': 0,
