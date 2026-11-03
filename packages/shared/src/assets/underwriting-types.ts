@@ -103,6 +103,16 @@ export function roundValue(n: number): number {
   return Math.round(n / step) * step;
 }
 
+/**
+ * Offers to the seller, the same way: $500 under $100,000 (the residential
+ * step), $1,000 under $1M, $5,000 above. An offer of $1,585,500 claims a
+ * precision no commercial valuation has.
+ */
+export function roundOffer(n: number): number {
+  const step = n < 100_000 ? 500 : n < 1_000_000 ? 1_000 : 5_000;
+  return Math.round(n / step) * step;
+}
+
 export function roundRange(r: ValueRange): ValueRange {
   return { low: roundValue(r.low), mid: roundValue(r.mid), high: roundValue(r.high) };
 }

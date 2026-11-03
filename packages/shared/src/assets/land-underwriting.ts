@@ -1,9 +1,9 @@
-import { roundPrice } from '../disposition/fee-pricing';
 import { factValue, isHighRiskFloodZone, type FactRecord } from './facts';
 import type { LandSubtype } from './taxonomy';
 import {
   confidenceLevel,
   quantile,
+  roundOffer,
   roundRange,
   roundValue,
   usd,
@@ -229,8 +229,8 @@ export function underwriteLand(input: LandUnderwritingInput): AssetUnderwriting 
   let offerRange: { low: number; high: number } | null = null;
   let expectedNet: number | null = null;
   if (expectedBuyerPrice != null) {
-    const high = roundPrice(expectedBuyerPrice - input.targetFee - costs);
-    if (high > 0) offerRange = { low: roundPrice(high * 0.8), high };
+    const high = roundOffer(expectedBuyerPrice - input.targetFee - costs);
+    if (high > 0) offerRange = { low: roundOffer(high * 0.8), high };
     const planned = input.contractPrice ?? offerRange?.high ?? null;
     expectedNet = planned != null ? expectedBuyerPrice - planned - costs : null;
   }

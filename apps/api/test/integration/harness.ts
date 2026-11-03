@@ -119,8 +119,18 @@ export const queue = {
   enqueueAgent: jest.fn().mockResolvedValue({}),
 };
 
-export async function buildModule(): Promise<TestingModule> {
-  return Test.createTestingModule({
+/**
+ * The suites' module. `extra` adds modules a suite exercises and replaces
+ * providers with stand-ins (a provider adapter, a public map service), so
+ * nothing leaves the machine.
+ */
+export async function buildModule(
+  extra: {
+    imports?: any[];
+    overrides?: Array<{ provide: unknown; useValue: unknown }>;
+  } = {},
+): Promise<TestingModule> {
+  let builder = Test.createTestingModule({
     imports: [
       PrismaModule,
       TestAlertsModule,
@@ -134,8 +144,13 @@ export async function buildModule(): Promise<TestingModule> {
       MarketsModule,
       TemplatesModule,
       DataModule,
+      ...(extra.imports ?? []),
     ],
-  })
+  });
+  for (const o of extra.overrides ?? []) {
+    builder = builder.overrideProvider(o.provide).useValue(o.useValue);
+  }
+  return builder
     .overrideProvider(QueueService)
     .useValue(queue)
     .overrideProvider(StorageService)
@@ -245,6 +260,9 @@ export function fixtures(moduleRef: TestingModule) {
       await prisma.dataImport.deleteMany({ where: { accountId } });
       await prisma.buyerCandidate.deleteMany({ where: { accountId } });
       await prisma.marketingSpend.deleteMany({ where: { accountId } });
+      await prisma.sourcingMarket.deleteMany({ where: { accountId } });
+      await prisma.assetCodeMapping.deleteMany({ where: { accountId } });
+      await prisma.propertyFact.deleteMany({ where: { accountId } });
       await prisma.timelineEvent.deleteMany({ where: { tenantId: accountId } });
       await prisma.auditLog.deleteMany({ where: { accountId } });
       await prisma.controlPlane.deleteMany({ where: { accountId } });

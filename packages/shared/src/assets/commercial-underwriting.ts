@@ -1,10 +1,10 @@
-import { roundPrice } from '../disposition/fee-pricing';
 import { factValue, isHighRiskFloodZone, numericFact, weakerStatus, type FactRecord, type FactStatus } from './facts';
 import { decisionSentence, summaryOf } from './land-underwriting';
 import type { CommercialSubtype } from './taxonomy';
 import {
   confidenceLevel,
   quantile,
+  roundOffer,
   roundRange,
   roundValue,
   usd,
@@ -295,8 +295,8 @@ export function underwriteCommercial(input: CommercialUnderwritingInput): AssetU
   let offerRange: { low: number; high: number } | null = null;
   let expectedNet: number | null = null;
   if (expectedBuyerPrice != null) {
-    const high = roundPrice(expectedBuyerPrice - input.targetFee - costs);
-    if (high > 0) offerRange = { low: roundPrice(high * 0.85), high };
+    const high = roundOffer(expectedBuyerPrice - input.targetFee - costs);
+    if (high > 0) offerRange = { low: roundOffer(high * 0.85), high };
     const planned = input.contractPrice ?? offerRange?.high ?? null;
     expectedNet = planned != null ? expectedBuyerPrice - planned - costs : null;
   }

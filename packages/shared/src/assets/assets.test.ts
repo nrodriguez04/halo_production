@@ -226,6 +226,9 @@ describe('commercial underwriting', () => {
     const sales = u.approaches.find((a) => a.key === 'sales_price_per_sqft')!;
     expect(sales.evidenceCount).toBe(3);
     expect(u.decision).toBe('pursue');
+    // Offers at this size are not quoted to the $500.
+    expect(u.offerRange!.high % 5_000).toBe(0);
+    expect(u.offerRange!.low % 5_000).toBe(0);
   });
 
   it('never invents NOI, operating expenses or a cap rate', () => {
