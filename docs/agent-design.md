@@ -52,7 +52,8 @@ Four agents, each a job on an existing queue, each one `AutomationRun` per invoc
 - **Produces:** ARV, repair estimate, MAO, confidence, rationale, and a recommended offer range. MAO = ARV x 0.70 - repairs - the assignment fee (the deal's own, else the tenant's default on the Agents page, $10,000 out of the box). Writes `underwriting_results`; writes deal economics **only** if the deal has not been edited since the run started (the guard from #85).
 - **Autonomy:** full, for numbers. Never contacts anyone.
 - **Numbers checked in code:** the MAO recorded is the formula's, rounded down to $100, whatever the model's arithmetic gave; the offer range is capped at it; an offer with no MAO is a hold, with a MAO of zero or less a pass, and below 0.4 confidence a hold. Every correction is written into the rationale.
-- **Holds without a model:** no property with a street address and ZIP (`no_property`); nothing on file says what the property is worth, no value, assessment, sale or listing price and no numbers a person entered (`no_value_data`).
+- **Holds without a model:** no property identified by a street address and ZIP, or by APN and county (`no_property`); nothing on file says what the property is worth, no value, assessment, sale or listing price and no numbers a person entered (`no_value_data`).
+- **Land and commercial deals (2026-11-03):** never valued by the model. The worker asks the api for the asset strategy's result (`POST /internal/deals/:id/asset-underwriting`, docs/asset-classes.md s5). The run restates the strategy, the explanation, the risks, what is missing and the assumptions, with no model call (`asset_strategy`). It sets no number; the api has already recorded the result on the deal.
 - **Model tier:** strong (numeric reasoning over documents).
 
 ### 3.3 Outreach Drafter

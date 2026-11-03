@@ -50,6 +50,24 @@ other signal go last.
   serve requests). Usage is counted from the lead timeline
   (`lead.status.enriching` events marked `autoEnrich`).
 
+## Asset classes
+
+Since 2026-11-03 a market sources residential, land or commercial property, or more than one (docs/asset-classes.md s3).
+
+- **`assetClasses`** names what the market looks for. A market saved before asset classes is residential and pulls as it always has.
+- **Filters per class:** `criteria.land` and `criteria.commercial` hold each class's own filters:
+  - land: counties, subtypes, APNs, acreage, vacant only, land use, assessed value, years owned, absentee, tax delinquent, liens, development indicators;
+  - commercial: subtypes, counties, building area, lot acres, units, year built, assessed value, years owned, sold since, owner type, distress.
+  - A filter on a fact the record lacks rejects the record.
+- **The area** can be a city, a ZIP, or, for land and commercial, counties alone. Realie is passed the county when exactly one is chosen.
+- **Classification and dedupe:** every record is classified. Records of another class are set aside; an unclassified record whose suggestion fits is kept for a person to confirm. Parcels are deduplicated by state, county and APN across overlapping markets.
+- **Manual first:** land and commercial markets start manual. `POST /markets/:id/run { limit }` runs a capped batch (at most 25 per source) to check the results before a schedule is turned on.
+- **Estimate first:** `POST /estimate { state, sources[], assetClasses?, cadence?, limit? }` returns, before anything is pulled:
+  - the most each source can bill per run and per month;
+  - which filters each provider applies and which Halo applies to pages already paid for;
+  - the state's research-only status per class.
+- **Nothing is added automatically.** "Add top metros" is unchanged and residential.
+
 ## Cost
 
 Every pull is a normal cost-governed call: RentCast bills one request per
@@ -67,11 +85,12 @@ All routes are tenant-scoped under `/api/sourcing`:
 | Route | Purpose |
 | --- | --- |
 | `GET /markets` | the tenant's markets with `lastResult` and `nextRunAt` |
-| `POST /markets` | `{ label?, state, city? \| postalCode, sources[], criteria?, cadence?, enabled? }` |
+| `POST /markets` | `{ label?, state, city? \| postalCode, sources[], assetClasses?, criteria?, cadence?, enabled? }` (counties in `criteria.land` / `criteria.commercial` can replace city or ZIP) |
 | `POST /markets/metros` | `{ count (1..50), sources[], criteria?, cadence }`: add the largest cities not already present |
 | `PATCH /markets/:id` | any of the fields above; cadence or enabled changes reschedule |
 | `DELETE /markets/:id` | remove |
-| `POST /markets/:id/run` | pull now |
+| `POST /markets/:id/run` | pull now; `{ limit }` (1..25) runs a small batch |
+| `POST /estimate` | cost, provider filter coverage and research-only status before a pull |
 | `GET /metros` | the built-in city list |
 | `GET /runs?limit=` | recent sourcing automation runs |
 
