@@ -843,6 +843,85 @@
         "decidedBy": "model",
         "error": "output"
       }
+    },
+    {
+      "id": "land-question-unverified-facts",
+      "title": "Land: zoning stated as reported, utilities and access not verified, nothing invented",
+      "base": "reply",
+      "context": {
+        "property": {
+          "address": null,
+          "city": null,
+          "zip": null,
+          "state": "TX",
+          "apn": "R-SYN-4471",
+          "county": "Bastrop",
+          "assetClass": "land",
+          "assetSubtype": "rural_acreage",
+          "acres": 12.4,
+          "estimatedValue": null,
+          "facts": [
+            {
+              "key": "gross_acres",
+              "value": 12.4,
+              "status": "reported",
+              "source": "realie"
+            },
+            {
+              "key": "zoning",
+              "value": "AG",
+              "status": "reported",
+              "source": "realie"
+            },
+            {
+              "key": "flood_zone",
+              "value": "X",
+              "status": "verified",
+              "source": "FEMA National Flood Hazard Layer"
+            },
+            {
+              "key": "legal_access",
+              "value": null,
+              "status": "needs_diligence",
+              "source": null
+            }
+          ]
+        },
+        "inbound": {
+          "id": "msg-buyer-in-land",
+          "channel": "email",
+          "subject": "Re: 12.4 acres, Bastrop County",
+          "content": "What is it zoned, does it have water and power, and is there road access?",
+          "at": "2026-10-09T18:20:00.000Z"
+        }
+      },
+      "reply": {
+        "intent": "question",
+        "confidence": 0.85,
+        "reply": {
+          "subject": "Re: 12.4 acres, Bastrop County",
+          "body": "Thanks for asking. The county record shows the parcel zoned AG; that is reported, not verified. Water and power have not been verified, and road access has not been confirmed by title work yet. We will find out and send you what we learn."
+        },
+        "offer": null,
+        "rationale": "The buyer asked about zoning, utilities and access. Only zoning is on file (reported); the rest is unknown or needs diligence."
+      },
+      "expect": {
+        "decidedBy": "model",
+        "recommendation": "question",
+        "tier": "mid",
+        "actions": [
+          "classify_inbound:question:model",
+          "draft_message:email:buyer"
+        ],
+        "noActions": [
+          "transition_deal",
+          "queue_buyer_blast",
+          "record_buyer_offer"
+        ],
+        "mentions": [
+          "not verified"
+        ]
+      }
     }
   ]
 }

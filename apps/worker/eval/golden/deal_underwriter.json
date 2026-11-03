@@ -650,6 +650,177 @@
         "decidedBy": "model",
         "error": "output"
       }
+    },
+    {
+      "id": "land-asset-strategy",
+      "title": "Land: the comparable-sales strategy decides; no model ARV, the unknown access is named",
+      "base": "deal",
+      "context": {
+        "property": {
+          "address": null,
+          "city": null,
+          "zip": null,
+          "apn": "R-SYN-4471",
+          "county": "Bastrop",
+          "assetClass": "land",
+          "assetSubtype": "rural_acreage",
+          "acres": 12.4,
+          "estimatedValue": null,
+          "salePrice": null
+        },
+        "facts": [
+          {
+            "key": "gross_acres",
+            "value": 12.4,
+            "status": "reported",
+            "source": "realie"
+          },
+          {
+            "key": "zoning",
+            "value": "AG",
+            "status": "reported",
+            "source": "realie"
+          },
+          {
+            "key": "flood_zone",
+            "value": "X",
+            "status": "verified",
+            "source": "FEMA National Flood Hazard Layer"
+          },
+          {
+            "key": "legal_access",
+            "value": null,
+            "status": "needs_diligence",
+            "source": null
+          }
+        ],
+        "assetAnalysis": {
+          "assetClass": "land",
+          "subtype": "rural_acreage",
+          "strategy": "land_comparables",
+          "valuation": {
+            "low": 135000,
+            "mid": 145000,
+            "high": 155000
+          },
+          "approaches": [],
+          "evidence": [],
+          "confidence": {
+            "score": 0.55,
+            "level": "medium"
+          },
+          "missing": [
+            "Legal access is not established: confirm road frontage or a recorded easement through title work."
+          ],
+          "risks": [
+            "Without legal access the parcel may be unsellable to most buyers."
+          ],
+          "assumptions": [
+            "A land buyer pays about 75% of the low end of the value range. This is an assumption; buyers' recorded purchases replace it once matched."
+          ],
+          "offerRange": {
+            "low": 70000,
+            "high": 87500
+          },
+          "targetFee": 10000,
+          "expectedBuyerPrice": 101000,
+          "expectedNet": 0,
+          "buyerDemand": {
+            "level": "unknown",
+            "matchingBuyers": 0,
+            "detail": "Buyers have not been matched to this deal yet."
+          },
+          "decision": "review",
+          "summary": "Worth about $135,000-$155,000; offer $70,000-$87,500. Review first: Legal access is not established: confirm road frontage or a recorded easement through title work.",
+          "explanation": [
+            "Halo valued the 12.4 acres from 6 comparable vacant-land sale(s) in Bastrop: $10,900 to $12,500 per acre, so about $135,000 to $155,000."
+          ],
+          "sensitivity": null
+        }
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "asset_strategy",
+        "recommendation": "hold",
+        "actions": [
+          "append_note"
+        ],
+        "noActions": [
+          "set_deal_economics"
+        ]
+      }
+    },
+    {
+      "id": "commercial-no-noi",
+      "title": "Commercial without operating expenses: no value is invented, the T12 is requested",
+      "base": "deal",
+      "context": {
+        "property": {
+          "assetClass": "commercial",
+          "assetSubtype": "retail",
+          "buildingSqft": 9800,
+          "estimatedValue": null,
+          "salePrice": null
+        },
+        "facts": [
+          {
+            "key": "gross_operating_income",
+            "value": 240000,
+            "status": "reported",
+            "source": "seller"
+          }
+        ],
+        "assetAnalysis": {
+          "assetClass": "commercial",
+          "subtype": "retail",
+          "strategy": "commercial_income_and_sales",
+          "valuation": null,
+          "approaches": [],
+          "evidence": [],
+          "confidence": {
+            "score": 0,
+            "level": "low"
+          },
+          "missing": [
+            "Operating expenses are not on file. Request the trailing-12-month operating statement (T12); Halo does not assume an expense ratio.",
+            "No sourced market cap rate. Enter one with its source (comparable sales or a broker survey); Halo has no default."
+          ],
+          "risks": [],
+          "assumptions": [],
+          "offerRange": null,
+          "targetFee": 25000,
+          "expectedBuyerPrice": null,
+          "expectedNet": null,
+          "buyerDemand": {
+            "level": "unknown",
+            "matchingBuyers": 0,
+            "detail": "No buyers on file to match against."
+          },
+          "decision": "review",
+          "summary": "No supported value yet. Review first: Operating expenses are not on file. Request the trailing-12-month operating statement (T12); Halo does not assume an expense ratio.",
+          "explanation": [
+            "Halo cannot value this property yet. Operating expenses are not on file. Request the trailing-12-month operating statement (T12); Halo does not assume an expense ratio."
+          ],
+          "sensitivity": null
+        }
+      },
+      "modes": [
+        "offline"
+      ],
+      "expect": {
+        "decidedBy": "rule",
+        "hardRule": "asset_strategy",
+        "recommendation": "hold",
+        "actions": [
+          "append_note"
+        ],
+        "noActions": [
+          "set_deal_economics"
+        ]
+      }
     }
   ]
 }

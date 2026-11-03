@@ -313,6 +313,21 @@ export function marketAgentContext<T>(
   });
 }
 
+/**
+ * The deal's asset-specific underwriting, computed and recorded by the api
+ * (docs/asset-classes.md s5). The worker never computes deal values itself.
+ */
+export function assetUnderwriting<T>(
+  accountId: string,
+  dealId: string,
+): Promise<T> {
+  return postInternal<T>(
+    `deals/${encodeURIComponent(dealId)}/asset-underwriting`,
+    accountId,
+    {},
+  );
+}
+
 /** What the agent saw and what the model answered, kept with the run (docs/agent-eval.md). */
 export interface AgentReplay {
   context: Record<string, unknown>;

@@ -118,10 +118,20 @@ export class DealsService {
     stage?: string,
     pagination?: { skip?: number; take?: number },
     viewer: PiiViewer | null = null,
+    /** residential | land | commercial | unclassified, by the deal's property. */
+    assetClass?: string,
   ) {
     const where: any = { accountId };
     if (stage) {
       where.stage = stage;
+    }
+    if (assetClass === 'unclassified') {
+      where.OR = [{ propertyId: null }, { property: { assetClass: null } }];
+    } else if (
+      assetClass &&
+      ['residential', 'land', 'commercial'].includes(assetClass)
+    ) {
+      where.property = { assetClass };
     }
 
     const skip = pagination?.skip ?? 0;

@@ -23,14 +23,30 @@ export interface DealUnderwriterContext {
     updatedAt: string;
   };
   property: {
-    address: string;
-    city: string;
+    /** Null for a rural parcel identified by APN and county. */
+    address: string | null;
+    city: string | null;
     state: string;
-    zip: string;
+    zip: string | null;
     apn: string | null;
+    county?: string | null;
     estimatedValue: number | null;
     salePrice: number | null;
+    /** residential | land | commercial, or null while unclassified. */
+    assetClass?: string | null;
+    assetSubtype?: string | null;
+    acres?: number | null;
+    buildingSqft?: number | null;
+    units?: number | null;
+    zoning?: string | null;
   } | null;
+  /** Property facts with how each is known (docs/asset-classes.md s4). */
+  facts?: Array<{
+    key: string;
+    value: unknown;
+    status: string;
+    source: string | null;
+  }>;
   lead: { status: string; score: number | null; tags: string[] } | null;
   sources: Array<{
     provider: string;
@@ -72,8 +88,18 @@ export async function loadDealContext(
           state: true,
           zip: true,
           apn: true,
+          county: true,
           estimatedValue: true,
           salePrice: true,
+          assetClass: true,
+          assetSubtype: true,
+          acres: true,
+          buildingSqft: true,
+          units: true,
+          zoning: true,
+          facts: {
+            select: { key: true, value: true, status: true, source: true },
+          },
           sourceRecords: {
             select: { provider: true, endpoint: true, response: true },
             orderBy: { createdAt: 'desc' },
@@ -121,9 +147,11 @@ export async function loadDealContext(
     }),
   ]);
 
-  const { sourceRecords: propertyRecords, ...property } = deal.property ?? {
-    sourceRecords: [],
-  };
+  const {
+    sourceRecords: propertyRecords,
+    facts,
+    ...property
+  } = deal.property ?? { sourceRecords: [], facts: [] };
   const { sourceRecords: leadRecords, ...lead } = deal.lead ?? {
     sourceRecords: [],
   };
@@ -159,6 +187,12 @@ export async function loadDealContext(
     property: deal.property
       ? (property as DealUnderwriterContext['property'])
       : null,
+    facts: (facts ?? []).map((f) => ({
+      key: f.key,
+      value: f.value,
+      status: f.status,
+      source: f.source,
+    })),
     lead: deal.lead ? (lead as DealUnderwriterContext['lead']) : null,
     sources,
     priorResult: deal.underwritingResult

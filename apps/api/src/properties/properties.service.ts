@@ -134,12 +134,20 @@ export class PropertiesService {
       state?: string;
       minPrice?: number;
       maxPrice?: number;
+      /** residential | land | commercial | unclassified (docs/asset-classes.md). */
+      assetClass?: string;
     },
   ) {
     const where: any = { accountId };
     if (filters.city)
       where.city = { contains: filters.city, mode: 'insensitive' };
     if (filters.state) where.state = filters.state;
+    if (filters.assetClass === 'unclassified') where.assetClass = null;
+    else if (
+      filters.assetClass &&
+      ['residential', 'land', 'commercial'].includes(filters.assetClass)
+    )
+      where.assetClass = filters.assetClass;
 
     return this.prisma.property.findMany({
       where,

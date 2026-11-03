@@ -98,10 +98,12 @@ export class LeadsController {
     @Query('skip') skip?: string,
     @Query('take') take?: string,
     @Query('search') search?: string,
+    @Query('assetClass') assetClass?: string,
   ) {
     return this.leadsService.findAll(accountId, {
       status,
       search,
+      assetClass,
       skip: skip ? parseInt(skip, 10) : 0,
       take: take ? Math.min(parseInt(take, 10), 200) : 50,
     });

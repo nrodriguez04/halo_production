@@ -1,6 +1,7 @@
 import { assignmentFeeFor } from '@halo/shared';
 import { prisma } from '../prisma-client';
 import { scalarsOf } from './agent-context';
+import { ASSET_PROPERTY_SELECT, type AssetPropertyFields } from './asset-context';
 
 const MAX_BUYERS = 300;
 const MAX_HISTORY_ROWS = 4000;
@@ -38,13 +39,15 @@ export interface DispositionContext {
   };
   /** The tenant's wholesale fee (control plane). */
   defaultAssignmentFee: number;
-  property: {
-    address: string;
-    city: string;
-    state: string;
-    zip: string;
-    estimatedValue: number | null;
-  } | null;
+  property:
+    | ({
+        address: string | null;
+        city: string | null;
+        state: string;
+        zip: string | null;
+        estimatedValue: number | null;
+      } & AssetPropertyFields)
+    | null;
   underwriting: {
     confidence: number | null;
     offerRange: Record<string, unknown> | null;
@@ -82,6 +85,7 @@ export async function loadDispositionContext(
           state: true,
           zip: true,
           estimatedValue: true,
+          ...ASSET_PROPERTY_SELECT,
         },
       },
       underwritingResult: {
